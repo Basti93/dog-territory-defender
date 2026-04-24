@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Dog Territory Defender",
+    "slug": "dog-territory-defender",
+    "version": "0.1.0",
+    "sdkVersion": "54.0.0",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.dogtd.mobile"
+    },
+    "android": {
+      "package": "com.dogtd.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermissions": "Allow Dog Territory Defender to track your walks"
+        }
+      ]
+    ]
+  }
+}

@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dog Territory Defender</title>
+<!--
+  ═══════════════════════════════════════════════════════════
+  DOG TERRITORY DEFENDER — Visual Prototype
+  ═══════════════════════════════════════════════════════════
+  Phase: 1 — Core Game Loop
+  Updated: 2026-04-24
+
+  ADDED IN THIS UPDATE (Phase 1):
+  ─ Den screen: SVG garden scene + 3 buildings (Doghouse,
+    Treat Bakery, Sniff Garden), each tappable with upgrade modal
+  ─ Global treats state with passive tick (configurable rate)
+  ─ Post-walk celebration now awards +50 treats and shows
+    passive rate + next upgrade tease
+  ─ Tab bar updated to 4 tabs: Map, Den, Dog, More
+  ─ All emoji removed; replaced with inline SVG icons
+  ─ Tweaks panel extended: passiveTreatRate, startingTreats,
+    denLevel, showDenBadge
+
+  REUSED FROM PRIOR BUILD:
+  ─ Design tokens (T object)
+  ─ IOSDevice frame
+  ─ NeighborhoodMap, Confetti, DogAvatar, XPBar, Badge
+  ─ MapScreen, CelebrationScreen, ProfileScreen,
+    LeaderboardModal, LeaderboardScreen
+
+  ═══════════════════════════════════════════════════════════
+  PARKED FOR LATER PHASES — DO NOT BUILD YET
+  ─ Phase 2: scent strength visualisation, seasonal map
+    variations beyond spring, evening recap / async events
+  ─ Phase 3: local leaderboard scoped to zip code,
+    rolling 7-day scoring, other players' live territories,
+    async PvP events
+  ─ Phase 4: full Den (10 buildings), Pack collection,
+    AI companion dogs, Beginner's Luck badge UI,
+    seasonal resets, mentor relationship screen,
+    7 additional Den buildings (Training Yard → Memorial Bench)
+  ═══════════════════════════════════════════════════════════
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="den-screen.jsx"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1C2A1C;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', sans-serif;
+  }
+  @keyframes confettiFall {
+    0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(700px) rotate(720deg); opacity: 0; }
+  }
+  @keyframes tailWag {
+    0%,100% { transform: rotate(-15deg); }
+    50%     { transform: rotate(15deg); }
+  }
+  @keyframes xpTick {
+    from { transform: scale(1.4); }
+    to   { transform: scale(1); }
+  }
+  @keyframes pulseGreen {
+    0%,100% { box-shadow: 0 0 0 0 rgba(46,204,113,0.45); }
+    50%     { box-shadow: 0 0 0 12px rgba(46,204,113,0); }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(36px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes popIn {
+    0%   { transform: scale(0.6); opacity: 0; }
+    70%  { transform: scale(1.08); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-40px); opacity: 0; }
+  }
+  @keyframes pawPrint {
+    0%   { opacity: 0; transform: scale(0); }
+    30%  { opacity: 0.6; transform: scale(1); }
+    100% { opacity: 0.3; }
+  }
+  @keyframes collectBounce {
+    0%,100% { transform: translateY(0) scale(1); }
+    40%     { transform: translateY(-5px) scale(1.08); }
+  }
+  @keyframes ripple {
+    0%   { transform: scale(0); opacity: 1; }
+    100% { transform: scale(3); opacity: 0; }
+  }
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes badgePop {
+    0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+    60%  { transform: scale(1.12) rotate(4deg); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  @keyframes treatPop {
+    0%   { transform: scale(0.5) translateY(8px); opacity: 0; }
+    60%  { transform: scale(1.1) translateY(-2px); opacity: 1; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+const T = {
+  green:  '#2ECC71',
+  blue:   '#3498DB',
+  gold:   '#F39C12',
+  brown:  '#8B6F47',
+  white:  '#FAFAF8',
+  bg:     '#F4F6F0',
+  rival:  '#E74C3C',
+  purple: '#9B59B6',
+  text:   '#1A2A1A',
+  muted:  '#8A9A8A',
+  card:   '#FFFFFF',
+};
+
+// ─── TWEAK DEFAULTS ───────────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dogName": "Max",
+  "breed": "Dachshund",
+  "primaryColor": "#6528cc",
+  "mapStyle": "spring",
+  "showCollectibles": true,
+  "celebrationIntensity": "high",
+  "passiveTreatRate": 0.3,
+  "startingTreats": 50,
+  "denLevel": "L1",
+  "showDenBadge": true
+}/*EDITMODE-END*/;
+
+// ─── INLINE SVG ICONS (no emoji) ──────────────────────────────────────────────
+function PawIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill={color}>
+      <ellipse cx="16" cy="21" rx="9" ry="8"/>
+      <circle cx="7"  cy="9"  r="4"/>
+      <circle cx="16" cy="5"  r="4"/>
+      <circle cx="25" cy="9"  r="4"/>
+    </svg>
+  );
+}
+
+function MapIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 6l7-4 8 4 7-4v16l-7 4-8-4-7 4z"/>
+      <path d="M8 2v16M16 6v16"/>
+    </svg>
+  );
+}
+
+function HomeIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9L12 2l9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+      <path d="M9 22V12h6v10"/>
+    </svg>
+  );
+}
+
+function DogIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill={color}>
+      <ellipse cx="16" cy="19" rx="11" ry="10"/>
+      <ellipse cx="7"  cy="11" rx="5" ry="7" transform="rotate(-18 7 11)"/>
+      <ellipse cx="25" cy="11" rx="5" ry="7" transform="rotate(18 25 11)"/>
+      <circle  cx="12" cy="18" r="1.5" fill="white"/>
+      <circle  cx="20" cy="18" r="1.5" fill="white"/>
+      <ellipse cx="16" cy="22" rx="3" ry="2" fill="rgba(0,0,0,0.2)"/>
+    </svg>
+  );
+}
+
+function MoreIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <circle cx="5"  cy="12" r="2.2"/>
+      <circle cx="12" cy="12" r="2.2"/>
+      <circle cx="19" cy="12" r="2.2"/>
+    </svg>
+  );
+}
+
+function TrophyIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth="2" strokeLinecap="round">
+      <path d="M8 21h8M12 17v4M17 3h4l-2 6H5L3 3h4"/>
+      <path d="M5 3a9 9 0 0014 0"/>
+    </svg>
+  );
+}
+
+function PinIcon({ size = 14, color = T.muted }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+      <circle cx="12" cy="9" r="2.5" fill="white"/>
+    </svg>
+  );
+}
+
+function StarIcon({ size = 14, color = T.gold }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+    </svg>
+  );
+}
+
+function ShieldIcon({ size = 14, color = T.green }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.4C16.5 22.15 20 17.25 20 12V6z"/>
+    </svg>
+  );
+}
+
+// ─── DOG AVATAR (SVG face, no emoji) ─────────────────────────────────────────
+function DogAvatar({ breed, size = 80, wag = false, celebrating = false }) {
+  const palettes = {
+    'Golden Retriever': { face: '#D4A76A', ears: '#B8864E', nose: '#3D2B1A' },
+    'Husky':            { face: '#E8E8E8', ears: '#888888', nose: '#2A2A2A' },
+    'Corgi':            { face: '#E8A84A', ears: '#C47830', nose: '#3D2B1A' },
+    'Dachshund':        { face: '#8B5E3C', ears: '#6B4020', nose: '#2A1A0A' },
+    'Poodle':           { face: '#F5E6D3', ears: '#E0C8B0', nose: '#3D2B1A' },
+    'Labrador':         { face: '#C49A6C', ears: '#A07840', nose: '#3D2B1A' },
+  };
+  const p = palettes[breed] || palettes['Golden Retriever'];
+  return (
+    <div style={{
+      width: size, height: size,
+      background: 'linear-gradient(135deg,#FFF9F0,#FFF3E0)',
+      borderRadius: '50%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+      border: `3px solid ${T.white}`,
+      overflow: 'hidden', flexShrink: 0,
+      animation: celebrating ? 'popIn 0.5s ease-out' : 'none',
+    }}>
+      <svg width={size * 0.78} height={size * 0.78} viewBox="0 0 60 60"
+        style={{ animation: wag ? 'tailWag 0.4s ease-in-out infinite alternate' : 'none' }}>
+        {/* Ears */}
+        <ellipse cx="11" cy="20" rx="9" ry="13" fill={p.ears} transform="rotate(-14 11 20)"/>
+        <ellipse cx="49" cy="20" rx="9" ry="13" fill={p.ears} transform="rotate(14 49 20)"/>
+        {/* Face */}
+        <circle cx="30" cy="33" r="22" fill={p.face}/>
+        {/* Eyes */}
+        <circle cx="22" cy="29" r="3.2" fill={p.nose}/>
+        <circle cx="38" cy="29" r="3.2" fill={p.nose}/>
+        <circle cx="23" cy="28" r="1.2" fill="white"/>
+        <circle cx="39" cy="28" r="1.2" fill="white"/>
+        {/* Snout */}
+        <ellipse cx="30" cy="38" rx="7" ry="5" fill={p.ears} opacity="0.5"/>
+        {/* Nose */}
+        <ellipse cx="30" cy="36" rx="3.5" ry="2.5" fill={p.nose}/>
+        {/* Nostril highlights */}
+        <circle cx="28.5" cy="35.5" r="0.8" fill="rgba(255,255,255,0.3)"/>
+        {/* Smile */}
+        <path d="M 24 41 Q 30 46 36 41" fill="none" stroke={p.nose} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    </div>
+  );
+}
+
+// ─── SHARED COMPONENTS ────────────────────────────────────────────────────────
+function XPBar({ percent, color = T.green, animated = false }) {
+  return (
+    <div style={{ background: '#E8F0E4', borderRadius: 99, height: 9, overflow: 'hidden', width: '100%' }}>
+      <div style={{
+        width: `${Math.max(0, Math.min(100, percent))}%`, height: '100%',
+        background: `linear-gradient(90deg, ${color}, ${color}BB)`,
+        borderRadius: 99,
+        transition: 'width 1.1s cubic-bezier(0.34,1.56,0.64,1)',
+        backgroundSize: '200% 100%',
+        animation: animated ? 'shimmer 2.5s linear infinite' : 'none',
+      }}/>
+    </div>
+  );
+}
+
+function Badge({ icon, label, color = '#E8F5E9', textColor = T.green, delay = 0 }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5,
+      background: color, borderRadius: 20, padding: '4px 10px',
+      animation: `badgePop 0.5s ${delay}s cubic-bezier(0.34,1.56,0.64,1) both`,
+    }}>
+      {icon && <span style={{ display: 'flex' }}>{icon}</span>}
+      <span style={{ fontSize: 11, fontWeight: 700, color: textColor, fontFamily: 'Nunito' }}>{label}</span>
+    </div>
+  );
+}
+
+function Confetti({ intensity = 'high' }) {
+  const count = intensity === 'high' ? 38 : 18;
+  const colors = [T.green, T.blue, T.gold, '#FF6B9D', '#A29BFE', '#85C1E9'];
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{
+          position: 'absolute',
+          left: `${Math.random() * 100}%`,
+          top: '-10px',
+          width: Math.random() * 8 + 4,
+          height: Math.random() * 8 + 4,
+          background: colors[i % colors.length],
+          borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+          animation: `confettiFall ${1.5 + Math.random() * 2}s ${Math.random() * 0.8}s ease-in forwards`,
+          transform: `rotate(${Math.random() * 360}deg)`,
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+// ─── NEIGHBORHOOD MAP ─────────────────────────────────────────────────────────
+function NeighborhoodMap({ walkActive, walkProgress, showRivalAttack, tweaks }) {
+  const primaryColor = tweaks.primaryColor || T.green;
+  const showCollect = tweaks.showCollectibles !== false;
+  const mapStyle = tweaks.mapStyle || 'spring';
+
+  const trailPoints = [
+    [186,320],[190,290],[195,260],[200,230],[210,205],
+    [230,185],[255,175],[280,170],[305,172],[325,180],
+    [340,195],[348,215],[350,240],[345,265],[335,285],
+    [318,300],[298,310],[275,312],[252,308],[232,300],[210,295],[194,305],[186,320]
+  ];
+  const trailPath = trailPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ') + ' Z';
+
+  const playerTerritory = [
+    [170,330],[175,275],[185,240],[205,210],[225,190],
+    [255,178],[285,174],[315,176],[338,190],[355,210],
+    [360,240],[358,270],[345,295],[325,313],[295,322],
+    [265,326],[235,322],[208,312],[186,325],[170,330]
+  ];
+  const playerPath = playerTerritory.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ') + ' Z';
+
+  const rivalTerritory = [
+    [300,290],[330,275],[360,280],[378,300],[375,330],
+    [355,345],[325,345],[305,330],[300,310],[300,290]
+  ];
+  const rivalPath = rivalTerritory.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ') + ' Z';
+
+  const pawPositions = [
+    [195,268],[215,220],[248,185],[290,173],[330,185],[347,225],[340,270],[310,305],[265,315],[225,302]
+  ];
+
+  // Collectibles — SVG shapes, no emoji
+  const collectibles = [
+    { x: 240, y: 200, type: 'bone' },
+    { x: 310, y: 265, type: 'hydrant' },
+    { x: 200, y: 250, type: 'treat' },
+    { x: 280, y: 310, type: 'star' },
+  ];
+
+  function CollectibleShape({ type, x, y }) {
+    return (
+      <g>
+        <circle cx={x} cy={y} r="14" fill="white" opacity="0.92" filter="url(#mapShadow)"/>
+        {type === 'bone' && (
+          <g fill="#C49A6C">
+            <rect x={x-6} y={y-2} width="12" height="4" rx="2"/>
+            <circle cx={x-6} cy={y} r="3.5"/>
+            <circle cx={x+6} cy={y} r="3.5"/>
+          </g>
+        )}
+        {type === 'hydrant' && (
+          <g fill="#E74C3C">
+            <rect x={x-4} y={y-7} width="8" height="10" rx="2"/>
+            <rect x={x-6} y={y-9} width="12" height="4" rx="2"/>
+            <rect x={x-7} y={y+2} width="14" height="4" rx="2"/>
+          </g>
+        )}
+        {type === 'treat' && (
+          <g>
+            <circle cx={x} cy={y} r="6" fill={T.gold} opacity="0.9"/>
+            <circle cx={x} cy={y} r="3" fill="#FFF3E0"/>
+          </g>
+        )}
+        {type === 'star' && (
+          <g transform={`translate(${x},${y})`}>
+            <polygon points="0,-7 2,-2 7,-2 3,1 5,7 0,3 -5,7 -3,1 -7,-2 -2,-2" fill={T.gold}/>
+          </g>
+        )}
+      </g>
+    );
+  }
+
+  return (
+    <svg width="390" height="520" viewBox="0 0 390 520" style={{ display: 'block', background: '#EAF0E8' }}>
+      <defs>
+        <filter id="mapShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.12"/>
+        </filter>
+        <linearGradient id="parkGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#C8E6C9"/>
+          <stop offset="100%" stopColor="#A5D6A7"/>
+        </linearGradient>
+        <linearGradient id="playerGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={primaryColor} stopOpacity="0.3"/>
+          <stop offset="100%" stopColor={primaryColor} stopOpacity="0.12"/>
+        </linearGradient>
+      </defs>
+
+      {/* City blocks */}
+      {[[10,10,160,130],[180,10,120,90],[320,10,60,130],
+        [10,160,80,160],[110,140,60,80],[10,340,80,170],
+        [350,160,30,130],[360,310,20,200]].map(([x,y,w,h],i)=>(
+        <rect key={i} x={x} y={y} width={w} height={h} fill="#DDEBD8" rx="4"/>
+      ))}
+
+      {/* Park */}
+      <rect x="100" y="350" width="240" height="150" fill="url(#parkGrad)" rx="8"/>
+      <text x="220" y="435" textAnchor="middle" fill="#66BB6A" fontSize="11"
+        fontFamily="Inter" fontWeight="600" opacity="0.8">Görlitzer Park</text>
+
+      {/* Spring blossoms */}
+      {mapStyle === 'spring' && [
+        [120,370],[145,390],[170,375],[250,365],[290,385],[310,370],[220,395],[175,415],[280,410]
+      ].map(([x,y],i)=>(
+        <circle key={i} cx={x} cy={y} r="5" fill="#FFB7C5" opacity="0.7"/>
+      ))}
+
+      {/* Streets */}
+      {[100,155,215,330].map((y,i)=>(
+        <rect key={i} x="0" y={y} width="390" height="18" fill="#F5F5F0" opacity="0.9"/>
+      ))}
+      {[90,170,280,360].map((x,i)=>(
+        <rect key={i} x={x} y="0" width="18" height="520" fill="#F5F5F0" opacity="0.9"/>
+      ))}
+      {[109,164,224,339].map((y,i)=>(
+        <line key={i} x1="0" y1={y} x2="390" y2={y}
+          stroke="#E0E0D8" strokeWidth="1" strokeDasharray="12,8"/>
+      ))}
+
+      {/* Rival territory */}
+      <path d={rivalPath} fill="rgba(231,76,60,0.1)"
+        stroke={showRivalAttack ? '#E74C3C' : T.rival}
+        strokeWidth={showRivalAttack ? 2.5 : 1.5} strokeDasharray="6,3"/>
+      {showRivalAttack && (
+        <text x="342" y="316" textAnchor="middle" fontSize="9" fill="#E74C3C"
+          fontFamily="Nunito" fontWeight="700">Rival</text>
+      )}
+
+      {/* Player territory */}
+      {(walkProgress > 0.8 || !walkActive) && (
+        <path d={playerPath} fill="url(#playerGrad)"
+          stroke={primaryColor} strokeWidth="2.5" strokeLinejoin="round"/>
+      )}
+
+      {/* Walk trail */}
+      {walkActive && walkProgress > 0 && (
+        <path d={trailPath} fill="none"
+          stroke={primaryColor} strokeWidth="4"
+          strokeLinecap="round" strokeLinejoin="round"
+          strokeDasharray="1000"
+          strokeDashoffset={1000 - walkProgress * 950}
+          opacity="0.85"/>
+      )}
+
+      {/* Paw prints (SVG, no emoji) */}
+      {walkActive && pawPositions.slice(0, Math.floor(walkProgress * 10)).map(([px,py],i)=>(
+        <g key={i} transform={`translate(${px-6},${py-6})`} opacity="0.4"
+          style={{ animation: 'pawPrint 0.4s ease-out' }}>
+          <ellipse cx="6" cy="9.5" rx="4" ry="3.5" fill={primaryColor}/>
+          <circle cx="2.5" cy="5"  r="1.8" fill={primaryColor}/>
+          <circle cx="6"   cy="3.5" r="1.8" fill={primaryColor}/>
+          <circle cx="9.5" cy="5"  r="1.8" fill={primaryColor}/>
+        </g>
+      ))}
+
+      {/* Collectibles */}
+      {showCollect && collectibles.map((c,i)=>(
+        <CollectibleShape key={i} type={c.type} x={c.x} y={c.y}/>
+      ))}
+
+      {/* Player location dot */}
+      <circle cx="186" cy="320" r="10" fill={primaryColor} filter="url(#mapShadow)"/>
+      <circle cx="186" cy="320" r="10" fill={primaryColor} opacity="0.28"
+        style={{ animation: 'ripple 1.8s ease-out infinite', transformBox: 'fill-box', transformOrigin: 'center' }}/>
+      {/* Small dog icon on dot */}
+      <circle cx="186" cy="320" r="5" fill="white" opacity="0.6"/>
+      <text x="186" y="340" textAnchor="middle" fontSize="9" fill="#666" fontFamily="Inter">You</text>
+    </svg>
+  );
+}
+
+// ─── TAB BAR (4 tabs, SVG icons, Den badge) ───────────────────────────────────
+function TabBar({ active, onTab, showDenBadge }) {
+  const tabs = [
+    { id: 'map',         label: 'Map',     Icon: (props) => <MapIcon  {...props}/> },
+    { id: 'den',         label: 'Den',     Icon: (props) => <HomeIcon {...props}/> },
+    { id: 'profile',     label: 'My Dog',  Icon: (props) => <DogIcon  {...props}/> },
+    { id: 'leaderboard', label: 'Rankings',Icon: (props) => <MoreIcon {...props}/> },
+  ];
+  return (
+    <div style={{
+      display: 'flex', background: 'white',
+      borderTop: '1px solid #EEF0EC',
+      paddingBottom: 4,
+      boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
+    }}>
+      {tabs.map(t => {
+        const isActive = active === t.id;
+        const color = isActive ? T.green : T.muted;
+        return (
+          <button key={t.id} onClick={() => onTab(t.id)} style={{
+            flex: 1, border: 'none', background: 'none',
+            padding: '8px 0 4px', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            position: 'relative',
+          }}>
+            <span style={{
+              transform: isActive ? 'scale(1.12)' : 'scale(1)',
+              transition: 'transform 0.2s',
+              display: 'flex', opacity: isActive ? 1 : 0.45,
+            }}>
+              <t.Icon size={20} color={color}/>
+            </span>
+            <span style={{
+              fontSize: 10, fontFamily: 'Nunito', fontWeight: 700, color,
+              transition: 'color 0.2s',
+            }}>{t.label}</span>
+            {/* Den badge */}
+            {t.id === 'den' && showDenBadge && !isActive && (
+              <div style={{
+                position: 'absolute', top: 5, right: '18%',
+                width: 8, height: 8, borderRadius: '50%',
+                background: T.green, border: '2px solid white',
+              }}/>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MAP SCREEN ───────────────────────────────────────────────────────────────
+function MapScreen({ onWalkComplete, tweaks }) {
+  const [walkState, setWalkState] = useState('idle');
+  const [seconds, setSeconds] = useState(0);
+  const [km, setKm] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showRivalAttack, setShowRivalAttack] = useState(false);
+  const [xpFloat, setXpFloat] = useState(null);
+  const timerRef = useRef(null);
+  const primaryColor = tweaks.primaryColor || T.green;
+
+  useEffect(() => {
+    if (walkState === 'active') {
+      timerRef.current = setInterval(() => {
+        setSeconds(s => {
+          const next = s + 1;
+          setKm(parseFloat((next * 0.008).toFixed(2)));
+          setProgress(Math.min(next / 120, 1));
+          if (next === 80) setShowRivalAttack(true);
+          if (next >= 118) {
+            clearInterval(timerRef.current);
+            setWalkState('idle');
+            onWalkComplete({ seconds: next, km: parseFloat((next * 0.008).toFixed(2)) });
+          }
+          return next;
+        });
+      }, 200);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [walkState]);
+
+  const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <NeighborhoodMap walkActive={walkState === 'active'} walkProgress={progress}
+          showRivalAttack={showRivalAttack} tweaks={tweaks}/>
+
+        {/* Rival attack banner */}
+        {showRivalAttack && (
+          <div style={{
+            position: 'absolute', top: 12, left: 12, right: 12,
+            background: 'linear-gradient(135deg,#E74C3C,#C0392B)',
+            color: 'white', borderRadius: 14, padding: '10px 14px',
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 4px 16px rgba(231,76,60,0.4)',
+            animation: 'slideUp 0.4s ease-out',
+          }}>
+            <ShieldIcon size={18} color="white"/>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 13 }}>Luna is defending your territory</div>
+              <div style={{ fontSize: 11, opacity: 0.85 }}>Walk the boundary again to reclaim it</div>
+            </div>
+            <button onClick={() => setShowRivalAttack(false)} style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none',
+              color: 'white', borderRadius: 99, width: 24, height: 24,
+              cursor: 'pointer', fontSize: 12,
+            }}>x</button>
+          </div>
+        )}
+
+        {/* XP float */}
+        {xpFloat && (
+          <div style={{
+            position: 'absolute', top: '40%', left: '50%', transform: 'translateX(-50%)',
+            background: 'white', borderRadius: 20, padding: '8px 18px',
+            fontFamily: 'Nunito', fontWeight: 800, fontSize: 16, color: T.green,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            animation: 'floatUp 1.2s ease-out forwards',
+          }}>{xpFloat}</div>
+        )}
+
+        {/* Leaderboard chip */}
+        <button onClick={() => setShowLeaderboard(true)} style={{
+          position: 'absolute', top: 48, right: 12,
+          background: 'white', borderRadius: 20, padding: '5px 10px',
+          display: 'flex', alignItems: 'center', gap: 5,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          border: 'none', cursor: 'pointer', marginTop: 4,
+        }}>
+          <TrophyIcon size={13} color={T.gold}/>
+          <span style={{ fontSize: 11, fontFamily: 'Nunito', fontWeight: 700, color: T.muted }}>#2</span>
+        </button>
+      </div>
+
+      {/* Walk HUD */}
+      <div style={{ background: 'white', padding: '12px 16px 6px', boxShadow: '0 -2px 12px rgba(0,0,0,0.06)' }}>
+        {walkState === 'idle' ? (
+          <button onClick={() => { setSeconds(0); setKm(0); setProgress(0); setShowRivalAttack(false); setWalkState('active'); }} style={{
+            width: '100%',
+            background: `linear-gradient(135deg, ${tweaks.primaryColor||T.green}, ${tweaks.primaryColor||T.green}CC)`,
+            border: 'none', borderRadius: 16, padding: '14px', cursor: 'pointer',
+            fontFamily: 'Nunito', fontWeight: 800, fontSize: 17, color: 'white',
+            boxShadow: `0 4px 16px ${(tweaks.primaryColor||T.green)}55`,
+            animation: 'pulseGreen 2.5s ease-in-out infinite',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+          }}>
+            <PawIcon size={20} color="white"/>
+            Start Walk with {tweaks.dogName || 'Max'}
+          </button>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
+              {[
+                { label: 'TIME',      value: fmtTime(seconds) },
+                { label: 'DISTANCE',  value: `${km} km` },
+                { label: 'TERRITORY', value: `${Math.round(progress * 100)}%` },
+              ].map(stat => (
+                <div key={stat.label} style={{ textAlign: 'center' }}>
+                  <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 21, color: T.text }}>
+                    {stat.value}
+                  </div>
+                  <div style={{ fontSize: 10, color: T.muted, fontFamily: 'Inter' }}>{stat.label}</div>
+                </div>
+              ))}
+            </div>
+            <XPBar percent={progress * 100} color={primaryColor} animated/>
+            <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
+              <button onClick={() => setWalkState(s => s === 'active' ? 'paused' : 'active')} style={{
+                flex: 1, background: '#F0F4EE', border: 'none', borderRadius: 12,
+                padding: '10px', fontFamily: 'Nunito', fontWeight: 700, fontSize: 14,
+                cursor: 'pointer', color: T.text,
+              }}>{walkState === 'active' ? 'Pause' : 'Resume'}</button>
+              <button onClick={() => { setWalkState('idle'); onWalkComplete({ seconds, km }); }} style={{
+                flex: 1, background: primaryColor, border: 'none', borderRadius: 12,
+                padding: '10px', fontFamily: 'Nunito', fontWeight: 700, fontSize: 14,
+                cursor: 'pointer', color: 'white',
+              }}>Finish Walk</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} tweaks={tweaks}/>}
+    </div>
+  );
+}
+
+// ─── CELEBRATION SCREEN (updated: shows treat reward) ────────────────────────
+function CelebrationScreen({ walkData, onDone, tweaks, onTreatsEarned }) {
+  const [xp, setXp] = useState(0);
+  const [leveled, setLeveled] = useState(false);
+  const [xpBarPct, setXpBarPct] = useState(67);
+  const [treatsClaimed, setTreatsClaimed] = useState(false);
+  const primaryColor = tweaks.primaryColor || T.green;
+  const intensity = tweaks.celebrationIntensity || 'high';
+  const WALK_TREAT_REWARD = 50;
+
+  useEffect(() => {
+    const target = 120;
+    let v = 0;
+    const interval = setInterval(() => {
+      v = Math.min(v + 4, target);
+      setXp(v);
+      if (v >= target) {
+        clearInterval(interval);
+        setTimeout(() => { setLeveled(true); setXpBarPct(87); }, 400);
+        setTimeout(() => { setTreatsClaimed(true); onTreatsEarned(WALK_TREAT_REWARD); }, 700);
+      }
+    }, 18);
+    return () => clearInterval(interval);
+  }, []);
+
+  const passiveRate = (tweaks.passiveTreatRate || 0.3) * (
+    1 + 0.1 * ((tweaks.denLevel === 'L3' ? 3 : tweaks.denLevel === 'L5' ? 5 : 1))
+  );
+
+  return (
+    <div style={{
+      height: '100%',
+      background: `linear-gradient(180deg, ${primaryColor}18 0%, white 55%)`,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '20px 20px 16px', position: 'relative', overflowY: 'auto',
+    }}>
+      {intensity !== 'none' && <Confetti intensity={intensity}/>}
+
+      {/* Title */}
+      <div style={{ textAlign: 'center', animation: 'slideUp 0.5s ease-out', zIndex: 1 }}>
+        <h1 style={{ fontFamily: 'Nunito', fontWeight: 900, fontSize: 26, color: T.text, lineHeight: 1.2 }}>
+          Territory Claimed
+        </h1>
+        <p style={{ color: T.muted, fontSize: 13, marginTop: 4, fontFamily: 'Inter' }}>
+          {tweaks.dogName || 'Max'} now owns this corner<br/>of Kreuzberg
+        </p>
+      </div>
+
+      {/* Walk summary card */}
+      <div style={{
+        background: 'white', borderRadius: 20, overflow: 'hidden',
+        width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.09)',
+        animation: 'popIn 0.6s 0.2s ease-out both', zIndex: 1,
+      }}>
+        <div style={{
+          background: `linear-gradient(135deg, ${primaryColor}22, ${primaryColor}10)`,
+          padding: '13px', display: 'flex', justifyContent: 'space-between',
+        }}>
+          {[
+            { v: `${walkData.km || '0.94'} km`, l: 'Distance' },
+            { v: '0.34 km²', l: 'Area' },
+            { v: walkData.seconds ? `${Math.floor(walkData.seconds / 60)}m` : '12m', l: 'Duration' },
+          ].map(s => (
+            <div key={s.l} style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 17, color: T.text }}>{s.v}</div>
+              <div style={{ fontSize: 10, color: T.muted }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '8px 13px', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <PinIcon size={13} color={T.muted}/>
+          <span style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, color: T.text }}>Kreuzberg North</span>
+        </div>
+      </div>
+
+      {/* Dog + XP */}
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+        animation: 'slideUp 0.5s 0.3s ease-out both', zIndex: 1,
+      }}>
+        <DogAvatar breed={tweaks.breed || 'Golden Retriever'} size={76} wag celebrating/>
+        <div style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 14, color: T.text }}>{tweaks.dogName || 'Max'}</div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: '#FFF9E6', borderRadius: 12, padding: '7px 14px',
+        }}>
+          <span style={{
+            fontFamily: 'Nunito', fontWeight: 900, fontSize: 22, color: T.gold,
+            animation: xp > 0 ? 'xpTick 0.3s ease-out' : 'none',
+          }}>+{xp} XP</span>
+          {leveled && (
+            <span style={{
+              fontFamily: 'Nunito', fontWeight: 800, fontSize: 13, color: T.green,
+              animation: 'badgePop 0.5s ease-out',
+            }}>Level 4</span>
+          )}
+        </div>
+        <div style={{ width: 190 }}>
+          <XPBar percent={xpBarPct} color={T.gold} animated/>
+        </div>
+      </div>
+
+      {/* Treat reward (Phase 1 addition) */}
+      <div style={{
+        width: '100%', background: '#F4F6F0', borderRadius: 14, padding: '12px 14px',
+        animation: `treatPop 0.5s 0.8s ease-out both`, zIndex: 1,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, color: T.text }}>
+            Walk reward
+          </div>
+          <div style={{
+            fontFamily: 'Nunito', fontWeight: 800, fontSize: 15,
+            color: treatsClaimed ? '#C87941' : T.muted,
+            animation: treatsClaimed ? 'xpTick 0.4s ease-out' : 'none',
+          }}>
+            {treatsClaimed ? `+${WALK_TREAT_REWARD} treats` : '...'}
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: T.muted, fontFamily: 'Inter', display: 'flex', justifyContent: 'space-between' }}>
+          <span>Bakery is earning +{passiveRate.toFixed(2)} treats/sec</span>
+          <span style={{ color: '#C87941', fontWeight: 600 }}>Den</span>
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div style={{
+        display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center',
+        animation: 'slideUp 0.5s 0.5s ease-out both', zIndex: 1,
+      }}>
+        <Badge icon={<TrophyIcon size={12} color={T.gold}/>} label="Kreuzberg Champion"
+          color="#FFF3E0" textColor={T.gold} delay={0.5}/>
+        <Badge icon={<ShieldIcon size={12} color={T.green}/>} label="Defender"
+          color="#E8F5E9" textColor={T.green} delay={0.7}/>
+        <Badge icon={<PawIcon size={12} color={T.purple}/>} label="7 Territories"
+          color="#EDE7F6" textColor={T.purple} delay={0.9}/>
+      </div>
+
+      <button onClick={onDone} style={{
+        width: '100%',
+        background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}CC)`,
+        border: 'none', borderRadius: 16, padding: '14px', cursor: 'pointer',
+        fontFamily: 'Nunito', fontWeight: 800, fontSize: 16, color: 'white',
+        boxShadow: `0 4px 16px ${primaryColor}44`,
+        animation: 'slideUp 0.5s 0.7s ease-out both', zIndex: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+      }}>
+        <PawIcon size={18} color="white"/>
+        Next Walk
+      </button>
+    </div>
+  );
+}
+
+// ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
+function ProfileScreen({ tweaks }) {
+  const primaryColor = tweaks.primaryColor || T.green;
+  const stats = [
+    { label: 'Total Walks',     value: '34' },
+    { label: 'Total Distance',  value: '127.4 km' },
+    { label: 'Territories',     value: '7' },
+    { label: 'Rivals Defended', value: '2' },
+    { label: 'Collectibles',    value: '48' },
+    { label: 'Longest Walk',    value: '8.2 km' },
+  ];
+  return (
+    <div style={{ height: '100%', overflowY: 'auto', background: T.white }}>
+      <div style={{
+        background: `linear-gradient(160deg, ${primaryColor}22, ${primaryColor}06)`,
+        padding: '24px 20px 18px', textAlign: 'center',
+        borderBottom: '1px solid #EEF0EC',
+      }}>
+        <DogAvatar breed={tweaks.breed || 'Golden Retriever'} size={90} wag/>
+        <h2 style={{ fontFamily: 'Nunito', fontWeight: 900, fontSize: 24, color: T.text, marginTop: 10 }}>
+          {tweaks.dogName || 'Max'}
+        </h2>
+        <p style={{ color: T.muted, fontSize: 13, fontFamily: 'Inter' }}>{tweaks.breed || 'Golden Retriever'}</p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <Badge icon={<TrophyIcon size={12} color={T.gold}/>} label="Kreuzberg Champion"
+            color="#FFF3E0" textColor={T.gold}/>
+          <Badge icon={<StarIcon size={12} color={T.green}/>} label="Level 4"
+            color="#E8F5E9" textColor={T.green}/>
+        </div>
+      </div>
+
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid #EEF0EC' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+          <span style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 14, color: T.text }}>Level 4 Progress</span>
+          <span style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 14, color: primaryColor }}>87%</span>
+        </div>
+        <XPBar percent={87} color={primaryColor} animated/>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+          <span style={{ fontSize: 11, color: T.muted }}>2,340 XP</span>
+          <span style={{ fontSize: 11, color: T.muted }}>2,700 XP to Level 5</span>
+        </div>
+      </div>
+
+      <div style={{ padding: '14px 20px' }}>
+        <h3 style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 14, color: T.text, marginBottom: 10 }}>Stats</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {stats.map((s, i) => (
+            <div key={i} style={{
+              background: 'white', borderRadius: 14, padding: '11px 12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              animation: `slideUp 0.4s ${0.05 * i}s ease-out both`,
+            }}>
+              <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 16, color: T.text }}>{s.value}</div>
+              <div style={{ fontSize: 10, color: T.muted, fontFamily: 'Inter' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '0 20px 20px' }}>
+        <div style={{ background: 'white', borderRadius: 16, padding: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+            <span style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 13, color: T.text }}>Weekly Goal</span>
+            <span style={{ fontSize: 12, color: primaryColor, fontFamily: 'Nunito', fontWeight: 700 }}>4 / 5 walks</span>
+          </div>
+          <XPBar percent={80} color={primaryColor}/>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 5 }}>1 more walk to hit this week's goal</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LEADERBOARD MODAL ────────────────────────────────────────────────────────
+function LeaderboardModal({ onClose, tweaks }) {
+  const primaryColor = tweaks.primaryColor || T.green;
+  const [sortBy, setSortBy] = useState('week');
+  const players = [
+    { rank: 1, name: 'Luna',                             breed: 'Husky',           xp: 523, territories: 4 },
+    { rank: 2, name: tweaks.dogName || 'Max',            breed: tweaks.breed||'Golden Retriever', xp: 487, territories: 7, isMe: true },
+    { rank: 3, name: 'Buddy',                            breed: 'Corgi',           xp: 412, territories: 5 },
+    { rank: 4, name: 'Bella',                            breed: 'Poodle',          xp: 380, territories: 3 },
+    { rank: 5, name: 'Rocky',                            breed: 'Dachshund',       xp: 340, territories: 2 },
+  ];
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.42)',
+      display: 'flex', alignItems: 'flex-end', animation: 'slideUp 0.3s ease-out',
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: 'white', borderRadius: '24px 24px 0 0',
+        width: '100%', maxHeight: '80%', overflowY: 'auto', padding: '0 0 16px',
+      }}>
+        <div style={{ width: 40, height: 4, background: '#E0E0E0', borderRadius: 2, margin: '12px auto 14px' }}/>
+        <div style={{ padding: '0 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <TrophyIcon size={18} color={T.gold}/>
+              <h2 style={{ fontFamily: 'Nunito', fontWeight: 900, fontSize: 17, color: T.text }}>Kreuzberg Rankings</h2>
+            </div>
+            <button onClick={onClose} style={{
+              background: '#F0F4EE', border: 'none', borderRadius: 99,
+              width: 28, height: 28, cursor: 'pointer', fontSize: 13,
+            }}>x</button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            {['week', 'month', 'alltime'].map(s => (
+              <button key={s} onClick={() => setSortBy(s)} style={{
+                flex: 1, padding: '6px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                background: sortBy === s ? primaryColor : '#F0F4EE',
+                color: sortBy === s ? 'white' : T.muted,
+                fontFamily: 'Nunito', fontWeight: 700, fontSize: 11, transition: 'all 0.2s',
+              }}>{s === 'week' ? 'This Week' : s === 'month' ? 'Month' : 'All Time'}</button>
+            ))}
+          </div>
+          {players.map((p, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              background: p.isMe ? `${primaryColor}12` : 'white',
+              border: p.isMe ? `1.5px solid ${primaryColor}44` : '1.5px solid #F0F0EC',
+              borderRadius: 13, padding: '9px 11px', marginBottom: 7,
+              animation: `slideUp 0.3s ${i * 0.06}s ease-out both`,
+            }}>
+              <span style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 15, minWidth: 24, textAlign: 'center', color: i < 3 ? T.gold : T.muted }}>
+                {i + 1}
+              </span>
+              <DogAvatar breed={p.breed} size={36}/>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 13, color: T.text }}>{p.name}</span>
+                  {p.isMe && (
+                    <span style={{
+                      fontSize: 9, background: primaryColor, color: 'white',
+                      borderRadius: 99, padding: '1px 6px', fontFamily: 'Nunito', fontWeight: 700,
+                    }}>You</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 10, color: T.muted }}>{p.breed}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 13, color: T.text }}>{p.xp} XP</div>
+                <div style={{ fontSize: 10, color: T.muted }}>{p.territories} zones</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LEADERBOARD SCREEN ───────────────────────────────────────────────────────
+function LeaderboardScreen({ tweaks }) {
+  const primaryColor = tweaks.primaryColor || T.green;
+  const [sortBy, setSortBy] = useState('week');
+  const players = [
+    { rank: 1, name: 'Luna',                          breed: 'Husky',           xp: 523, territories: 4 },
+    { rank: 2, name: tweaks.dogName || 'Max',         breed: tweaks.breed||'Golden Retriever', xp: 487, territories: 7, isMe: true },
+    { rank: 3, name: 'Buddy',                         breed: 'Corgi',           xp: 412, territories: 5 },
+    { rank: 4, name: 'Bella',                         breed: 'Poodle',          xp: 380, territories: 3 },
+    { rank: 5, name: 'Rocky',                         breed: 'Dachshund',       xp: 340, territories: 2 },
+    { rank: 6, name: 'Charlie',                       breed: 'Labrador',        xp: 290, territories: 1 },
+  ];
+  return (
+    <div style={{ height: '100%', overflowY: 'auto', background: T.white }}>
+      <div style={{ padding: '18px 18px 12px', background: `linear-gradient(160deg, ${primaryColor}18, transparent)` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <TrophyIcon size={20} color={T.gold}/>
+          <h2 style={{ fontFamily: 'Nunito', fontWeight: 900, fontSize: 19, color: T.text }}>This Week in Kreuzberg</h2>
+        </div>
+        <p style={{ color: T.muted, fontSize: 11, fontFamily: 'Inter' }}>April 18 – April 24, 2026</p>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          {['week', 'month', 'alltime'].map(s => (
+            <button key={s} onClick={() => setSortBy(s)} style={{
+              flex: 1, padding: '7px', borderRadius: 9, border: 'none', cursor: 'pointer',
+              background: sortBy === s ? primaryColor : 'white',
+              color: sortBy === s ? 'white' : T.muted,
+              fontFamily: 'Nunito', fontWeight: 700, fontSize: 11,
+              boxShadow: sortBy === s ? `0 2px 8px ${primaryColor}44` : 'none',
+              transition: 'all 0.2s',
+            }}>{s === 'week' ? 'This Week' : s === 'month' ? 'Month' : 'All Time'}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding: '0 14px 14px' }}>
+        {players.map((p, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: p.isMe ? `${primaryColor}12` : 'white',
+            border: p.isMe ? `2px solid ${primaryColor}55` : '1px solid #EEF0EC',
+            borderRadius: 15, padding: '11px', marginBottom: 7,
+            animation: `slideUp 0.35s ${i * 0.06}s ease-out both`,
+          }}>
+            <span style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 16, minWidth: 28, textAlign: 'center', color: i < 3 ? T.gold : T.muted }}>
+              {i + 1}
+            </span>
+            <DogAvatar breed={p.breed} size={44}/>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 14, color: T.text }}>{p.name}</span>
+                {p.isMe && (
+                  <span style={{
+                    fontSize: 9, background: primaryColor, color: 'white',
+                    borderRadius: 99, padding: '2px 7px', fontFamily: 'Nunito', fontWeight: 700,
+                  }}>You</span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: T.muted }}>{p.breed}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: 15, color: T.text }}>{p.xp}</div>
+              <div style={{ fontSize: 10, color: T.muted }}>XP</div>
+              <div style={{ fontSize: 10, color: T.muted }}>{p.territories} zones</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  // Navigation
+  const [screen, setScreen] = useState('map');
+  const [tab, setTab] = useState('map');
+  const [walkData, setWalkData] = useState(null);
+
+  // ── Treats state (Phase 1) ────────────────────────────────────────────────
+  const [treats, setTreats] = useState(() => tweaks.startingTreats || 50);
+
+  // Den buildings — initial level depends on tweaks.denLevel preset
+  const initLevel = tweaks.denLevel === 'L5' ? 5 : tweaks.denLevel === 'L3' ? 3 : 1;
+  const [buildings, setBuildings] = useState({
+    doghouse: { level: initLevel },
+    bakery:   { level: initLevel },
+    garden:   { level: initLevel },
+  });
+
+  // Passive treat rate: base rate * bakery multiplier
+  const passiveRate = (tweaks.passiveTreatRate || 0.3) * buildings.bakery.level;
+  const storageCap = 100 + buildings.doghouse.level * 100;
+
+  // Passive tick
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTreats(t => Math.min(storageCap, t + passiveRate / 10));
+    }, 100);
+    return () => clearInterval(id);
+  }, [passiveRate, storageCap]);
+
+  // Sync starting treats when tweak changes
+  useEffect(() => {
+    setTreats(tweaks.startingTreats || 50);
+  }, [tweaks.startingTreats]);
+
+  // Sync den level preset
+  useEffect(() => {
+    const lvl = tweaks.denLevel === 'L5' ? 5 : tweaks.denLevel === 'L3' ? 3 : 1;
+    setBuildings({ doghouse: { level: lvl }, bakery: { level: lvl }, garden: { level: lvl } });
+  }, [tweaks.denLevel]);
+
+  // ── Den upgrade handler ───────────────────────────────────────────────────
+  const handleUpgrade = (key) => {
+    const cost = upgradeCost(key, buildings[key].level + 1);
+    if (treats < cost) return;
+    setTreats(t => t - cost);
+    setBuildings(b => ({ ...b, [key]: { ...b[key], level: b[key].level + 1 } }));
+  };
+
+  // Den badge: show if can afford any upgrade
+  const canAffordAny = Object.entries(buildings).some(([key, bld]) =>
+    treats >= upgradeCost(key, bld.level + 1)
+  );
+  const showDenBadge = tweaks.showDenBadge && canAffordAny;
+
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const handleWalkComplete = (data) => { setWalkData(data); setScreen('celebrate'); };
+  const handleCelebrationDone = () => { setScreen('map'); setTab('map'); };
+  const handleTab = (t) => { setTab(t); setScreen(t); };
+
+  const renderScreen = () => {
+    if (screen === 'celebrate') return (
+      <CelebrationScreen
+        walkData={walkData} tweaks={tweaks}
+        onDone={handleCelebrationDone}
+        onTreatsEarned={(n) => setTreats(t => Math.min(storageCap, t + n))}
+      />
+    );
+    if (screen === 'den') return (
+      <DenScreen
+        treats={treats} buildings={buildings}
+        onUpgrade={handleUpgrade} tweaks={tweaks}
+        passiveRate={passiveRate}
+      />
+    );
+    if (screen === 'profile') return <ProfileScreen tweaks={tweaks}/>;
+    if (screen === 'leaderboard') return <LeaderboardScreen tweaks={tweaks}/>;
+    return <MapScreen onWalkComplete={handleWalkComplete} tweaks={tweaks}/>;
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20 }}>
+        <IOSDevice statusBarStyle="dark">
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.white }}>
+            {/* App header */}
+            {screen !== 'celebrate' && (
+              <div style={{
+                padding: '9px 16px 7px', background: 'white',
+                borderBottom: '1px solid #EEF0EC',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <PawIcon size={18} color={tweaks.primaryColor || T.green}/>
+                  <span style={{ fontFamily: 'Nunito', fontWeight: 900, fontSize: 15, color: T.text }}>
+                    Territory Defender
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Treat counter in header */}
+                  <div style={{
+                    background: '#FFF3E0', borderRadius: 20, padding: '3px 10px',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}>
+                    <BakeryIcon size={13} color="#C87941"/>
+                    <span style={{ fontFamily: 'Nunito', fontWeight: 700, fontSize: 12, color: '#C87941' }}>
+                      {Math.floor(treats)}
+                    </span>
+                  </div>
+                  <DogAvatar breed={tweaks.breed || 'Golden Retriever'} size={30}/>
+                </div>
+              </div>
+            )}
+
+            {/* Screen content */}
+            <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+              {renderScreen()}
+            </div>
+
+            {/* Tab bar */}
+            {screen !== 'celebrate' && (
+              <TabBar active={tab} onTab={handleTab} showDenBadge={showDenBadge}/>
+            )}
+          </div>
+        </IOSDevice>
+      </div>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Dog">
+          <TweakText   label="Dog Name" value={tweaks.dogName}
+            onChange={v => setTweak('dogName', v)}/>
+          <TweakSelect label="Breed" value={tweaks.breed}
+            options={['Golden Retriever','Husky','Corgi','Dachshund','Poodle','Labrador']}
+            onChange={v => setTweak('breed', v)}/>
+        </TweakSection>
+        <TweakSection label="Map">
+          <TweakColor  label="Territory Color" value={tweaks.primaryColor}
+            onChange={v => setTweak('primaryColor', v)}/>
+
+          <TweakToggle label="Show Collectibles" value={tweaks.showCollectibles}
+            onChange={v => setTweak('showCollectibles', v)}/>
+        </TweakSection>
+        <TweakSection label="Den (Phase 1)">
+          <TweakSlider label="Passive Rate (treats/sec)" value={tweaks.passiveTreatRate}
+            min={0.1} max={5} step={0.1}
+            onChange={v => setTweak('passiveTreatRate', v)}/>
+          <TweakSlider label="Starting Treats" value={tweaks.startingTreats}
+            min={0} max={500} step={10}
+            onChange={v => setTweak('startingTreats', v)}/>
+          <TweakRadio  label="Den Level Preset" value={tweaks.denLevel}
+            options={['L1','L3','L5']}
+            onChange={v => setTweak('denLevel', v)}/>
+          <TweakToggle label="Den Upgrade Badge" value={tweaks.showDenBadge}
+            onChange={v => setTweak('showDenBadge', v)}/>
+        </TweakSection>
+        <TweakSection label="Celebration">
+          <TweakSelect label="Confetti Level" value={tweaks.celebrationIntensity}
+            options={['high','low','none']}
+            onChange={v => setTweak('celebrationIntensity', v)}/>
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
