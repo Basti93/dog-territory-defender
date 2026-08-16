@@ -15,6 +15,37 @@ This file tells Claude (and any AI coding agent) how to collaborate on **Dog Ter
 - **Design update prompt:** [docs/05-design-update-prompt.md](docs/05-design-update-prompt.md) (evolve the prototype as phases progress).
 - **Decisions log:** [DECISIONS.md](DECISIONS.md) (append-only, newest first).
 - **Visual prototype:** [prototype/](prototype/) — clickable HTML demo. Match its output, not its internal structure.
+- **Spec-driven workflow:** [openspec/](openspec/) (OpenSpec, `openspec/config.yaml`). **Always use the OpenSpec flow for non-trivial changes** — don't jump straight to code. `/opsx:explore` → `/opsx:propose <feature-name>` → `/opsx:apply` → `/opsx:archive`.
+
+---
+
+## Dev commands
+
+```bash
+npm install        # install deps (legacy-peer-deps=true set in .npmrc)
+npm run start       # expo start — QR code, pick platform
+npm run android      # expo start --android
+npm run ios          # expo start --ios
+npm run web           # expo start --web
+```
+
+No lint or test scripts configured (`package.json` has none). Don't invent `npm run lint`/`npm test` commands — they don't exist yet.
+
+Stack: Expo SDK 54, React Native 0.74, React 18, TypeScript 5.3 (strict via `expo/tsconfig.base`). `eas.json` has build profiles (`development`/`preview`/`production`) but no build has been run from this repo yet.
+
+## Architecture (current implementation, Phase 0)
+
+Single-screen app, all state in `App.tsx` via `useState`/`useRef` — no navigation, no backend, no persistence. One `Walk` in flight at a time.
+
+- `src/types.ts` — `Location`, `Walk`, `TerritoryPolygon`, `AppState` interfaces.
+- `src/utils/gps.ts` — thin wrapper over `expo-location`: `requestLocationPermission` (foreground + background), `startWatchingLocation` (1s / 2m interval callback), `getInitialLocation`.
+- `src/utils/geometry.ts` — `getDistance` (haversine), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [docs/04-engagement-mechanics.md](docs/04-engagement-mechanics.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
+- `src/components/MapCanvas.tsx` — renders the trail/territory by projecting raw lat/lon into an SVG viewBox (`react-native-svg` `Polyline`/`Polygon`/`Circle`), scaled to the bounding box of visited points. **This is not a real map** — no tiles, no `react-native-maps`, no pan/zoom. README's "Architecture" section describes a `MapView`-based approach; that's aspirational/stale, not what's implemented.
+- `src/web/mapHTML.ts` — a Leaflet-in-WebView HTML string. **Currently unused/dead code** — not imported anywhere. Leftover from an earlier map approach; either wire it up or remove it, don't assume it's live.
+
+State flow (`App.tsx`): `startWalk()` creates a `Walk`, starts the location subscription → each GPS callback appends to `walk.locations` → `canCloseWalk()` gates the "Close Territory" button → `stopWalk()` runs `locationsToPolygon()` and marks the walk closed → `resetWalk()` clears state for the next walk.
+
+`prototype/` is the design spec (standalone HTML + React via Babel, not a real build) — see rule 1 below and `prototype/README.md`. Match its visuals/behavior; never import its structure into `src/`.
 
 ---
 

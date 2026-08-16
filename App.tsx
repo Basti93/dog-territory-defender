@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
-import MapView, { Polyline, Polygon } from 'react-native-maps';
 import { StatusBar } from 'expo-status-bar';
 
 import { Walk, AppState as AppStateType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { canCloseWalk, locationsToPolygon } from './src/utils/geometry';
+import { MapCanvas } from './src/components/MapCanvas';
 
 const COLORS = {
   green: '#2ECC71',
@@ -23,17 +24,9 @@ export default function App() {
     error: null,
   });
 
-  const [mapRegion, setMapRegion] = useState({
-    latitude: 52.5,
-    longitude: 13.4,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  });
-
-  const mapRef = useRef<MapView>(null);
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
 
-  // Initialize location permission and get starting point
+  // Initialize location permission
   useEffect(() => {
     (async () => {
       const hasPermission = await requestLocationPermission();
@@ -42,17 +35,6 @@ export default function App() {
           ...prev,
           error: 'Location permission denied',
         }));
-        return;
-      }
-
-      const initialLoc = await getInitialLocation();
-      if (initialLoc) {
-        setMapRegion({
-          latitude: initialLoc.latitude,
-          longitude: initialLoc.longitude,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
-        });
       }
     })();
   }, []);
@@ -86,13 +68,6 @@ export default function App() {
           ...prev.walk,
           locations: [...prev.walk.locations, location],
         };
-
-        // Center map on current location
-        setMapRegion((prev) => ({
-          ...prev,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        }));
 
         return { ...prev, walk: updatedWalk };
       });
@@ -145,42 +120,18 @@ export default function App() {
   const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar />
 
       {/* Map */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        region={mapRegion}
-        onRegionChange={setMapRegion}
-      >
-        {/* Walk trail */}
-        {appState.walk && appState.walk.locations.length > 1 && (
-          <Polyline
-            coordinates={appState.walk.locations.map((loc) => ({
-              latitude: loc.latitude,
-              longitude: loc.longitude,
-            }))}
-            strokeColor={COLORS.blue}
-            strokeWidth={3}
-            lineDashPattern={[5, 5]}
-          />
-        )}
-
-        {/* Territory polygon (if closed) */}
-        {appState.walk && appState.walk.territory && (
-          <Polygon
-            coordinates={appState.walk.territory.coordinates.map((coords) => ({
-              latitude: coords[0],
-              longitude: coords[1],
-            }))}
-            fillColor={`${COLORS.green}33`}
-            strokeColor={COLORS.green}
-            strokeWidth={2}
-          />
-        )}
-      </MapView>
+      <View style={styles.map}>
+        <MapCanvas
+          locations={appState.walk?.locations || []}
+          territory={appState.walk?.territory}
+          currentLocation={appState.walk?.locations[appState.walk.locations.length - 1]}
+        />
+      </View>
 
       {/* Bottom controls */}
       <View style={styles.controls}>
@@ -226,6 +177,7 @@ export default function App() {
         {appState.error && <Text style={styles.error}>{appState.error}</Text>}
       </View>
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

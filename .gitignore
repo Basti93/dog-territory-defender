@@ -11,3 +11,4 @@ dist/
 *.mobileprovision
 *.orig.*
 web-build/
+.claude/worktrees/

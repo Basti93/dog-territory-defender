@@ -1,0 +1,41 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+context: |
+  Dog Territory Defender: location-based mobile game for urban dog owners.
+  Spring-like, joyful tone. Cookie-clicker background loop (The Den). Anti-snowball social layer.
+  Stack: Expo SDK 54, React Native 0.74, React 18, TypeScript 5.3 strict. No backend/persistence yet.
+  Currently Phase 0 (Walking Skeleton) of a 5-phase lean-startup plan — see docs/01-prototype-plan-prompt.md.
+  Phase-gated: never build a later phase's features early. Confirm target phase before proposing scope.
+  Never use aggressive language ("conquer", "destroy", "kill", "battle") — use "claim", "defend", "protect".
+  No dark mode. Full rules: CLAUDE.md, docs/04-engagement-mechanics.md (numeric thresholds are load-bearing).
+  Every significant decision must also be logged in DECISIONS.md (see CLAUDE.md for the entry format).
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
