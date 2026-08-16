@@ -97,7 +97,7 @@ After validating GPS:
 3. Add tab navigation (Map / Den / Dog / Settings)
 4. Wire up basic backend (Supabase) for walk history
 
-See [`../docs/01-prototype-plan-prompt.md`](../docs/01-prototype-plan-prompt.md) for the full Phase 0→1 transition.
+See [`openspec/specs/game-phases/spec.md`](openspec/specs/game-phases/spec.md) for the full Phase 0→1 transition.
 
 ---
 
