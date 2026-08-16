@@ -22,7 +22,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 **What's not built yet:**
 - ❌ Collectibles, enemies, leaderboards (Phase 2+)
 - ❌ Cloud/remote sync (AWS) — local storage is schema-ready (`syncedAt` field) but no sync service exists yet
-- ❌ Background-location tracking fix — real GPS accuracy degrades once backgrounded; tracked as `openspec/changes/background-location-tracking/`, needs a dev-client rebuild
+- ⚠️ Background-location tracking — foreground-service fix built and notification confirmed working; still needs one extended (5+ min) real-walk re-verification before archiving `openspec/changes/background-location-tracking/`
 - ❌ Dark mode (design polish)
 
 ---
