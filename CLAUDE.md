@@ -38,8 +38,7 @@ Single-screen app, all state in `App.tsx` via `useState`/`useRef` — no navigat
 - `src/types.ts` — `Location`, `Walk`, `TerritoryPolygon`, `AppState` interfaces.
 - `src/utils/gps.ts` — thin wrapper over `expo-location`: `requestLocationPermission` (foreground + background), `startWatchingLocation` (1s / 2m interval callback), `getInitialLocation`.
 - `src/utils/geometry.ts` — `getDistance` (haversine), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [openspec/specs/walk-lifecycle/spec.md](openspec/specs/walk-lifecycle/spec.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
-- `src/components/MapCanvas.tsx` — renders the trail/territory by projecting raw lat/lon into an SVG viewBox (`react-native-svg` `Polyline`/`Polygon`/`Circle`), scaled to the bounding box of visited points. **This is not a real map** — no tiles, no `react-native-maps`, no pan/zoom. README's "Architecture" section describes a `MapView`-based approach; that's aspirational/stale, not what's implemented.
-- `src/web/mapHTML.ts` — a Leaflet-in-WebView HTML string. **Currently unused/dead code** — not imported anywhere. Leftover from an earlier map approach; either wire it up or remove it, don't assume it's live.
+- `src/components/MapView.tsx` — real map: `react-native-webview` hosting `src/web/mapHTML.ts` (Leaflet + OpenStreetMap tiles), driven by a `postMessage` bridge (`UPDATE_LOCATION`/`UPDATE_TRAIL`/`SHOW_TERRITORY`/`RESET`). Requires internet access at walk time. The old SVG-projection `MapCanvas.tsx` placeholder was deleted once this replaced it.
 
 State flow (`App.tsx`): `startWalk()` creates a `Walk`, starts the location subscription → each GPS callback appends to `walk.locations` → `canCloseWalk()` gates the "Close Territory" button → `stopWalk()` runs `locationsToPolygon()` and marks the walk closed → `resetWalk()` clears state for the next walk.
 

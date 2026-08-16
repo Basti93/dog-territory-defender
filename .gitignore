@@ -12,3 +12,7 @@ dist/
 *.orig.*
 web-build/
 .claude/worktrees/
+
+# Expo prebuild output (managed workflow — regenerated from app.json, not checked in)
+/android/
+/ios/

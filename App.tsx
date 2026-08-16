@@ -7,15 +7,18 @@ import { StatusBar } from 'expo-status-bar';
 import { Walk, AppState as AppStateType, Location as LocationType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { canCloseWalk, locationsToPolygon } from './src/utils/geometry';
-import { MapCanvas } from './src/components/MapCanvas';
+import { MapView } from './src/components/MapView';
 import { startMockWalk, MockWalkHandle } from './src/utils/mockGps';
 import { mockClosedLoop, mockOpenWalk } from './src/utils/mockWalkFixtures';
 import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { DenScreen } from './src/components/DenScreen';
+import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
-import { applyPassiveAccrual, awardWalkTreats } from './src/economy/denEconomy';
+import { applyPassiveAccrual, awardWalkTreats, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
 import { BALANCE } from './src/economy/balanceConfig';
+import { log } from './src/utils/log';
+import { getDistance } from './src/utils/geometry';
 
 const walkRepository = createSqliteWalkRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
@@ -37,6 +40,11 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showDen, setShowDen] = useState(false);
   const [treats, setTreats] = useState<number | null>(null);
+  const [celebration, setCelebration] = useState<{
+    areaM2: number;
+    treatsEarned: number;
+    tease: UpgradeTease | null;
+  } | null>(null);
 
   const subscriptionRef = useRef<Location.LocationSubscription | MockWalkHandle | null>(null);
 
@@ -59,6 +67,11 @@ export default function App() {
       const state = await denEconomyRepository.getState();
       const accrued = applyPassiveAccrual(state, Date.now());
       await denEconomyRepository.saveState(accrued);
+      log('TREATS_PASSIVE_ACCRUAL', {
+        before: state.treats,
+        after: accrued.treats,
+        elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
+      });
       setTreats(accrued.treats);
     })();
   }, []);
@@ -76,6 +89,8 @@ export default function App() {
       locations: [initialLoc],
       closed: false,
     };
+
+    log('WALK_START', { id: newWalk.id, lat: initialLoc.latitude, lon: initialLoc.longitude });
 
     setAppState((prev) => ({
       ...prev,
@@ -137,8 +152,17 @@ export default function App() {
     }
 
     if (appState.walk) {
+      const startEndDistance = getDistance(
+        appState.walk.locations[0].latitude,
+        appState.walk.locations[0].longitude,
+        appState.walk.locations[appState.walk.locations.length - 1].latitude,
+        appState.walk.locations[appState.walk.locations.length - 1].longitude
+      );
+
       // Check if can close
       const canClose = canCloseWalk(appState.walk.locations);
+      log('WALK_CLOSURE_CHECK', { points: appState.walk.locations.length, startEndDistance, canClose });
+
       if (canClose) {
         const polygon = locationsToPolygon(appState.walk.locations);
         const closedWalk: Walk = { ...appState.walk, closed: true, territory: polygon || undefined };
@@ -147,21 +171,30 @@ export default function App() {
           walk: prev.walk ? closedWalk : null,
           isTracking: false,
         }));
-        walkRepository.saveWalk(closedWalk).catch((err) => console.error('Failed to save walk:', err));
+        log('WALK_CLOSED', { id: closedWalk.id, areaM2: polygon?.area, points: closedWalk.locations.length });
+
+        walkRepository
+          .saveWalk(closedWalk)
+          .then(() => log('STORAGE_WALK_SAVED', { id: closedWalk.id, closed: true }))
+          .catch((err) => {
+            console.error('Failed to save walk:', err);
+            log('STORAGE_WALK_SAVE_ERROR', { id: closedWalk.id, error: String(err) });
+          });
 
         denEconomyRepository
           .getState()
           .then((state) => {
             const rewarded = awardWalkTreats(state);
+            log('TREATS_AWARD', { amount: BALANCE.treatsPerWalk, before: state.treats, after: rewarded.treats });
             setTreats(rewarded.treats);
+            setCelebration({
+              areaM2: polygon?.area ?? 0,
+              treatsEarned: BALANCE.treatsPerWalk,
+              tease: getUpgradeTease(rewarded),
+            });
             return denEconomyRepository.saveState(rewarded);
           })
           .catch((err) => console.error('Failed to award walk treats:', err));
-
-        Alert.alert(
-          'Success!',
-          `Territory claimed! Area: ${polygon?.area.toFixed(0) || '?'} m². +${BALANCE.treatsPerWalk} treats!`
-        );
       } else {
         Alert.alert('Not closed', 'Walk does not form a closed loop (start and end within 20m)');
         setAppState((prev) => ({
@@ -179,7 +212,14 @@ export default function App() {
     }
 
     if (appState.walk) {
-      walkRepository.saveWalk(appState.walk).catch((err) => console.error('Failed to save walk:', err));
+      log('WALK_ENDED_EARLY', { id: appState.walk.id, points: appState.walk.locations.length });
+      walkRepository
+        .saveWalk(appState.walk)
+        .then(() => log('STORAGE_WALK_SAVED', { id: appState.walk!.id, closed: false }))
+        .catch((err) => {
+          console.error('Failed to save walk:', err);
+          log('STORAGE_WALK_SAVE_ERROR', { id: appState.walk!.id, error: String(err) });
+        });
     }
 
     setAppState((prev) => ({
@@ -189,6 +229,9 @@ export default function App() {
   };
 
   const resetWalk = () => {
+    if (appState.walk) {
+      log('WALK_CANCELLED', { id: appState.walk.id, points: appState.walk.locations.length });
+    }
     setAppState({
       walk: null,
       isTracking: false,
@@ -203,6 +246,21 @@ export default function App() {
     : 0;
 
   const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
+
+  if (celebration) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <CelebrationScreen
+            areaM2={celebration.areaM2}
+            treatsEarned={celebration.treatsEarned}
+            tease={celebration.tease}
+            onContinue={() => setCelebration(null)}
+          />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
   if (showHistory) {
     return (
@@ -231,7 +289,7 @@ export default function App() {
 
       {/* Map */}
       <View style={styles.map}>
-        <MapCanvas
+        <MapView
           locations={appState.walk?.locations || []}
           territory={appState.walk?.territory}
           currentLocation={appState.walk?.locations[appState.walk.locations.length - 1]}

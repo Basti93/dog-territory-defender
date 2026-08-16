@@ -4,6 +4,7 @@ import {
   applyPassiveAccrual,
   awardWalkTreats,
   defaultDenEconomyState,
+  getUpgradeTease,
   upgradeBuilding,
 } from '../denEconomy';
 
@@ -77,5 +78,34 @@ describe('upgradeBuilding', () => {
     const result = upgradeBuilding(state, 'bakery');
 
     expect(result).toEqual({ error: 'max-level' });
+  });
+});
+
+describe('getUpgradeTease', () => {
+  it('picks the cheapest affordable upgrade', () => {
+    // level 1->2 costs: doghouse 60, sniffGarden 72, bakery 96
+    const state = { ...defaultDenEconomyState(NOW), treats: 80 };
+    const tease = getUpgradeTease(state);
+
+    expect(tease).toEqual({ building: 'doghouse', cost: 60, affordable: true });
+  });
+
+  it('falls back to the cheapest overall when nothing is affordable', () => {
+    const state = { ...defaultDenEconomyState(NOW), treats: 10 };
+    const tease = getUpgradeTease(state);
+
+    expect(tease).toEqual({ building: 'doghouse', cost: 60, affordable: false });
+  });
+
+  it('returns null when every building is at max level', () => {
+    const state = {
+      ...defaultDenEconomyState(NOW),
+      doghouseLevel: BALANCE.maxBuildingLevel,
+      bakeryLevel: BALANCE.maxBuildingLevel,
+      sniffGardenLevel: BALANCE.maxBuildingLevel,
+      treats: 1_000_000,
+    };
+
+    expect(getUpgradeTease(state)).toBeNull();
   });
 });

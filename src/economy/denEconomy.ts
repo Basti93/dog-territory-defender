@@ -45,6 +45,36 @@ function levelKey(building: BuildingKey): 'doghouseLevel' | 'bakeryLevel' | 'sni
   return `${building}Level` as const;
 }
 
+export function getBuildingLevel(state: DenEconomyState, building: BuildingKey): number {
+  return state[levelKey(building)];
+}
+
+export interface UpgradeTease {
+  building: BuildingKey;
+  cost: number;
+  affordable: boolean;
+}
+
+export function getUpgradeTease(state: DenEconomyState): UpgradeTease | null {
+  const buildingKeys = Object.keys(BALANCE.buildings) as BuildingKey[];
+  const upgradable = buildingKeys
+    .filter((building) => getBuildingLevel(state, building) < BALANCE.maxBuildingLevel)
+    .map((building) => ({
+      building,
+      cost: upgradeCost(building, getBuildingLevel(state, building) + 1),
+    }));
+
+  if (upgradable.length === 0) {
+    return null;
+  }
+
+  const affordableNow = upgradable.filter((x) => state.treats >= x.cost);
+  const pool = affordableNow.length > 0 ? affordableNow : upgradable;
+  const cheapest = pool.slice().sort((a, b) => a.cost - b.cost)[0];
+
+  return { building: cheapest.building, cost: cheapest.cost, affordable: state.treats >= cheapest.cost };
+}
+
 export function upgradeBuilding(
   state: DenEconomyState,
   building: BuildingKey

@@ -4,7 +4,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { upgradeCost, storageCap, passiveTreatsPerHour, softCapBonusPercent } from '../economy/formulas';
-import { DenEconomyState, upgradeBuilding } from '../economy/denEconomy';
+import { DenEconomyState, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 
 const COLORS = {
@@ -23,17 +23,6 @@ const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; color: 
 };
 
 const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
-
-function getLevel(state: DenEconomyState, building: BuildingKey): number {
-  switch (building) {
-    case 'doghouse':
-      return state.doghouseLevel;
-    case 'bakery':
-      return state.bakeryLevel;
-    case 'sniffGarden':
-      return state.sniffGardenLevel;
-  }
-}
 
 function effectText(building: BuildingKey, level: number): string {
   switch (building) {
@@ -74,12 +63,7 @@ export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenPro
     );
   }
 
-  const upgradable = BUILDING_ORDER.filter((b) => getLevel(state, b) < BALANCE.maxBuildingLevel).map((building) => ({
-    building,
-    cost: upgradeCost(building, getLevel(state, building) + 1),
-  }));
-  const affordableNow = upgradable.filter((x) => state.treats >= x.cost);
-  const teaseTarget = (affordableNow.length > 0 ? affordableNow : upgradable).slice().sort((a, b) => a.cost - b.cost)[0];
+  const tease = getUpgradeTease(state);
 
   const handleUpgrade = async (building: BuildingKey) => {
     const result = upgradeBuilding(state, building);
@@ -125,10 +109,10 @@ export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenPro
 
         {BUILDING_ORDER.map((building) => {
           const display = BUILDING_DISPLAY[building];
-          const level = getLevel(state, building);
+          const level = getBuildingLevel(state, building);
           const maxed = level >= BALANCE.maxBuildingLevel;
           const cost = maxed ? null : upgradeCost(building, level + 1);
-          const isTease = teaseTarget?.building === building;
+          const isTease = tease?.building === building;
 
           return (
             <TouchableOpacity

@@ -17,11 +17,13 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ "View Past Walks" screen — see every previously recorded walk
 - ✅ Treats economy core: +50 treats per closed walk, passive treats accrue over time (capped by storage), all persisted
 - ✅ Den screen: 3 buildings (Doghouse, Treat Bakery, Sniff Garden), tap to upgrade, "next upgrade" tease, spring touches
+- ✅ Post-walk celebration: area claimed, treats earned, next-upgrade tease, gentle confetti — replaces the old plain alert
 
 **What's not built yet:**
 - ❌ Collectibles, enemies, leaderboards (Phase 2+)
 - ❌ Cloud/remote sync (AWS) — local storage is schema-ready (`syncedAt` field) but no sync service exists yet
-- ❌ Dark mode, animations (design polish)
+- ❌ Background-location tracking fix — real GPS accuracy degrades once backgrounded; tracked as `openspec/changes/background-location-tracking/`, needs a dev-client rebuild
+- ❌ Dark mode (design polish)
 
 ---
 
@@ -66,7 +68,8 @@ In a dev build, two extra buttons ("🧪 Load Mock Closed Loop" / "🧪 Load Moc
 ```
 App.tsx
 ├── React hooks: useState, useRef, useEffect
-├── MapView (from react-native-maps)
+├── MapView (src/components/MapView.tsx) — real OpenStreetMap tiles via react-native-webview + Leaflet
+│   └── src/web/mapHTML.ts: the Leaflet page + postMessage bridge (UPDATE_LOCATION/UPDATE_TRAIL/SHOW_TERRITORY/RESET)
 ├── GPS tracking (expo-location)
 ├── Utils:
 │   ├── gps.ts: permission + location watching
@@ -123,7 +126,7 @@ App.tsx
 
 1. ~~Passive treats tick + treats-per-walk~~ — done (`src/economy/`)
 2. ~~Den screen~~ — done (`src/components/DenScreen.tsx`)
-3. Add post-walk celebration (confetti)
+3. ~~Post-walk celebration~~ — done (`src/components/CelebrationScreen.tsx`)
 4. Add tab navigation (Map / Den / Dog / Settings)
 5. Wire up cloud sync (AWS — DynamoDB target) for data already saved locally via `syncedAt`
 
@@ -138,9 +141,10 @@ See [`openspec/specs/game-phases/spec.md`](openspec/specs/game-phases/spec.md) f
 - Ensure "High accuracy" mode is on (Settings → Location)
 - Try reloading: press 'r' in the Expo terminal
 
-**Map shows wrong location?**
-- Initial region defaults to Berlin (52.5, 13.4). First GPS fix will pan to your location.
-- Drag map manually if needed.
+**Map shows wrong location, or blank?**
+- Map starts zoomed out world-view; it centers/zooms in on your first GPS fix. Give it a moment.
+- The map needs internet access (loads Leaflet + OpenStreetMap tiles) — a dead zone at launch can show a blank map.
+- Drag/pinch the map manually if needed — it's a real Leaflet map now, pan/zoom both work.
 
 **App crashes?**
 - Check terminal for errors

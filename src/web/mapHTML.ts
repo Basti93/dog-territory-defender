@@ -16,7 +16,7 @@ export const mapHTML = `
 <body>
   <div id="map"></div>
   <script>
-    const map = L.map('map').setView([52.5, 13.4], 16);
+    const map = L.map('map').setView([0, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap',
       maxZoom: 20
@@ -25,9 +25,30 @@ export const mapHTML = `
     let trailPolyline = null;
     let territoryPolygon = null;
     let currentMarker = null;
+    let hasCentered = false;
 
-    window.addEventListener('message', (e) => {
-      const { type, payload } = e.data;
+    function reset() {
+      if (trailPolyline) {
+        map.removeLayer(trailPolyline);
+        trailPolyline = null;
+      }
+      if (territoryPolygon) {
+        map.removeLayer(territoryPolygon);
+        territoryPolygon = null;
+      }
+      if (currentMarker) {
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }
+      hasCentered = false;
+    }
+
+    function handleMessage(e) {
+      const { type, payload } = JSON.parse(e.data);
+
+      if (type === 'RESET') {
+        reset();
+      }
 
       if (type === 'UPDATE_LOCATION') {
         const { latitude, longitude } = payload;
@@ -41,8 +62,13 @@ export const mapHTML = `
           currentMarker.setLatLng([latitude, longitude]);
         }
 
-        // Center map on current location
-        map.panTo([latitude, longitude]);
+        // Center + zoom in on the first real fix; pan on every fix after that
+        if (!hasCentered) {
+          map.setView([latitude, longitude], 16);
+          hasCentered = true;
+        } else {
+          map.panTo([latitude, longitude]);
+        }
       }
 
       if (type === 'UPDATE_TRAIL') {
@@ -50,6 +76,7 @@ export const mapHTML = `
 
         if (trailPolyline) {
           map.removeLayer(trailPolyline);
+          trailPolyline = null;
         }
 
         if (locations.length > 1) {
@@ -70,6 +97,7 @@ export const mapHTML = `
 
         if (territoryPolygon) {
           map.removeLayer(territoryPolygon);
+          territoryPolygon = null;
         }
 
         if (coordinates.length > 2) {
@@ -87,7 +115,11 @@ export const mapHTML = `
           map.fitBounds(group.getBounds().pad(0.1));
         }
       }
-    });
+    }
+
+    // Android WebView delivers postMessage on document; iOS delivers on window.
+    window.addEventListener('message', handleMessage);
+    document.addEventListener('message', handleMessage);
   <\/script>
 </body>
 </html>
