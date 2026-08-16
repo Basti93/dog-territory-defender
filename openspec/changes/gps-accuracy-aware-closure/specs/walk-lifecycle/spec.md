@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Walk can end without a closed loop
-The system SHALL allow the user to end an in-progress walk before it satisfies the closure condition — at least 10 recorded points, and straight-line distance between the first and last point under an accuracy-aware radius (the sum of the first and last points' own reported GPS accuracy, plus a fixed margin, rather than one fixed distance regardless of conditions) — preserving the recorded trail as an open, unclosed walk.
+The system SHALL allow the user to end an in-progress walk before it satisfies the closure condition — at least 10 recorded points, and straight-line distance between the first and last point under an accuracy-aware radius (the sum of the first and last points' own reported GPS accuracy, plus a fixed margin, floored at 100m so the radius is never tighter than that regardless of conditions) — preserving the recorded trail as an open, unclosed walk.
 
 #### Scenario: Ending a walk that hasn't closed
 - **WHEN** the user ends the walk while tracking and the walk has not yet met the closure condition
@@ -9,8 +9,8 @@ The system SHALL allow the user to end an in-progress walk before it satisfies t
 
 #### Scenario: Closing under good GPS conditions
 - **WHEN** the first and last recorded points both have good (low-meter) reported accuracy
-- **THEN** the closure radius is small, close to what a fixed ~20m threshold would have required
+- **THEN** the closure radius is the 100m floor — generous by default, since real testing showed even clean GPS accuracy doesn't guarantee the walker's actual return point lands within a tight threshold of the first recorded fix
 
 #### Scenario: Closing under poor GPS conditions
-- **WHEN** the first and/or last recorded points have worse reported accuracy (e.g. under tree cover or in an urban canyon)
-- **THEN** the closure radius widens accordingly, so a walker who genuinely returned to their starting point is not blocked by ordinary GPS noise
+- **WHEN** the first and/or last recorded points have worse reported accuracy (e.g. under tree cover or in an urban canyon) such that their summed accuracy plus margin exceeds the 100m floor
+- **THEN** the closure radius widens beyond 100m accordingly, so a walker who genuinely returned to their starting point is not blocked by ordinary GPS noise

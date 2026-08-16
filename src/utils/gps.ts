@@ -5,13 +5,23 @@ import { log } from './log';
 
 const LOCATION_TASK_NAME = 'dog-territory-location-task';
 
+// Fixes worse than this are dropped before they ever reach the app — they'd
+// otherwise corrupt the trail, closure check, and territory area. See
+// openspec/changes/gps-accuracy-aware-closure/design.md for why 30m.
+const MAX_ACCEPTABLE_ACCURACY_M = 30;
+
 let currentSubscriber: ((location: LocationType) => void) | null = null;
+
+export function isAccurateEnough(accuracy: number): boolean {
+  return accuracy <= MAX_ACCEPTABLE_ACCURACY_M;
+}
 
 function toLocationType(position: Location.LocationObject): LocationType {
   return {
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
     timestamp: position.timestamp,
+    accuracy: position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M,
   };
 }
 
@@ -24,10 +34,15 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
   const { locations } = data as { locations: Location.LocationObject[] };
   locations.forEach((position) => {
+    const accuracy = position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M;
+    if (!isAccurateEnough(accuracy)) {
+      log('GPS_FIX_REJECTED', { accuracy, lat: position.coords.latitude, lon: position.coords.longitude });
+      return;
+    }
     log('GPS_UPDATE', {
       lat: position.coords.latitude,
       lon: position.coords.longitude,
-      accuracy: position.coords.accuracy,
+      accuracy,
       gpsTimestamp: position.timestamp,
     });
     currentSubscriber?.(toLocationType(position));

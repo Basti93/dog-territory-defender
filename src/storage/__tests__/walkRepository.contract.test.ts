@@ -5,7 +5,7 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
   return {
     id: overrides.id ?? 'walk-1',
     startTime: overrides.startTime ?? 1000,
-    locations: overrides.locations ?? [{ latitude: 52.5, longitude: 13.4, timestamp: 1000 }],
+    locations: overrides.locations ?? [{ latitude: 52.5, longitude: 13.4, timestamp: 1000, accuracy: 5 }],
     closed: overrides.closed ?? false,
     territory: overrides.territory,
   };

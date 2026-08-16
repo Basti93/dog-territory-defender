@@ -8,7 +8,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Real GPS tracking (reads every 1-2 seconds)
 - ✅ Live map showing your position + trail
 - ✅ Distance + point count during walk
-- ✅ Auto-detects when walk is "closeable" (start ≈ end, within 20m)
+- ✅ Auto-detects when walk is "closeable" (start ≈ end, within an accuracy-aware radius, ≥100m by default)
 - ✅ Closes perimeter to claim territory
 - ✅ Shows claimed territory polygon on map — and every previously claimed territory stays visible on the idle map, not just the latest one
 - ✅ End Walk early (no closed loop needed) — keeps the trail, no reward for an unclosed walk
@@ -101,7 +101,7 @@ App.tsx
 **State flow:**
 1. `startWalk()` → create Walk record, start location subscription
 2. GPS callback → update locations array, pan map to current position
-3. `canCloseWalk()` checks: ≥10 points AND distance(start, end) < 20m
+3. `canCloseWalk()` checks: ≥10 points AND distance(start, end) < closure radius, where closure radius = `max(firstAccuracy + lastAccuracy + 10, 100)` meters — a 100m floor by default, widening further under poor GPS accuracy
 4. `stopWalk()` → if closeable, `locationsToPolygon()` → show territory, save via `walkRepository.saveWalk()`
 5. `endWalk()` → stop tracking, keep the trail as an open/unclosed walk, save via `walkRepository.saveWalk()`, no reward
 6. `resetWalk()` → clear walk (Cancel) — never saved, nothing to persist

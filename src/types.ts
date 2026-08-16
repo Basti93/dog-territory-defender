@@ -2,6 +2,7 @@ export interface Location {
   latitude: number;
   longitude: number;
   timestamp: number;
+  accuracy: number;
 }
 
 export interface Walk {
