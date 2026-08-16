@@ -1,5 +1,6 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { Location as LocationType } from '../types';
 import { log } from './log';
 
@@ -49,12 +50,22 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   });
 });
 
+// Android 13+ (API 33+) requires this before any notification can render,
+// including the foreground-service notification startWatchingLocation posts —
+// without it, the service still runs but silently shows no notification.
+async function requestNotificationPermissionIfNeeded(): Promise<void> {
+  if (Platform.OS !== 'android' || Platform.Version < 33) return;
+  const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  log('GPS_NOTIFICATION_PERMISSION', { result });
+}
+
 export async function requestLocationPermission(): Promise<boolean> {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status === 'granted') {
       const bg = await Location.requestBackgroundPermissionsAsync();
       log('GPS_PERMISSION', { foreground: status, background: bg.status });
+      await requestNotificationPermissionIfNeeded();
       return true;
     }
     log('GPS_PERMISSION', { foreground: status, background: 'not-requested' });

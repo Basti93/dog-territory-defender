@@ -19,6 +19,7 @@
 - [x] 4.3 Update `App.tsx`'s `stopWalk`/`endWalk`/`resetWalk` to call the new `stopWatchingLocation()` instead of `subscriptionRef.current.remove()` (the subscription-object pattern no longer applies). Note: `resetWalk` (Cancel) never held a real-GPS subscription reference before either — added `stopAllTracking()` there too for correctness, stopping both the location task and any mock subscription.
 - [x] 4.4 Add Android foreground-service permissions to `app.json` if not already covered by the `expo-location` plugin's background flags. Not needed — `isAndroidForegroundServiceEnabled` defaults to `isAndroidBackgroundLocationEnabled`'s value (already `true`), which already adds `FOREGROUND_SERVICE`/`FOREGROUND_SERVICE_LOCATION`.
 - [ ] 4.5 Rebuild the dev client (new native permissions).
+- [ ] 4.6 Add `android.permission.POST_NOTIFICATIONS` to `app.json`'s `android.permissions`, and request it at runtime (`PermissionsAndroid.request`, Android 13+/API 33+ only) before starting the foreground service — without it, the foreground-service notification silently fails to render on Android 13+ even though the service itself keeps running (confirmed via real testing: app showed under "Active apps" with no notification).
 
 ## 5. Re-verify
 
