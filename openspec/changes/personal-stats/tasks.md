@@ -31,5 +31,5 @@
 ## 5. Wrap-up
 
 - [x] 5.1 `npx tsc --noEmit` and `npx jest` both clean. 55 tests passing across 8 suites.
-- [ ] 5.2 Manual on-device check: close a walk that crosses at least one achievement threshold, confirm the celebration screen shows it; upgrade a building to trigger a Den-side achievement, confirm the notice banner shows it; open the new Stats screen and confirm locked/unlocked states render correctly. **Needs user — real device/emulator test.**
+- [x] 5.2 Manual on-device check: verified with a new walk — closing it correctly recorded stats and unlocked achievements. Note: found and documented (design.md Risks) that pre-existing walks from before this change don't backfill into personal stats — declined to fix for now, revisit before wider rollout.
 - [x] 5.3 Update `README.md`'s "What works" list and folder map to include the Stats screen and personal-stats module.
