@@ -18,6 +18,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Treats economy core: +50 treats per closed walk, passive treats accrue over time (capped by storage), all persisted
 - ✅ Den screen: 3 buildings (Doghouse, Treat Bakery, Sniff Garden), tap to upgrade, "next upgrade" tease, spring touches
 - ✅ Post-walk celebration: area claimed, treats earned, next-upgrade tease, gentle confetti — replaces the old plain alert
+- ✅ Personal lifetime stats + 18 one-off achievements: solo highscore to chase (walks, distance, territory, treats), no gameplay bonus — "Stats & Badges" screen
 
 **What's not built yet:**
 - ❌ Collectibles, enemies, leaderboards (Phase 2+)
@@ -84,18 +85,21 @@ App.tsx
 │   ├── WalkRepository.ts: repository interface (saveWalk/getWalks/getWalk/deleteWalk) + StoredWalk type
 │   ├── sqliteWalkRepository.ts: expo-sqlite implementation (single-table, DynamoDB-shaped schema)
 │   ├── inMemoryWalkRepository.ts: in-memory fake, used by the contract tests
-│   └── DenEconomyRepository.ts + sqlite/inMemory implementations: single-row treats/building state
+│   ├── DenEconomyRepository.ts + sqlite/inMemory implementations: single-row treats/building state
+│   └── PersonalStatsRepository.ts + sqlite/inMemory implementations: lifetime stats + unlocked achievement badges
 ├── Economy (src/economy/):
 │   ├── balanceConfig.ts: every tunable number (treats/walk, storage, passive rate, costs, soft cap)
 │   ├── formulas.ts: pure functions built on the config (upgradeCost, storageCap, passiveTreatsPerHour, softCapBonusPercent)
-│   └── denEconomy.ts: state transitions (applyPassiveAccrual, awardWalkTreats, upgradeBuilding)
+│   ├── denEconomy.ts: state transitions (applyPassiveAccrual, awardWalkTreats, upgradeBuilding)
+│   └── personalStats.ts: lifetime stat tracking + 18-achievement catalog, purely personal prestige (no gameplay bonus)
 └── UI:
     ├── Map region + pan/zoom
     ├── Trail polyline (blue dashed)
     ├── Territory polygon (green, if closed)
     ├── Bottom controls: stats + buttons
     ├── WalkHistoryScreen: list of past walks (src/components/)
-    └── DenScreen: 3 building cards, next-upgrade tease (src/components/)
+    ├── DenScreen: 3 building cards, next-upgrade tease (src/components/)
+    └── StatsScreen: lifetime stats + achievement badge case (src/components/)
 ```
 
 **State flow:**

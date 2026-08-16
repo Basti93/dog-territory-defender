@@ -5,7 +5,9 @@ import Svg, { Circle } from 'react-native-svg';
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { upgradeCost, storageCap, passiveTreatsPerHour, softCapBonusPercent } from '../economy/formulas';
 import { DenEconomyState, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
+import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
+import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 
 const COLORS = {
   green: '#2ECC71',
@@ -37,14 +39,25 @@ function effectText(building: BuildingKey, level: number): string {
 
 interface DenScreenProps {
   repository: DenEconomyRepository;
+  personalStatsRepository: PersonalStatsRepository;
+  pendingAchievements?: AchievementId[];
+  onAcknowledgePendingAchievements?: () => void;
   onClose: () => void;
   onTreatsChanged: (treats: number) => void;
 }
 
-export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenProps) {
+export function DenScreen({
+  repository,
+  personalStatsRepository,
+  pendingAchievements = [],
+  onAcknowledgePendingAchievements,
+  onClose,
+  onTreatsChanged,
+}: DenScreenProps) {
   const [state, setState] = useState<DenEconomyState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
+  const [achievementNotices, setAchievementNotices] = useState<AchievementId[]>([]);
 
   useEffect(() => {
     repository.getState().then((s) => {
@@ -54,6 +67,15 @@ export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenPro
       }
     });
   }, [repository]);
+
+  useEffect(() => {
+    if (pendingAchievements.length > 0) {
+      setAchievementNotices((prev) => [...prev, ...pendingAchievements]);
+      onAcknowledgePendingAchievements?.();
+    }
+    // Only meant to run once per batch of pending achievements handed down from App.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAchievements]);
 
   if (!state) {
     return (
@@ -79,6 +101,13 @@ export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenPro
     setState(result);
     onTreatsChanged(result.treats);
     await repository.saveState(result);
+
+    const personalStats = await personalStatsRepository.getState();
+    const { newlyUnlocked } = recordBuildingUpgrade(personalStats, state, result);
+    if (newlyUnlocked.length > 0) {
+      await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
+      setAchievementNotices((prev) => [...prev, ...newlyUnlocked]);
+    }
   };
 
   return (
@@ -95,6 +124,12 @@ export function DenScreen({ repository, onClose, onTreatsChanged }: DenScreenPro
           <Text style={styles.noticeText}>Your Treat Bakery filled up while you were away! 🦴</Text>
         </View>
       )}
+
+      {achievementNotices.map((id, i) => (
+        <View key={`${id}-${i}`} style={styles.notice}>
+          <Text style={styles.noticeText}>🏅 New badge: {ACHIEVEMENTS[id].copyTitle}</Text>
+        </View>
+      ))}
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.denScene}>

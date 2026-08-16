@@ -12,13 +12,17 @@ import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { DenScreen } from './src/components/DenScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
+import { StatsScreen } from './src/components/StatsScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
+import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
 import { applyPassiveAccrual, awardWalkTreats, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
+import { AchievementId, recordTreatsEarned, recordWalkClosed } from './src/economy/personalStats';
 import { BALANCE } from './src/economy/balanceConfig';
 import { log } from './src/utils/log';
 
 const walkRepository = createSqliteWalkRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
+const personalStatsRepository = createSqlitePersonalStatsRepository();
 
 const COLORS = {
   green: '#2ECC71',
@@ -37,12 +41,15 @@ export default function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [showDen, setShowDen] = useState(false);
   const [showDebugLog, setShowDebugLog] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
+  const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   const [celebration, setCelebration] = useState<{
     areaM2: number;
     treatsEarned: number;
     tease: UpgradeTease | null;
+    unlockedAchievements: AchievementId[];
   } | null>(null);
 
   // Initialize location permission
@@ -70,6 +77,17 @@ export default function App() {
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
       setTreats(accrued.treats);
+
+      const accruedDelta = accrued.treats - state.treats;
+      if (accruedDelta > 0) {
+        const personalStats = await personalStatsRepository.getState();
+        const { stats: nextPersonalStats, newlyUnlocked } = recordTreatsEarned(personalStats, accruedDelta);
+        await personalStatsRepository.saveState(nextPersonalStats);
+        if (newlyUnlocked.length > 0) {
+          await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
+          setPendingDenAchievements(newlyUnlocked);
+        }
+      }
     })();
   }, []);
 
@@ -145,14 +163,25 @@ export default function App() {
 
         denEconomyRepository
           .getState()
-          .then((state) => {
+          .then(async (state) => {
             const rewarded = awardWalkTreats(state);
             log('TREATS_AWARD', { amount: BALANCE.treatsPerWalk, before: state.treats, after: rewarded.treats });
             setTreats(rewarded.treats);
+
+            const personalStats = await personalStatsRepository.getState();
+            const walkResult = recordWalkClosed(personalStats, closedWalk);
+            const treatsResult = recordTreatsEarned(walkResult.stats, BALANCE.treatsPerWalk);
+            const newlyUnlocked = [...walkResult.newlyUnlocked, ...treatsResult.newlyUnlocked];
+            await personalStatsRepository.saveState(treatsResult.stats);
+            if (newlyUnlocked.length > 0) {
+              await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
+            }
+
             setCelebration({
               areaM2: polygon?.area ?? 0,
               treatsEarned: BALANCE.treatsPerWalk,
               tease: getUpgradeTease(rewarded),
+              unlockedAchievements: newlyUnlocked,
             });
             return denEconomyRepository.saveState(rewarded);
           })
@@ -211,6 +240,7 @@ export default function App() {
             areaM2={celebration.areaM2}
             treatsEarned={celebration.treatsEarned}
             tease={celebration.tease}
+            unlockedAchievements={celebration.unlockedAchievements}
             onContinue={() => setCelebration(null)}
           />
         </SafeAreaView>
@@ -238,7 +268,14 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DenScreen repository={denEconomyRepository} onClose={() => setShowDen(false)} onTreatsChanged={setTreats} />
+          <DenScreen
+            repository={denEconomyRepository}
+            personalStatsRepository={personalStatsRepository}
+            pendingAchievements={pendingDenAchievements}
+            onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
+            onClose={() => setShowDen(false)}
+            onTreatsChanged={setTreats}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -249,6 +286,20 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
           <DebugLogScreen onClose={() => setShowDebugLog(false)} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (showStats) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <StatsScreen
+            repository={personalStatsRepository}
+            denEconomyRepository={denEconomyRepository}
+            onClose={() => setShowStats(false)}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -296,6 +347,9 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.denButton]} onPress={() => setShowDen(true)}>
                 <Text style={styles.buttonText}>The Den</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.statsButton]} onPress={() => setShowStats(true)}>
+                <Text style={styles.buttonText}>Stats & Badges</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.debugLogButton]} onPress={() => setShowDebugLog(true)}>
                 <Text style={styles.buttonText}>Debug Log</Text>
@@ -385,6 +439,9 @@ const styles = StyleSheet.create({
   },
   denButton: {
     backgroundColor: '#8B6F47',
+  },
+  statsButton: {
+    backgroundColor: '#3A9E5F',
   },
   debugLogButton: {
     backgroundColor: COLORS.muted,

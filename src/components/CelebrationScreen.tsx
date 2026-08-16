@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 
 import { BuildingKey } from '../economy/balanceConfig';
 import { UpgradeTease } from '../economy/denEconomy';
+import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 
 const COLORS = {
   green: '#2ECC71',
@@ -27,6 +28,7 @@ interface CelebrationScreenProps {
   areaM2: number;
   treatsEarned: number;
   tease: UpgradeTease | null;
+  unlockedAchievements?: AchievementId[];
   onContinue: () => void;
 }
 
@@ -56,7 +58,13 @@ function ConfettiPiece({ left, color, delay }: { left: number; color: string; de
   );
 }
 
-export function CelebrationScreen({ areaM2, treatsEarned, tease, onContinue }: CelebrationScreenProps) {
+export function CelebrationScreen({
+  areaM2,
+  treatsEarned,
+  tease,
+  unlockedAchievements = [],
+  onContinue,
+}: CelebrationScreenProps) {
   const confetti = useMemo(
     () =>
       Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
@@ -90,6 +98,17 @@ export function CelebrationScreen({ areaM2, treatsEarned, tease, onContinue }: C
               {BUILDING_NAMES[tease.building]} — {tease.cost} treats
               {tease.affordable ? ' (you can afford it now!)' : ''}
             </Text>
+          </View>
+        )}
+
+        {unlockedAchievements.length > 0 && (
+          <View style={styles.badgeBox}>
+            <Text style={styles.badgeLabel}>New badge{unlockedAchievements.length > 1 ? 's' : ''}!</Text>
+            {unlockedAchievements.map((id) => (
+              <Text key={id} style={styles.badgeText}>
+                🏅 {ACHIEVEMENTS[id].copyTitle}
+              </Text>
+            ))}
           </View>
         )}
 
@@ -158,6 +177,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     marginTop: 4,
+    textAlign: 'center',
+  },
+  badgeBox: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#EAF7EE',
+    alignItems: 'center',
+    gap: 2,
+  },
+  badgeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  badgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text,
     textAlign: 'center',
   },
   continueButton: {
