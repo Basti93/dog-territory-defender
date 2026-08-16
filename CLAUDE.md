@@ -7,12 +7,11 @@ This file tells Claude (and any AI coding agent) how to collaborate on **Dog Ter
 ## Project essentials
 
 - **Product:** Location-based mobile game for urban dog owners. Spring-like, joyful. Cookie-clicker background loop. Anti-snowball social layer.
+- **Spec-driven workflow:** [openspec/](openspec/) is the source of truth for the build plan and game design. Use the `/opsx:*` workflows (propose/apply/archive/sync) for any spec-level change.
 - **Status tracker:** [README.md](README.md) — check Project Status section first.
-- **Master build plan:** [docs/01-prototype-plan-prompt.md](docs/01-prototype-plan-prompt.md) (5-phase lean-startup plan). **Do not deviate from the phase-gated approach.**
-- **Per-phase validation:** [docs/02-post-prototype-investigation-prompt.md](docs/02-post-prototype-investigation-prompt.md) (run at end of each phase).
-- **Visual direction:** [docs/03-design-brief.md](docs/03-design-brief.md).
-- **Engagement mechanics:** [docs/04-engagement-mechanics.md](docs/04-engagement-mechanics.md) (The Den, The Pack, anti-snowball).
-- **Design update prompt:** [docs/05-design-update-prompt.md](docs/05-design-update-prompt.md) (evolve the prototype as phases progress).
+- **Master build plan:** [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) (5-phase lean-startup plan + phase-gating rule + per-phase validation process). **Do not deviate from the phase-gated approach.**
+- **Visual direction:** [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md).
+- **Engagement mechanics:** [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md) (The Den), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md) (The Pack), [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md) (the 10 anti-snowball mechanisms).
 - **Decisions log:** [DECISIONS.md](DECISIONS.md) (append-only, newest first).
 - **Visual prototype:** [prototype/](prototype/) — clickable HTML demo. Match its output, not its internal structure.
 
@@ -25,10 +24,10 @@ When implementing the real app (i.e., you're not just planning):
 1. **The prototype is a design spec, not a starter codebase.** It's HTML + React Babel standalone — meant to be pixel-recreated in React Native + Expo (the target stack). Don't copy its structure; match its visuals and behaviors.
 2. **Always confirm the phase before writing code.** Ask: "Are we implementing Phase 0, 1, 2, 3, or 4?" Build only what that phase needs.
 3. **Read the `PARKED FOR LATER PHASES` comment block** at the top of `prototype/Dog Territory Defender.html` — those features are explicitly deferred and must not leak into earlier phases.
-4. **Use the design tokens** defined in the prototype (`T.green`, `T.blue`, etc.). No new colors without an entry in [DECISIONS.md](DECISIONS.md).
-5. **Re-read [docs/04-engagement-mechanics.md](docs/04-engagement-mechanics.md)** before touching anything related to treats, the Den, building levels, or anti-snowball. Numeric thresholds there are load-bearing.
+4. **Use the design tokens** defined in the prototype (`T.green`, `T.blue`, etc.) and in [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md). No new colors without an entry in [DECISIONS.md](DECISIONS.md).
+5. **Re-read [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md), and [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md)** before touching anything related to treats, the Den, building levels, Pack, or anti-snowball. Numeric thresholds there are load-bearing.
 6. **When ambiguity arises, ask the user — don't guess.** Scope clarification is cheap; rebuilding is not.
-7. **After implementation of a phase:** run [docs/02-post-prototype-investigation-prompt.md](docs/02-post-prototype-investigation-prompt.md) to validate before advancing.
+7. **After implementation of a phase:** run the "Per-Phase Validation Process" requirement in [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) to validate before advancing.
 
 ---
 
@@ -40,13 +39,15 @@ When any of the following changes, update the relevant doc **in the same turn**:
 
 | Change | Update |
 |---|---|
-| New feature decided | `docs/01-prototype-plan-prompt.md` (assign to a phase) + `DECISIONS.md` |
-| Visual / UX direction shifts | `docs/03-design-brief.md` + `DECISIONS.md` |
-| Game mechanic added or changed | `docs/04-engagement-mechanics.md` + `DECISIONS.md` |
+| New feature decided | `openspec/specs/game-phases/spec.md` (assign to a phase, via an OpenSpec change) + `DECISIONS.md` |
+| Visual / UX direction shifts | `openspec/specs/visual-design/spec.md` + `DECISIONS.md` |
+| Game mechanic added or changed | `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, or `openspec/specs/anti-snowball/spec.md` + `DECISIONS.md` |
 | Phase hypothesis validated/invalidated | `README.md` status + `DECISIONS.md` |
-| Tech stack / architecture decision | `docs/01-prototype-plan-prompt.md` (architecture section) + `DECISIONS.md` |
-| Tone / language guideline added | `docs/03-design-brief.md` + `DECISIONS.md` |
+| Tech stack / architecture decision | `openspec/specs/game-phases/spec.md` (or a new capability's `design.md`) + `DECISIONS.md` |
+| Tone / language guideline added | `openspec/specs/visual-design/spec.md` + `DECISIONS.md` |
 | Prototype files added/renamed | `README.md` folder map + `prototype/README.md` |
+
+Spec-level changes go through the OpenSpec workflow (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`), not a direct edit to `openspec/specs/`.
 
 **Rule:** No silent drift. If the plan no longer matches reality, fix it now.
 
@@ -95,8 +96,8 @@ For decisions that should persist across conversations, save to the memory syste
 ### 6. Don't guess — check
 
 - Before referencing a file, verify with `ls` or `Glob`.
-- Before citing a numeric threshold, read it from the source doc.
-- Before proposing a mechanic, check `docs/04-engagement-mechanics.md` — it may exist.
+- Before citing a numeric threshold, read it from the source spec.
+- Before proposing a mechanic, check `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, and `openspec/specs/anti-snowball/spec.md` — it may already be specified.
 - Memory can be stale — verify against current files.
 
 ### 7. Default behaviors
