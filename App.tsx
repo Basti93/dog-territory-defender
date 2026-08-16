@@ -12,8 +12,13 @@ import { startMockWalk, MockWalkHandle } from './src/utils/mockGps';
 import { mockClosedLoop, mockOpenWalk } from './src/utils/mockWalkFixtures';
 import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
+import { DenScreen } from './src/components/DenScreen';
+import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
+import { applyPassiveAccrual, awardWalkTreats } from './src/economy/denEconomy';
+import { BALANCE } from './src/economy/balanceConfig';
 
 const walkRepository = createSqliteWalkRepository();
+const denEconomyRepository = createSqliteDenEconomyRepository();
 
 const COLORS = {
   green: '#2ECC71',
@@ -30,6 +35,8 @@ export default function App() {
     error: null,
   });
   const [showHistory, setShowHistory] = useState(false);
+  const [showDen, setShowDen] = useState(false);
+  const [treats, setTreats] = useState<number | null>(null);
 
   const subscriptionRef = useRef<Location.LocationSubscription | MockWalkHandle | null>(null);
 
@@ -43,6 +50,16 @@ export default function App() {
           error: 'Location permission denied',
         }));
       }
+    })();
+  }, []);
+
+  // Apply passive treat accrual since last open, then load the balance
+  useEffect(() => {
+    (async () => {
+      const state = await denEconomyRepository.getState();
+      const accrued = applyPassiveAccrual(state, Date.now());
+      await denEconomyRepository.saveState(accrued);
+      setTreats(accrued.treats);
     })();
   }, []);
 
@@ -131,7 +148,20 @@ export default function App() {
           isTracking: false,
         }));
         walkRepository.saveWalk(closedWalk).catch((err) => console.error('Failed to save walk:', err));
-        Alert.alert('Success!', `Territory claimed! Area: ${polygon?.area.toFixed(0) || '?'} m²`);
+
+        denEconomyRepository
+          .getState()
+          .then((state) => {
+            const rewarded = awardWalkTreats(state);
+            setTreats(rewarded.treats);
+            return denEconomyRepository.saveState(rewarded);
+          })
+          .catch((err) => console.error('Failed to award walk treats:', err));
+
+        Alert.alert(
+          'Success!',
+          `Territory claimed! Area: ${polygon?.area.toFixed(0) || '?'} m². +${BALANCE.treatsPerWalk} treats!`
+        );
       } else {
         Alert.alert('Not closed', 'Walk does not form a closed loop (start and end within 20m)');
         setAppState((prev) => ({
@@ -184,6 +214,16 @@ export default function App() {
     );
   }
 
+  if (showDen) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <DenScreen repository={denEconomyRepository} onClose={() => setShowDen(false)} onTreatsChanged={setTreats} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -207,6 +247,9 @@ export default function App() {
           <Text style={[styles.statLabel, { marginLeft: 20 }]}>Points</Text>
           <Text style={styles.statValue}>{appState.walk?.locations.length || 0}</Text>
 
+          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Treats</Text>
+          <Text style={styles.statValue}>{treats !== null ? Math.floor(treats) : '…'}</Text>
+
           {canClose && <Text style={[styles.statLabel, { marginLeft: 20, color: COLORS.green }]}>🔄 Can close!</Text>}
         </View>
 
@@ -218,6 +261,9 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.historyButton]} onPress={() => setShowHistory(true)}>
                 <Text style={styles.buttonText}>View Past Walks</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.denButton]} onPress={() => setShowDen(true)}>
+                <Text style={styles.buttonText}>The Den</Text>
               </TouchableOpacity>
               {__DEV__ && (
                 <>
@@ -320,6 +366,9 @@ const styles = StyleSheet.create({
   },
   historyButton: {
     backgroundColor: COLORS.blue,
+  },
+  denButton: {
+    backgroundColor: '#8B6F47',
   },
   cancelButton: {
     backgroundColor: '#E74C3C',

@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Defines the visual identity, tone, design tokens, and screen-level interaction intent for Dog Territory Defender, so every build — prototype or production — reads as warm, spring-like, and dog-centric. Design North Star: after a walk, the player looks at the map and thinks "I just did that. My dog did that. We belong here."
+Defines the visual identity, tone, design tokens, and screen-level interaction intent for Dog Territory Defender, so every build — prototype or production — reads as warm, spring-like, and dog-centric. Design North Star: after a walk, the player looks at the map and thinks "I just did that. My dog did that. We belong here." Guiding principle: the walk is the heartbeat — phone stays in the owner's pocket, eyes on the dog, minimal audio-first cues — and the actual game experience (Den progression, async events, upgrade decisions) lives in the 23.5 hours between walks, not during them.
 
 ## Requirements
 
 ### Requirement: Design Tokens
-The system SHALL use exactly these design tokens, extended only via a new entry in `DECISIONS.md`:
+The system SHALL use exactly these design tokens, extended only via the introducing change's `proposal.md`/`design.md` explaining why:
 - Primary green (territory/growth): `#2ECC71`
 - Sky blue (map/safety): `#3498DB`
 - Warm accent (collectibles/joy): `#F39C12`
@@ -19,7 +19,7 @@ The system SHALL use exactly these design tokens, extended only via a new entry 
 
 #### Scenario: New color needed
 - **WHEN** a screen needs a color not in the token list
-- **THEN** it SHALL NOT be added without a corresponding entry in `DECISIONS.md`
+- **THEN** it SHALL NOT be added without a corresponding OpenSpec change explaining why
 
 ### Requirement: Tone and Language Rules
 Copy and UI language SHALL be warm and celebratory, not transactional, and SHALL NOT use aggressive or PvP language. Use "claim," "defend," "protect" — never "conquer," "destroy," "kill," "battle."
@@ -43,15 +43,20 @@ Beyond dark mode and PvP language, the system SHALL avoid gamey chrome (XP bars 
 - **THEN** it SHALL be rendered as an illustration/avatar, not a photo
 
 ### Requirement: Key Screen Intents
-The following four key screens SHALL follow this intent:
+The following five key screens SHALL follow this intent:
 - **Map View (Active Walk):** the map dominates full screen; walk-in-progress state is obvious (time, distance); pause/stop controls are easy to reach but not accidental to trigger.
 - **Territory Claimed (Post-Walk Celebration):** the peak-joy moment; shows what was claimed and the dog's XP/level progress; ends with clear momentum toward the next walk.
 - **Dog Profile:** the dog is the star; stats are about walks and community, not power creep; badges feel earned.
 - **Leaderboard:** friendly competition that celebrates all dogs; reached by tapping from the map (modal), not as a separate primary tab, so the map stays primary.
+- **Den (Home Base):** the dog's buildable home base; the current "next upgrade" is always visible with its cost; buildings feel alive (idle touches, spring theming) rather than a stat dashboard; upgrading a building reads as building a bigger yard for the dog, not leveling a stat.
 
 #### Scenario: Territory claimed celebration
 - **WHEN** a walk closes and claims new territory
 - **THEN** the post-walk screen SHALL show what was claimed and the dog's XP/level progress, and SHALL end with a clear call to the next walk
+
+#### Scenario: Den screen visited
+- **WHEN** the player opens the Den screen
+- **THEN** the current cheapest affordable upgrade SHALL be visibly called out, and the screen SHALL avoid stat-dashboard chrome (bare progress bars, power meters) in favor of a home-base feel
 
 ### Requirement: Delight Interaction Moments
 Where the relevant screen exists, the system SHALL implement: paw prints appearing briefly on pull-to-refresh on the map; a bounce plus a "ding" sound when a collectible is tapped and collected; a subtle red outline on overlapping rival territory (the player's own territory stays green) with a "defend" action (walk it again) available on tap; a full-screen celebration with a tail-wag animation and a ticking XP counter on dog level-up; and gentle, not aggressive, confetti at the end of a walk.

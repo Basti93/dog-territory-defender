@@ -12,7 +12,7 @@ This file tells Claude (and any AI coding agent) how to collaborate on **Dog Ter
 - **Master build plan:** [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) (5-phase lean-startup plan + phase-gating rule + per-phase validation process). **Do not deviate from the phase-gated approach.**
 - **Visual direction:** [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md).
 - **Engagement mechanics:** [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md) (The Den), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md) (The Pack), [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md) (the 10 anti-snowball mechanisms).
-- **Decisions log:** [DECISIONS.md](DECISIONS.md) (append-only, newest first).
+- **Decisions log:** `openspec/changes/archive/` — every archived change's `proposal.md` (Why / Alternatives rejected) and `design.md` (Decisions / Risks) together are the decision log. Newest changes sort last alphabetically by date prefix; browse or `grep` across the archive for history.
 - **Visual prototype:** [prototype/](prototype/) — clickable HTML demo. Match its output, not its internal structure.
 
 ---
@@ -37,7 +37,7 @@ Single-screen app, all state in `App.tsx` via `useState`/`useRef` — no navigat
 
 - `src/types.ts` — `Location`, `Walk`, `TerritoryPolygon`, `AppState` interfaces.
 - `src/utils/gps.ts` — thin wrapper over `expo-location`: `requestLocationPermission` (foreground + background), `startWatchingLocation` (1s / 2m interval callback), `getInitialLocation`.
-- `src/utils/geometry.ts` — `getDistance` (haversine), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [docs/04-engagement-mechanics.md](docs/04-engagement-mechanics.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
+- `src/utils/geometry.ts` — `getDistance` (haversine), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [openspec/specs/walk-lifecycle/spec.md](openspec/specs/walk-lifecycle/spec.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
 - `src/components/MapCanvas.tsx` — renders the trail/territory by projecting raw lat/lon into an SVG viewBox (`react-native-svg` `Polyline`/`Polygon`/`Circle`), scaled to the bounding box of visited points. **This is not a real map** — no tiles, no `react-native-maps`, no pan/zoom. README's "Architecture" section describes a `MapView`-based approach; that's aspirational/stale, not what's implemented.
 - `src/web/mapHTML.ts` — a Leaflet-in-WebView HTML string. **Currently unused/dead code** — not imported anywhere. Leftover from an earlier map approach; either wire it up or remove it, don't assume it's live.
 
@@ -54,7 +54,7 @@ When implementing the real app (i.e., you're not just planning):
 1. **The prototype is a design spec, not a starter codebase.** It's HTML + React Babel standalone — meant to be pixel-recreated in React Native + Expo (the target stack). Don't copy its structure; match its visuals and behaviors.
 2. **Always confirm the phase before writing code.** Ask: "Are we implementing Phase 0, 1, 2, 3, or 4?" Build only what that phase needs.
 3. **Read the `PARKED FOR LATER PHASES` comment block** at the top of `prototype/Dog Territory Defender.html` — those features are explicitly deferred and must not leak into earlier phases.
-4. **Use the design tokens** defined in the prototype (`T.green`, `T.blue`, etc.) and in [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md). No new colors without an entry in [DECISIONS.md](DECISIONS.md).
+4. **Use the design tokens** defined in the prototype (`T.green`, `T.blue`, etc.) and in [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md). No new colors without updating that spec's Design Tokens list and explaining why in the introducing change's `proposal.md`.
 5. **Re-read [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md), and [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md)** before touching anything related to treats, the Den, building levels, Pack, or anti-snowball. Numeric thresholds there are load-bearing.
 6. **When ambiguity arises, ask the user — don't guess.** Scope clarification is cheap; rebuilding is not.
 7. **After implementation of a phase:** run the "Per-Phase Validation Process" requirement in [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) to validate before advancing.
@@ -69,31 +69,26 @@ When any of the following changes, update the relevant doc **in the same turn**:
 
 | Change | Update |
 |---|---|
-| New feature decided | `openspec/specs/game-phases/spec.md` (assign to a phase, via an OpenSpec change) + `DECISIONS.md` |
-| Visual / UX direction shifts | `openspec/specs/visual-design/spec.md` + `DECISIONS.md` |
-| Game mechanic added or changed | `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, or `openspec/specs/anti-snowball/spec.md` + `DECISIONS.md` |
-| Phase hypothesis validated/invalidated | `README.md` status + `DECISIONS.md` |
-| Tech stack / architecture decision | `openspec/specs/game-phases/spec.md` (or a new capability's `design.md`) + `DECISIONS.md` |
-| Tone / language guideline added | `openspec/specs/visual-design/spec.md` + `DECISIONS.md` |
+| New feature decided | `openspec/specs/game-phases/spec.md` (assign to a phase, via an OpenSpec change) |
+| Visual / UX direction shifts | `openspec/specs/visual-design/spec.md` (via an OpenSpec change) |
+| Game mechanic added or changed | `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, or `openspec/specs/anti-snowball/spec.md` (via an OpenSpec change) |
+| Phase hypothesis validated/invalidated | `README.md` status |
+| Tech stack / architecture decision | the introducing change's `design.md` (Decisions section) |
+| Tone / language guideline added | `openspec/specs/visual-design/spec.md` (via an OpenSpec change) |
 | Prototype files added/renamed | `README.md` folder map + `prototype/README.md` |
 
 Spec-level changes go through the OpenSpec workflow (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`), not a direct edit to `openspec/specs/`.
 
 **Rule:** No silent drift. If the plan no longer matches reality, fix it now.
 
-### 2. Log every significant decision in `DECISIONS.md`
+### 2. Log every significant decision in the OpenSpec change
 
-Entry format:
+Every non-trivial change already goes through `/opsx:propose`, which produces the decision record as a side effect — no separate logging step:
+- **`proposal.md`**'s Why and Capabilities sections capture what was decided and why now.
+- **`design.md`**'s Decisions section captures the alternatives considered and rejected, with rationale — this is where "why this number/library/approach and not another" lives.
+- Once the change is archived (`/opsx:archive`), these become the permanent record under `openspec/changes/archive/`.
 
-```markdown
-## YYYY-MM-DD — [Short title]
-**Area:** Architecture / Design / Game / Tone / Product
-**Decision:** [What was decided, in one sentence]
-**Why:** [The rationale — especially the tradeoffs considered]
-**Alternatives rejected:** [What else was considered and why not]
-**Affects:** [Which files / phases / features this touches]
-**Decided by:** [User / Claude / discussion]
-```
+For a decision that doesn't warrant a full change (a quick numeric tweak, a small tone fix), still write a short Decisions-style note into whatever `design.md` is already open, or start a minimal change if none is — don't let a decision go unrecorded just because it's small.
 
 **Significant** = tech choices, mechanic changes, numeric thresholds, cutting features, tone shifts, architecture moves, user preferences revealed.
 **Not significant** = typos, reordering bullets, wording clarifications that don't change meaning.
@@ -106,7 +101,7 @@ For decisions that should persist across conversations, save to the memory syste
 - **feedback** — collaboration guidance
 - **reference** — pointers to external systems
 
-`DECISIONS.md` is the authoritative log. Memory is the quick-recall cache.
+`openspec/changes/archive/` is the authoritative log. Memory is the quick-recall cache.
 
 ### 4. Respect phase boundaries
 
@@ -135,7 +130,7 @@ For decisions that should persist across conversations, save to the memory syste
 - **Prefer editing over creating** new files. Each doc has a purpose; justify a new one first.
 - **Keep docs concise.** Every doc is meant to be read end-to-end.
 - **Update `README.md`** folder map when adding or moving files.
-- **Update `DECISIONS.md`** when anything non-trivial is decided.
+- **Record non-trivial decisions** in the relevant OpenSpec change's `proposal.md`/`design.md` (see rule 2 above).
 
 ---
 
@@ -143,7 +138,7 @@ For decisions that should persist across conversations, save to the memory syste
 
 1. Read `CLAUDE.md` (this file) → collaboration rules
 2. Read `README.md` → current status, folder map, phase we're in
-3. Skim `DECISIONS.md` → recent decisions (last 5–10 entries)
+3. Check `openspec list` for active changes, and skim recent entries under `openspec/changes/archive/` → recent decisions
 4. Check `MEMORY.md` (if memory system is available) → user preferences + project context
 5. If working on implementation: open `prototype/Dog Territory Defender.html` in a text editor to see the design spec
 6. Ask the user: "What are we working on today, and which phase?"
@@ -153,7 +148,7 @@ For decisions that should persist across conversations, save to the memory syste
 ## Anti-patterns to avoid
 
 - ❌ Building Phase 3+ features when we're still in Phase 1
-- ❌ Updating a doc without an entry in `DECISIONS.md`
+- ❌ Editing `openspec/specs/` directly instead of going through `/opsx:propose` → `/opsx:apply` → `/opsx:archive`
 - ❌ Forgetting to update `README.md` status after a phase completes
 - ❌ Using aggressive/competitive language
 - ❌ Proposing dark mode, emoji-heavy UI, or aggressive monetization
