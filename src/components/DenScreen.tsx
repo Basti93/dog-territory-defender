@@ -138,6 +138,13 @@ export function DenScreen({
       ))}
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.treatsRow}>
+          <Text style={styles.treatsLabel}>Treats</Text>
+          <Text style={styles.treatsValue}>
+            {Math.floor(state.treats)} / {storageCap(state.doghouseLevel)}
+          </Text>
+        </View>
+
         <View style={styles.levelBar}>
           <View style={styles.levelBarHeader}>
             <Text style={styles.levelBarLabel}>Level {state.level}</Text>
@@ -260,6 +267,22 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 16,
     gap: 12,
+  },
+  treatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  treatsLabel: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: '600',
+  },
+  treatsValue: {
+    fontSize: 16,
+    color: COLORS.warm,
+    fontWeight: '700',
   },
   levelBar: {
     marginBottom: 16,
