@@ -1,8 +1,9 @@
 import { BALANCE } from '../balanceConfig';
-import { upgradeCost, storageCap } from '../formulas';
+import { upgradeCost, storageCap, cumulativeXpForLevel } from '../formulas';
 import {
   applyPassiveAccrual,
   awardWalkTreats,
+  awardWalkXp,
   defaultDenEconomyState,
   getUpgradeTease,
   upgradeBuilding,
@@ -78,6 +79,60 @@ describe('upgradeBuilding', () => {
     const result = upgradeBuilding(state, 'bakery');
 
     expect(result).toEqual({ error: 'max-level' });
+  });
+});
+
+describe('awardWalkXp', () => {
+  it('accumulates xp across multiple walks without leveling up on a short walk', () => {
+    const state = defaultDenEconomyState(NOW);
+    const { state: after, leveledUp } = awardWalkXp(state, 500, 1000);
+
+    expect(after.xp).toBeGreaterThan(0);
+    expect(after.level).toBe(1);
+    expect(leveledUp).toBe(false);
+    expect(after.treats).toBe(state.treats);
+  });
+
+  it('levels up exactly once and credits the flat treat bonus when xp crosses a level threshold', () => {
+    const state = { ...defaultDenEconomyState(NOW), xp: cumulativeXpForLevel(2) - 5, level: 1 };
+    const { state: after, leveledUp } = awardWalkXp(state, 100, 0);
+
+    expect(leveledUp).toBe(true);
+    expect(after.level).toBe(2);
+    expect(after.treats).toBe(state.treats + BALANCE.leveling.treatsPerLevelUp);
+  });
+
+  it('does not level up when xp stays below the next threshold', () => {
+    const state = { ...defaultDenEconomyState(NOW), xp: cumulativeXpForLevel(2) - 1000, level: 1 };
+    const { leveledUp } = awardWalkXp(state, 1, 1);
+
+    expect(leveledUp).toBe(false);
+  });
+
+  it('caps the treats bonus at storage capacity', () => {
+    const state = {
+      ...defaultDenEconomyState(NOW),
+      xp: cumulativeXpForLevel(2) - 5,
+      level: 1,
+      treats: storageCap(1) - 5,
+    };
+    const { state: after } = awardWalkXp(state, 10_000, 20_000);
+
+    expect(after.treats).toBe(storageCap(1));
+  });
+
+  it('does not change xp/level as a side effect of upgradeBuilding or applyPassiveAccrual', () => {
+    const state = { ...defaultDenEconomyState(NOW), xp: 500, level: 3 };
+
+    const upgraded = upgradeBuilding({ ...state, treats: 1_000_000 }, 'bakery');
+    if (!('error' in upgraded)) {
+      expect(upgraded.xp).toBe(500);
+      expect(upgraded.level).toBe(3);
+    }
+
+    const accrued = applyPassiveAccrual(state, NOW + HOUR);
+    expect(accrued.xp).toBe(500);
+    expect(accrued.level).toBe(3);
   });
 });
 

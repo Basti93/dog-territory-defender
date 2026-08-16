@@ -1,5 +1,5 @@
 import { BALANCE, BuildingKey } from './balanceConfig';
-import { passiveTreatsPerHour, storageCap, upgradeCost } from './formulas';
+import { passiveTreatsPerHour, storageCap, upgradeCost, xpAwardForWalk, levelForXp } from './formulas';
 
 export interface DenEconomyState {
   treats: number;
@@ -7,6 +7,8 @@ export interface DenEconomyState {
   bakeryLevel: number;
   sniffGardenLevel: number;
   lastTickAt: number;
+  xp: number;
+  level: number;
 }
 
 export type UpgradeError = 'insufficient-treats' | 'max-level';
@@ -18,6 +20,33 @@ export function defaultDenEconomyState(now: number): DenEconomyState {
     bakeryLevel: 1,
     sniffGardenLevel: 1,
     lastTickAt: now,
+    xp: 0,
+    level: 1,
+  };
+}
+
+export interface AwardWalkXpResult {
+  state: DenEconomyState;
+  leveledUp: boolean;
+}
+
+export function awardWalkXp(state: DenEconomyState, distanceMeters: number, areaM2: number): AwardWalkXpResult {
+  const xpGained = xpAwardForWalk(distanceMeters, areaM2);
+  const nextXp = state.xp + xpGained;
+  const nextLevel = levelForXp(nextXp);
+  const leveledUp = nextLevel > state.level;
+
+  const cap = storageCap(state.doghouseLevel);
+  const treatsBonus = leveledUp ? BALANCE.leveling.treatsPerLevelUp : 0;
+
+  return {
+    state: {
+      ...state,
+      xp: nextXp,
+      level: nextLevel,
+      treats: Math.min(cap, state.treats + treatsBonus),
+    },
+    leveledUp,
   };
 }
 

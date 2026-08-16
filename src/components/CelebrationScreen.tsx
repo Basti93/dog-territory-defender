@@ -29,6 +29,7 @@ interface CelebrationScreenProps {
   treatsEarned: number;
   tease: UpgradeTease | null;
   unlockedAchievements?: AchievementId[];
+  leveledUpTo?: number | null;
   onContinue: () => void;
 }
 
@@ -63,6 +64,7 @@ export function CelebrationScreen({
   treatsEarned,
   tease,
   unlockedAchievements = [],
+  leveledUpTo = null,
   onContinue,
 }: CelebrationScreenProps) {
   const confetti = useMemo(
@@ -109,6 +111,12 @@ export function CelebrationScreen({
                 🏅 {ACHIEVEMENTS[id].copyTitle}
               </Text>
             ))}
+          </View>
+        )}
+
+        {leveledUpTo !== null && (
+          <View style={styles.levelBox}>
+            <Text style={styles.levelText}>Level {leveledUpTo} 🐾</Text>
           </View>
         )}
 
@@ -200,6 +208,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
     textAlign: 'center',
+  },
+  levelBox: {
+    marginTop: 12,
+  },
+  levelText: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontWeight: '600',
   },
   continueButton: {
     marginTop: 32,

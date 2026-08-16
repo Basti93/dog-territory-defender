@@ -28,6 +28,7 @@ interface StatCard {
 
 function buildStatCards(stats: PersonalStatsState, denState: DenEconomyState): StatCard[] {
   return [
+    { label: 'Level', value: `${denState.level}` },
     { label: 'Total walks', value: `${stats.totalWalksClosed}` },
     { label: 'Lifetime distance', value: `${(stats.lifetimeDistanceMeters / 1000).toFixed(1)} km` },
     { label: 'Biggest territory', value: `${stats.biggestTerritoryAreaM2.toFixed(0)} m²` },

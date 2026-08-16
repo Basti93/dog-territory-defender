@@ -3,7 +3,13 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-nati
 import Svg, { Circle } from 'react-native-svg';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
-import { upgradeCost, storageCap, passiveTreatsPerHour, softCapBonusPercent } from '../economy/formulas';
+import {
+  upgradeCost,
+  storageCap,
+  passiveTreatsPerHour,
+  softCapBonusPercent,
+  cumulativeXpForLevel,
+} from '../economy/formulas';
 import { DenEconomyState, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
@@ -132,6 +138,36 @@ export function DenScreen({
       ))}
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.levelBar}>
+          <View style={styles.levelBarHeader}>
+            <Text style={styles.levelBarLabel}>Level {state.level}</Text>
+            {state.level < BALANCE.leveling.maxLevel && (
+              <Text style={styles.levelBarSub}>
+                {Math.floor(state.xp - cumulativeXpForLevel(state.level))} /{' '}
+                {cumulativeXpForLevel(state.level + 1) - cumulativeXpForLevel(state.level)} XP
+              </Text>
+            )}
+          </View>
+          <View style={styles.levelBarTrack}>
+            <View
+              style={[
+                styles.levelBarFill,
+                {
+                  width:
+                    state.level >= BALANCE.leveling.maxLevel
+                      ? '100%'
+                      : `${Math.min(
+                          100,
+                          ((state.xp - cumulativeXpForLevel(state.level)) /
+                            (cumulativeXpForLevel(state.level + 1) - cumulativeXpForLevel(state.level))) *
+                            100
+                        )}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
+
         <View style={styles.denScene}>
           <Svg width={80} height={60} viewBox="0 0 80 60">
             <Circle cx={40} cy={40} r={18} fill="#D4A76A" opacity={0.5} />
@@ -224,6 +260,33 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 16,
     gap: 12,
+  },
+  levelBar: {
+    marginBottom: 16,
+  },
+  levelBarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  levelBarLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  levelBarSub: {
+    fontSize: 12,
+    color: COLORS.muted,
+  },
+  levelBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#eee',
+    overflow: 'hidden',
+  },
+  levelBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.green,
   },
   denScene: {
     alignItems: 'center',

@@ -13,6 +13,8 @@ interface DenEconomyRow {
   bakeryLevel: number;
   sniffGardenLevel: number;
   lastTickAt: number;
+  xp: number;
+  level: number;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -22,7 +24,22 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     bakeryLevel: row.bakeryLevel,
     sniffGardenLevel: row.sniffGardenLevel,
     lastTickAt: row.lastTickAt,
+    xp: row.xp,
+    level: row.level,
   };
+}
+
+// SQLite has no `ADD COLUMN IF NOT EXISTS` — a fresh install's CREATE TABLE
+// already includes the column, so the ALTER TABLE below hits a "duplicate
+// column" error, which we catch and ignore. Any other error still throws.
+async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, columnDef: string): Promise<void> {
+  try {
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${columnDef};`);
+  } catch (error) {
+    if (!String(error).includes('duplicate column name')) {
+      throw error;
+    }
+  }
 }
 
 export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAME): DenEconomyRepository {
@@ -34,9 +51,14 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         doghouseLevel INTEGER NOT NULL,
         bakeryLevel INTEGER NOT NULL,
         sniffGardenLevel INTEGER NOT NULL,
-        lastTickAt INTEGER NOT NULL
+        lastTickAt INTEGER NOT NULL,
+        xp REAL NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 1
       );
     `);
+    // Migration for rows created before xp/level existed (e.g. an already-installed app).
+    await addColumnIfMissing(db, 'den_economy', 'xp REAL NOT NULL DEFAULT 0');
+    await addColumnIfMissing(db, 'den_economy', 'level INTEGER NOT NULL DEFAULT 1');
     return db;
   });
 
@@ -50,14 +72,16 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
 
       const initial = defaultDenEconomyState(Date.now());
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         SINGLETON_ID,
         initial.treats,
         initial.doghouseLevel,
         initial.bakeryLevel,
         initial.sniffGardenLevel,
-        initial.lastTickAt
+        initial.lastTickAt,
+        initial.xp,
+        initial.level
       );
       return initial;
     },
@@ -65,20 +89,24 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
            bakeryLevel = excluded.bakeryLevel,
            sniffGardenLevel = excluded.sniffGardenLevel,
-           lastTickAt = excluded.lastTickAt`,
+           lastTickAt = excluded.lastTickAt,
+           xp = excluded.xp,
+           level = excluded.level`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
         state.bakeryLevel,
         state.sniffGardenLevel,
-        state.lastTickAt
+        state.lastTickAt,
+        state.xp,
+        state.level
       );
     },
   };

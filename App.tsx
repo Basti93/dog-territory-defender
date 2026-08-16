@@ -15,7 +15,7 @@ import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
-import { applyPassiveAccrual, awardWalkTreats, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
+import { applyPassiveAccrual, awardWalkTreats, awardWalkXp, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
 import { AchievementId, recordTreatsEarned, recordWalkClosed } from './src/economy/personalStats';
 import { BALANCE } from './src/economy/balanceConfig';
 import { log } from './src/utils/log';
@@ -44,12 +44,14 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
+  const [level, setLevel] = useState<number | null>(null);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   const [celebration, setCelebration] = useState<{
     areaM2: number;
     treatsEarned: number;
     tease: UpgradeTease | null;
     unlockedAchievements: AchievementId[];
+    leveledUpTo: number | null;
   } | null>(null);
 
   // Initialize location permission
@@ -77,6 +79,7 @@ export default function App() {
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
       setTreats(accrued.treats);
+      setLevel(accrued.level);
 
       const accruedDelta = accrued.treats - state.treats;
       if (accruedDelta > 0) {
@@ -177,13 +180,20 @@ export default function App() {
               await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
             }
 
+            const distanceMeters = cumulativeDistance(closedWalk.locations);
+            const { state: leveledState, leveledUp } = awardWalkXp(rewarded, distanceMeters, polygon?.area ?? 0);
+            log('XP_AWARD', { xp: leveledState.xp, level: leveledState.level, leveledUp });
+            setLevel(leveledState.level);
+            setTreats(leveledState.treats);
+
             setCelebration({
               areaM2: polygon?.area ?? 0,
               treatsEarned: BALANCE.treatsPerWalk,
-              tease: getUpgradeTease(rewarded),
+              tease: getUpgradeTease(leveledState),
               unlockedAchievements: newlyUnlocked,
+              leveledUpTo: leveledUp ? leveledState.level : null,
             });
-            return denEconomyRepository.saveState(rewarded);
+            return denEconomyRepository.saveState(leveledState);
           })
           .catch((err) => console.error('Failed to award walk treats:', err));
       } else {
@@ -241,6 +251,7 @@ export default function App() {
             treatsEarned={celebration.treatsEarned}
             tease={celebration.tease}
             unlockedAchievements={celebration.unlockedAchievements}
+            leveledUpTo={celebration.leveledUpTo}
             onContinue={() => setCelebration(null)}
           />
         </SafeAreaView>
@@ -332,6 +343,9 @@ export default function App() {
 
           <Text style={[styles.statLabel, { marginLeft: 20 }]}>Treats</Text>
           <Text style={styles.statValue}>{treats !== null ? Math.floor(treats) : '…'}</Text>
+
+          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Lv.</Text>
+          <Text style={styles.statValue}>{level !== null ? level : '…'}</Text>
 
           {canClose && <Text style={[styles.statLabel, { marginLeft: 20, color: COLORS.green }]}>🔄 Can close!</Text>}
         </View>

@@ -21,4 +21,16 @@ export const BALANCE = {
     curveRate: 25,
   },
   maxBuildingLevel: 100,
+  xp: {
+    perWalkBase: 20,
+    perKm: 15,
+    per1000m2: 5,
+    areaCapM2: 20000,
+  },
+  leveling: {
+    xpBase: 100,
+    xpGrowth: 1.13,
+    maxLevel: 100,
+    treatsPerLevelUp: 25,
+  },
 } as const;

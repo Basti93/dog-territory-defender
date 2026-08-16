@@ -19,6 +19,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Den screen: 3 buildings (Doghouse, Treat Bakery, Sniff Garden), tap to upgrade, "next upgrade" tease, spring touches
 - ✅ Post-walk celebration: area claimed, treats earned, next-upgrade tease, gentle confetti — replaces the old plain alert
 - ✅ Personal lifetime stats + 18 one-off achievements: solo highscore to chase (walks, distance, territory, treats), no gameplay bonus — "Stats & Badges" screen
+- ✅ Den Level/XP: standalone number driven by walk distance/area, climbs on every closed walk (not just milestones), visible in the main stats row, Den screen, Stats screen, and post-walk celebration — no gameplay bonus in Phase 1
 
 **What's not built yet:**
 - ❌ Collectibles, enemies, leaderboards (Phase 2+)
@@ -90,7 +91,7 @@ App.tsx
 ├── Economy (src/economy/):
 │   ├── balanceConfig.ts: every tunable number (treats/walk, storage, passive rate, costs, soft cap)
 │   ├── formulas.ts: pure functions built on the config (upgradeCost, storageCap, passiveTreatsPerHour, softCapBonusPercent)
-│   ├── denEconomy.ts: state transitions (applyPassiveAccrual, awardWalkTreats, upgradeBuilding)
+│   ├── denEconomy.ts: state transitions (applyPassiveAccrual, awardWalkTreats, awardWalkXp, upgradeBuilding)
 │   └── personalStats.ts: lifetime stat tracking + 18-achievement catalog, purely personal prestige (no gameplay bonus)
 └── UI:
     ├── Map region + pan/zoom
@@ -112,6 +113,7 @@ App.tsx
 7. "View Past Walks" → `walkRepository.getWalks()` → `WalkHistoryScreen`
 8. On app load → `applyPassiveAccrual()` for elapsed time since last open → treats balance shown in header
 9. On closing a walk → `awardWalkTreats()` → treats balance updates, folded into the success alert
+10. On closing a walk → `awardWalkXp()` → Den Level/XP updates from that walk's distance/area (capped, no dependency on buildings/treats), flat treats bonus + notice if it crosses a level, folded into the same celebration moment
 
 ---
 
