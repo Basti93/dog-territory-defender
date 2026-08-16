@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "expo": "^54.0.36",
+    "expo-file-system": "~19.0.23",
     "expo-location": "~19.0.8",
+    "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",

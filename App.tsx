@@ -14,6 +14,7 @@ import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { DenScreen } from './src/components/DenScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
+import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { applyPassiveAccrual, awardWalkTreats, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
 import { BALANCE } from './src/economy/balanceConfig';
@@ -38,6 +39,7 @@ export default function App() {
   });
   const [showHistory, setShowHistory] = useState(false);
   const [showDen, setShowDen] = useState(false);
+  const [showDebugLog, setShowDebugLog] = useState(false);
   const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<{
@@ -284,6 +286,16 @@ export default function App() {
     );
   }
 
+  if (showDebugLog) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <DebugLogScreen onClose={() => setShowDebugLog(false)} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -326,6 +338,9 @@ export default function App() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.denButton]} onPress={() => setShowDen(true)}>
                 <Text style={styles.buttonText}>The Den</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.debugLogButton]} onPress={() => setShowDebugLog(true)}>
+                <Text style={styles.buttonText}>Debug Log</Text>
               </TouchableOpacity>
               {__DEV__ && (
                 <>
@@ -431,6 +446,9 @@ const styles = StyleSheet.create({
   },
   denButton: {
     backgroundColor: '#8B6F47',
+  },
+  debugLogButton: {
+    backgroundColor: COLORS.muted,
   },
   cancelButton: {
     backgroundColor: '#E74C3C',

@@ -1,11 +1,11 @@
 ## 1. Config change
 
-- [ ] 1.1 Add `isIosBackgroundLocationEnabled: true` and `isAndroidBackgroundLocationEnabled: true` to the `expo-location` plugin block in `app.json`.
+- [x] 1.1 Add `isIosBackgroundLocationEnabled: true` and `isAndroidBackgroundLocationEnabled: true` to the `expo-location` plugin block in `app.json`.
 
 ## 2. Dev-client build
 
-- [ ] 2.1 Build a local dev client (`npx expo run:android` or `npx expo run:ios`) — first-time toolchain setup if not already done.
-- [ ] 2.2 Confirm the app installs and runs on the dev client (baseline sanity check before testing the actual fix).
+- [x] 2.1 Build a local dev client (`npx expo run:android` or `npx expo run:ios`) — first-time toolchain setup if not already done.
+- [x] 2.2 Confirm the app installs and runs on the dev client (baseline sanity check before testing the actual fix). Confirmed: Android manifest now declares `ACCESS_BACKGROUND_LOCATION` — device permission dialog shows "Allow every time".
 
 ## 3. Verify the fix
 

@@ -1,9 +1,11 @@
 import { AppState } from 'react-native';
+import { appendToDebugLog } from './debugLog';
 
 /**
- * Structured, copy-pasteable console logging for on-device test walks —
- * one line per event, tagged, with wall-clock time and foreground/background
- * state, so a pasted terminal transcript can be reviewed after the fact.
+ * Structured logging for on-device test walks — one line per event, tagged,
+ * with wall-clock time and foreground/background state. Goes to the console
+ * (when Metro is attached) and to a local durable log (works regardless of
+ * build variant or dev-server connectivity — see DebugLogScreen).
  */
 export function log(tag: string, data: Record<string, unknown> = {}): void {
   const entry = {
@@ -11,5 +13,7 @@ export function log(tag: string, data: Record<string, unknown> = {}): void {
     appState: AppState.currentState,
     ...data,
   };
-  console.log(`[${tag}] ${JSON.stringify(entry)}`);
+  const line = `[${tag}] ${JSON.stringify(entry)}`;
+  console.log(line);
+  appendToDebugLog(line);
 }
