@@ -4,10 +4,16 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 
-import { Walk, AppState as AppStateType } from './src/types';
+import { Walk, AppState as AppStateType, Location as LocationType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { canCloseWalk, locationsToPolygon } from './src/utils/geometry';
 import { MapCanvas } from './src/components/MapCanvas';
+import { startMockWalk, MockWalkHandle } from './src/utils/mockGps';
+import { mockClosedLoop, mockOpenWalk } from './src/utils/mockWalkFixtures';
+import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
+import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
+
+const walkRepository = createSqliteWalkRepository();
 
 const COLORS = {
   green: '#2ECC71',
@@ -23,8 +29,9 @@ export default function App() {
     isTracking: false,
     error: null,
   });
+  const [showHistory, setShowHistory] = useState(false);
 
-  const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const subscriptionRef = useRef<Location.LocationSubscription | MockWalkHandle | null>(null);
 
   // Initialize location permission
   useEffect(() => {
@@ -76,6 +83,36 @@ export default function App() {
     subscriptionRef.current = subscription;
   };
 
+  const startMockWalkFlow = (fixture: LocationType[]) => {
+    const [initial, ...rest] = fixture;
+
+    const newWalk: Walk = {
+      id: Date.now().toString(),
+      startTime: Date.now(),
+      locations: [initial],
+      closed: false,
+    };
+
+    setAppState((prev) => ({
+      ...prev,
+      walk: newWalk,
+      isTracking: true,
+    }));
+
+    subscriptionRef.current = startMockWalk(rest, (location) => {
+      setAppState((prev) => {
+        if (!prev.walk) return prev;
+
+        const updatedWalk = {
+          ...prev.walk,
+          locations: [...prev.walk.locations, location],
+        };
+
+        return { ...prev, walk: updatedWalk };
+      });
+    });
+  };
+
   const stopWalk = () => {
     if (subscriptionRef.current) {
       subscriptionRef.current.remove();
@@ -87,11 +124,13 @@ export default function App() {
       const canClose = canCloseWalk(appState.walk.locations);
       if (canClose) {
         const polygon = locationsToPolygon(appState.walk.locations);
+        const closedWalk: Walk = { ...appState.walk, closed: true, territory: polygon || undefined };
         setAppState((prev) => ({
           ...prev,
-          walk: prev.walk ? { ...prev.walk, closed: true, territory: polygon || undefined } : null,
+          walk: prev.walk ? closedWalk : null,
           isTracking: false,
         }));
+        walkRepository.saveWalk(closedWalk).catch((err) => console.error('Failed to save walk:', err));
         Alert.alert('Success!', `Territory claimed! Area: ${polygon?.area.toFixed(0) || '?'} m²`);
       } else {
         Alert.alert('Not closed', 'Walk does not form a closed loop (start and end within 20m)');
@@ -101,6 +140,22 @@ export default function App() {
         }));
       }
     }
+  };
+
+  const endWalk = () => {
+    if (subscriptionRef.current) {
+      subscriptionRef.current.remove();
+      subscriptionRef.current = null;
+    }
+
+    if (appState.walk) {
+      walkRepository.saveWalk(appState.walk).catch((err) => console.error('Failed to save walk:', err));
+    }
+
+    setAppState((prev) => ({
+      ...prev,
+      isTracking: false,
+    }));
   };
 
   const resetWalk = () => {
@@ -118,6 +173,16 @@ export default function App() {
     : 0;
 
   const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
+
+  if (showHistory) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <WalkHistoryScreen repository={walkRepository} onClose={() => setShowHistory(false)} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <SafeAreaProvider>
@@ -147,19 +212,39 @@ export default function App() {
 
         <View style={styles.buttons}>
           {!appState.isTracking ? (
-            <TouchableOpacity style={[styles.button, styles.startButton]} onPress={startWalk}>
-              <Text style={styles.buttonText}>Start Walk</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={[styles.button, styles.startButton]} onPress={startWalk}>
+                <Text style={styles.buttonText}>Start Walk</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.historyButton]} onPress={() => setShowHistory(true)}>
+                <Text style={styles.buttonText}>View Past Walks</Text>
+              </TouchableOpacity>
+              {__DEV__ && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.button, styles.devButton]}
+                    onPress={() => startMockWalkFlow(mockClosedLoop)}
+                  >
+                    <Text style={styles.buttonText}>🧪 Load Mock Closed Loop</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.devButton]}
+                    onPress={() => startMockWalkFlow(mockOpenWalk)}
+                  >
+                    <Text style={styles.buttonText}>🧪 Load Mock Open Walk</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </>
           ) : (
             <>
-              <TouchableOpacity
-                style={[styles.button, styles.stopButton, !canClose && styles.disabled]}
-                onPress={stopWalk}
-                disabled={!canClose}
-              >
-                <Text style={styles.buttonText}>
-                  {canClose ? '✓ Close Territory' : 'Keep walking...'}
-                </Text>
+              {canClose && (
+                <TouchableOpacity style={[styles.button, styles.stopButton]} onPress={stopWalk}>
+                  <Text style={styles.buttonText}>✓ Close Territory</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={[styles.button, styles.endButton]} onPress={endWalk}>
+                <Text style={styles.buttonText}>End Walk</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={resetWalk}>
                 <Text style={styles.buttonText}>Cancel</Text>
@@ -225,6 +310,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.green,
   },
   stopButton: {
+    backgroundColor: COLORS.blue,
+  },
+  endButton: {
+    backgroundColor: COLORS.muted,
+  },
+  devButton: {
+    backgroundColor: COLORS.text,
+  },
+  historyButton: {
     backgroundColor: COLORS.blue,
   },
   cancelButton: {

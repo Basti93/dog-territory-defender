@@ -28,7 +28,8 @@
           "locationAlwaysAndWhenInUsePermissions": "Allow Dog Territory Defender to track your walks"
         }
       ],
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "expo-sqlite"
     ],
     "extra": {
       "eas": {

@@ -6,6 +6,24 @@ See [CLAUDE.md](CLAUDE.md) for the format and rules.
 
 ---
 
+## 2026-08-16 — Local walk persistence via expo-sqlite, DynamoDB-shaped schema
+
+**Area:** Architecture
+**Decision:** Walks now persist locally via `expo-sqlite`, accessed only through a `WalkRepository` interface (`saveWalk`/`getWalks`/`getWalk`/`deleteWalk`) living in a new `src/storage/` module, separate from `App.tsx` and game-feature code. The local schema is single-table and NoSQL/DynamoDB-shaped (`id` as partition key, `startTime`/`closed` as queryable columns, the full walk as a JSON body) rather than relationally normalized, plus a `syncedAt` column (unused, always null for now) for forward-compat with a future cloud sync. A new "View Past Walks" screen lists saved walks. `WalkRepository`'s behavior contract is covered by tests run against an in-memory fake (new test infra: `jest` + `jest-expo`); the real SQLite adapter is verified manually, not by automated tests, since its native binding isn't meaningfully unit-testable under Jest.
+**Why:** All walk data — including real GPS data from an actual dog walk — lived only in React state and was lost on reload/crash. The storage layer also needed to be stable enough that future game features (Den, scent layering, etc.) don't risk the walk record itself. The schema is modeled NoSQL-style specifically because the eventual target is AWS: DynamoDB's free tier is perpetual (RDS's is only 12 months), and the user wants to learn DynamoDB's single-table modeling mindset — shaping the local schema the same way now means the concepts transfer later even though the storage engine will change.
+**Alternatives rejected:** WatermelonDB (built-in sync protocol is heavier than needed right now, plus native config friction in Expo managed workflow); Realm (its cloud sync path is MongoDB Atlas, not AWS — wrong ecosystem for the stated AWS-learning goal); AsyncStorage/plain JSON (no query engine, no migration story, weak fit for "tested core service with a stable schema"); a normalized relational schema (no current requirement needs querying inside a walk's locations, and it wouldn't map as cleanly onto a future DynamoDB table).
+**Affects:** `src/storage/` (new: `WalkRepository.ts`, `sqliteWalkRepository.ts`, `inMemoryWalkRepository.ts`, contract tests), `src/components/WalkHistoryScreen.tsx` (new), `App.tsx` (calls `saveWalk` from `stopWalk`/`endWalk`, new history view toggle), `package.json` (adds `expo-sqlite`, `jest`, `jest-expo`, `@types/jest`, `test` script), `README.md`. Full spec: `openspec/changes/walk-history-persistence/`.
+**Decided by:** User + Claude
+
+## 2026-08-16 — End Walk split from Cancel; dev-only mock walk data
+
+**Area:** Product / Architecture
+**Decision:** Added an "End Walk" action, separate from "Cancel": it stops tracking and keeps the recorded trail as an open/unclosed walk (no territory polygon, no reward), whereas "Cancel" still discards the walk entirely. Also added a dev-only (`__DEV__`-gated) mock walk loader with two canned GPS fixtures (a closed loop and an open route) so the walk flow can be tested without physically walking.
+**Why:** Phase 0's hypothesis ("GPS tracking feels accurate and satisfying to replay") doesn't require a closed loop, but the only way to stop an unclosed walk was "Cancel," which discarded everything — harsher than the hypothesis needs, and real dog walks are rarely tidy loops. Physically walking for every test cycle was also slowing iteration.
+**Alternatives rejected:** Awarding points/treats for an early-ended walk (raised during discussion) — rejected as out-of-phase; Phase 0 has no economy. That idea is deferred to Phase 1, where "any walk earns treats, closed loop additionally earns territory" is already the planned reward split (see `openspec/specs/game-phases/spec.md`).
+**Affects:** `App.tsx` (new `endWalk()` + `startMockWalkFlow()`, new UI buttons), `src/utils/mockGps.ts` (new), `src/utils/mockWalkFixtures.ts` (new), `README.md`. Full spec: `openspec/changes/end-walk-and-mock-data/`.
+**Decided by:** User + Claude
+
 ## 2026-04-24 — Reorganised repo for AI coding agent handoff
 
 **Area:** Product / Architecture

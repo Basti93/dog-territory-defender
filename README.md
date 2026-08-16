@@ -9,11 +9,15 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Auto-detects when walk is "closeable" (start ≈ end, within 20m)
 - ✅ Closes perimeter to claim territory
 - ✅ Shows claimed territory polygon on map
+- ✅ End Walk early (no closed loop needed) — keeps the trail, no reward (Phase 0 has none)
+- ✅ Dev-only mock walk loader (`__DEV__` builds) — test without physically walking
+- ✅ Walks persist locally (`expo-sqlite`) — survives app restarts, no data lost
+- ✅ "View Past Walks" screen — see every previously recorded walk
 
 **What's not in Phase 0:**
 - ❌ Collectibles, enemies, leaderboards (Phase 2+)
 - ❌ The Den, treats, buildings (Phase 1)
-- ❌ Backend sync (Phase 3)
+- ❌ Cloud/remote sync (AWS) — local storage is schema-ready (`syncedAt` field) but no sync service exists yet
 - ❌ Dark mode, animations (design polish)
 
 ---
@@ -44,10 +48,13 @@ The first run installs the Expo Go app on your phone. Subsequent runs let you re
 3. **Accept location permissions** when prompted
 4. **Tap "Start Walk"** — you'll see a blue dot (your position) on the map
 5. **Walk around your block** (even 100-150 meters in a rough loop works)
-6. **When you're close to where you started**, the button changes to **"✓ Close Territory"**
+6. **When you're close to where you started**, a **"✓ Close Territory"** button appears alongside "End Walk"
 7. **Tap it** — you'll see your territory polygon on the map in green
+8. Didn't make it back to the start? Tap **"End Walk"** instead — the trail stays visible, just without a territory polygon or reward
 
 Done! You've validated Phase 0: GPS works, territory claiming works.
+
+In a dev build, two extra buttons ("🧪 Load Mock Closed Loop" / "🧪 Load Mock Open Walk") replay canned GPS fixtures so you can test both flows without walking.
 
 ---
 
@@ -62,19 +69,26 @@ App.tsx
 │   ├── gps.ts: permission + location watching
 │   ├── geometry.ts: distance, closure detection, polygon area
 │   └── types.ts: TypeScript interfaces
+├── Storage (src/storage/):
+│   ├── WalkRepository.ts: repository interface (saveWalk/getWalks/getWalk/deleteWalk) + StoredWalk type
+│   ├── sqliteWalkRepository.ts: expo-sqlite implementation (single-table, DynamoDB-shaped schema)
+│   └── inMemoryWalkRepository.ts: in-memory fake, used by the contract tests
 └── UI:
     ├── Map region + pan/zoom
     ├── Trail polyline (blue dashed)
     ├── Territory polygon (green, if closed)
-    └── Bottom controls: stats + buttons
+    ├── Bottom controls: stats + buttons
+    └── WalkHistoryScreen: list of past walks (src/components/)
 ```
 
 **State flow:**
 1. `startWalk()` → create Walk record, start location subscription
 2. GPS callback → update locations array, pan map to current position
 3. `canCloseWalk()` checks: ≥10 points AND distance(start, end) < 20m
-4. `stopWalk()` → if closeable, `locationsToPolygon()` → show territory
-5. `resetWalk()` → clear walk, ready for next one
+4. `stopWalk()` → if closeable, `locationsToPolygon()` → show territory, save via `walkRepository.saveWalk()`
+5. `endWalk()` → stop tracking, keep the trail as an open/unclosed walk, save via `walkRepository.saveWalk()`, no reward
+6. `resetWalk()` → clear walk (Cancel) — never saved, nothing to persist
+7. "View Past Walks" → `walkRepository.getWalks()` → `WalkHistoryScreen`
 
 ---
 
@@ -85,6 +99,8 @@ App.tsx
 - [ ] **Distance updates** — increases as you walk
 - [ ] **Closure detection works** — "Can close!" appears when you're near start
 - [ ] **Territory is claimed** — green polygon shows your route when you close
+- [ ] **End Walk works** — tap it before closing the loop, trail stays visible, no reward shown
+- [ ] **Walks survive a restart** — close and reopen the app, "View Past Walks" still shows your walk
 - [ ] **Phone doesn't crash** — foreground location tracking is stable for 15+ minutes
 
 ---
@@ -95,7 +111,7 @@ After validating GPS:
 1. Add Den screen (3 buildings, passive treats tick)
 2. Add post-walk celebration (confetti, +50 treats)
 3. Add tab navigation (Map / Den / Dog / Settings)
-4. Wire up basic backend (Supabase) for walk history
+4. Wire up cloud sync (AWS — DynamoDB target) for walks already saved locally via `syncedAt`
 
 See [`openspec/specs/game-phases/spec.md`](openspec/specs/game-phases/spec.md) for the full Phase 0→1 transition.
 
