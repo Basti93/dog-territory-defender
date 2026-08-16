@@ -12,7 +12,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Closes perimeter to claim territory
 - ✅ Shows claimed territory polygon on map — and every previously claimed territory stays visible on the idle map, not just the latest one
 - ✅ End Walk early (no closed loop needed) — keeps the trail, no reward for an unclosed walk
-- ✅ Dev-only mock walk loader (`__DEV__` builds) — test without physically walking
+- ✅ Testable without walking — Android Emulator GPX route playback (`testing/munich-route.gpx`)
 - ✅ Walks persist locally (`expo-sqlite`) — survives app restarts, no data lost
 - ✅ "View Past Walks" screen — see every previously recorded walk, delete any of them (with confirmation)
 - ✅ Treats economy core: +50 treats per closed walk, passive treats accrue over time (capped by storage), all persisted
@@ -33,6 +33,7 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - Node.js 16+ (`node -v`)
 - Android phone with Android 8.0+ (API 26+)
 - Android phone on same WiFi as your computer (or USB debug cable)
+- Android SDK + a connected device/emulator (`adb devices`) — needed for the dev-client build below; Expo Go alone is no longer enough (see note)
 
 ### Setup
 
@@ -40,11 +41,15 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 # 1. Install dependencies
 npm install
 
-# 2. Start the Expo dev server
-npm run android
+# 2. Build and install a dev client on your connected device
+npx expo run:android
 ```
 
-The first run installs the Expo Go app on your phone. Subsequent runs let you reload the code instantly.
+**Why not Expo Go:** reliable GPS tracking while the app is backgrounded (screen off, phone in pocket) needs native config (background-location entitlement, Android foreground service) that only takes effect in a real native build — Expo Go's generic shell can't reflect it. `npx expo run:android` builds and installs a custom dev client with this project's actual native config; re-run it any time `app.json`'s native config changes (it re-syncs automatically). Once installed, day-to-day JS changes still hot-reload — you don't need to rebuild for every code change, only for native/config changes.
+
+While tracking, you'll see a persistent notification ("Tracking your walk…") — that's the foreground service keeping GPS accurate in the background, not a bug.
+
+If you hit trouble reviewing what happened on a walk (especially untethered, no laptop nearby): tap **Debug Log** on the main screen — Share exports everything logged so far via the OS share sheet, Clear resets it.
 
 ### First walk
 
@@ -59,7 +64,7 @@ The first run installs the Expo Go app on your phone. Subsequent runs let you re
 
 Done! You've validated Phase 0: GPS works, territory claiming works.
 
-In a dev build, two extra buttons ("🧪 Load Mock Closed Loop" / "🧪 Load Mock Open Walk") replay canned GPS fixtures so you can test both flows without walking.
+Testing without physically walking: use the Android Emulator's built-in location simulator (Extended Controls → Location), which drives the real Android location provider instead of a JS-level fixture. Import `testing/munich-route.gpx` under the Routes tab and play it back for a closed-loop test; stop playback partway through (or set a single point that doesn't return near the start) to simulate an open/incomplete walk.
 
 ---
 
@@ -72,7 +77,7 @@ App.tsx
 │   └── src/web/mapHTML.ts: the Leaflet page + postMessage bridge (UPDATE_LOCATION/UPDATE_TRAIL/SHOW_TERRITORY/RESET)
 ├── GPS tracking (expo-location)
 ├── Utils:
-│   ├── gps.ts: permission + location watching
+│   ├── gps.ts: permission + foreground-service-backed location tracking (TaskManager)
 │   ├── geometry.ts: distance, closure detection, polygon area
 │   └── types.ts: TypeScript interfaces
 ├── Storage (src/storage/):

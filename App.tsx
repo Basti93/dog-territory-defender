@@ -1,15 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 
-import { Walk, AppState as AppStateType, Location as LocationType } from './src/types';
-import { requestLocationPermission, startWatchingLocation, getInitialLocation } from './src/utils/gps';
+import { Walk, AppState as AppStateType } from './src/types';
+import { requestLocationPermission, startWatchingLocation, stopWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { canCloseWalk, locationsToPolygon, cumulativeDistance, getDistance } from './src/utils/geometry';
 import { MapView } from './src/components/MapView';
-import { startMockWalk, MockWalkHandle } from './src/utils/mockGps';
-import { mockClosedLoop, mockOpenWalk } from './src/utils/mockWalkFixtures';
 import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { DenScreen } from './src/components/DenScreen';
@@ -47,8 +44,6 @@ export default function App() {
     treatsEarned: number;
     tease: UpgradeTease | null;
   } | null>(null);
-
-  const subscriptionRef = useRef<Location.LocationSubscription | MockWalkHandle | null>(null);
 
   // Initialize location permission
   useEffect(() => {
@@ -100,40 +95,8 @@ export default function App() {
       isTracking: true,
     }));
 
-    // Start watching location
-    const subscription = await startWatchingLocation((location) => {
-      setAppState((prev) => {
-        if (!prev.walk) return prev;
-
-        const updatedWalk = {
-          ...prev.walk,
-          locations: [...prev.walk.locations, location],
-        };
-
-        return { ...prev, walk: updatedWalk };
-      });
-    });
-
-    subscriptionRef.current = subscription;
-  };
-
-  const startMockWalkFlow = (fixture: LocationType[]) => {
-    const [initial, ...rest] = fixture;
-
-    const newWalk: Walk = {
-      id: Date.now().toString(),
-      startTime: Date.now(),
-      locations: [initial],
-      closed: false,
-    };
-
-    setAppState((prev) => ({
-      ...prev,
-      walk: newWalk,
-      isTracking: true,
-    }));
-
-    subscriptionRef.current = startMockWalk(rest, (location) => {
+    // Start watching location (foreground-service-backed, gps.ts manages the subscription internally)
+    await startWatchingLocation((location) => {
       setAppState((prev) => {
         if (!prev.walk) return prev;
 
@@ -147,11 +110,8 @@ export default function App() {
     });
   };
 
-  const stopWalk = () => {
-    if (subscriptionRef.current) {
-      subscriptionRef.current.remove();
-      subscriptionRef.current = null;
-    }
+  const stopWalk = async () => {
+    await stopWatchingLocation();
 
     if (appState.walk) {
       const startEndDistance = getDistance(
@@ -207,11 +167,8 @@ export default function App() {
     }
   };
 
-  const endWalk = () => {
-    if (subscriptionRef.current) {
-      subscriptionRef.current.remove();
-      subscriptionRef.current = null;
-    }
+  const endWalk = async () => {
+    await stopWatchingLocation();
 
     if (appState.walk) {
       log('WALK_ENDED_EARLY', { id: appState.walk.id, points: appState.walk.locations.length });
@@ -230,7 +187,8 @@ export default function App() {
     }));
   };
 
-  const resetWalk = () => {
+  const resetWalk = async () => {
+    await stopWatchingLocation();
     if (appState.walk) {
       log('WALK_CANCELLED', { id: appState.walk.id, points: appState.walk.locations.length });
     }
@@ -342,22 +300,6 @@ export default function App() {
               <TouchableOpacity style={[styles.button, styles.debugLogButton]} onPress={() => setShowDebugLog(true)}>
                 <Text style={styles.buttonText}>Debug Log</Text>
               </TouchableOpacity>
-              {__DEV__ && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.button, styles.devButton]}
-                    onPress={() => startMockWalkFlow(mockClosedLoop)}
-                  >
-                    <Text style={styles.buttonText}>🧪 Load Mock Closed Loop</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.button, styles.devButton]}
-                    onPress={() => startMockWalkFlow(mockOpenWalk)}
-                  >
-                    <Text style={styles.buttonText}>🧪 Load Mock Open Walk</Text>
-                  </TouchableOpacity>
-                </>
-              )}
             </>
           ) : (
             <>
@@ -437,9 +379,6 @@ const styles = StyleSheet.create({
   },
   endButton: {
     backgroundColor: COLORS.muted,
-  },
-  devButton: {
-    backgroundColor: COLORS.text,
   },
   historyButton: {
     backgroundColor: COLORS.blue,
