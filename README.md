@@ -10,11 +10,11 @@ Minimal real prototype you can take on a walk. GPS tracking → map → territor
 - ✅ Distance + point count during walk
 - ✅ Auto-detects when walk is "closeable" (start ≈ end, within 20m)
 - ✅ Closes perimeter to claim territory
-- ✅ Shows claimed territory polygon on map
+- ✅ Shows claimed territory polygon on map — and every previously claimed territory stays visible on the idle map, not just the latest one
 - ✅ End Walk early (no closed loop needed) — keeps the trail, no reward for an unclosed walk
 - ✅ Dev-only mock walk loader (`__DEV__` builds) — test without physically walking
 - ✅ Walks persist locally (`expo-sqlite`) — survives app restarts, no data lost
-- ✅ "View Past Walks" screen — see every previously recorded walk
+- ✅ "View Past Walks" screen — see every previously recorded walk, delete any of them (with confirmation)
 - ✅ Treats economy core: +50 treats per closed walk, passive treats accrue over time (capped by storage), all persisted
 - ✅ Den screen: 3 buildings (Doghouse, Treat Bakery, Sniff Garden), tap to upgrade, "next upgrade" tease, spring touches
 - ✅ Post-walk celebration: area claimed, treats earned, next-upgrade tease, gentle confetti — replaces the old plain alert

@@ -39,6 +39,7 @@ export default function App() {
   });
   const [showHistory, setShowHistory] = useState(false);
   const [showDen, setShowDen] = useState(false);
+  const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
   const [celebration, setCelebration] = useState<{
     areaM2: number;
@@ -266,7 +267,13 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <WalkHistoryScreen repository={walkRepository} onClose={() => setShowHistory(false)} />
+          <WalkHistoryScreen
+            repository={walkRepository}
+            onClose={() => {
+              setShowHistory(false);
+              setTerritoryRefreshKey((k) => k + 1);
+            }}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -293,6 +300,8 @@ export default function App() {
           locations={appState.walk?.locations || []}
           territory={appState.walk?.territory}
           currentLocation={appState.walk?.locations[appState.walk.locations.length - 1]}
+          walkRepository={walkRepository}
+          territoryRefreshKey={territoryRefreshKey}
         />
       </View>
 

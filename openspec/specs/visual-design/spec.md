@@ -44,7 +44,7 @@ Beyond dark mode and PvP language, the system SHALL avoid gamey chrome (XP bars 
 
 ### Requirement: Key Screen Intents
 The following five key screens SHALL follow this intent:
-- **Map View (Active Walk):** the map dominates full screen; walk-in-progress state is obvious (time, distance); pause/stop controls are easy to reach but not accidental to trigger.
+- **Map View:** the map dominates full screen. While a walk is active, walk-in-progress state is obvious (time, distance) and pause/stop controls are easy to reach but not accidental to trigger. While idle (no walk active), the map SHALL show every previously claimed territory the player owns, so the accumulated result of past walks stays visible rather than disappearing once a walk ends.
 - **Territory Claimed (Post-Walk Celebration):** the peak-joy moment; shows what was claimed and the dog's XP/level progress; ends with clear momentum toward the next walk.
 - **Dog Profile:** the dog is the star; stats are about walks and community, not power creep; badges feel earned.
 - **Leaderboard:** friendly competition that celebrates all dogs; reached by tapping from the map (modal), not as a separate primary tab, so the map stays primary.
@@ -57,6 +57,10 @@ The following five key screens SHALL follow this intent:
 #### Scenario: Den screen visited
 - **WHEN** the player opens the Den screen
 - **THEN** the current cheapest affordable upgrade SHALL be visibly called out, and the screen SHALL avoid stat-dashboard chrome (bare progress bars, power meters) in favor of a home-base feel
+
+#### Scenario: Idle map shows accumulated territory
+- **WHEN** the player opens the app or returns to the map with no walk currently active
+- **THEN** every territory the player has previously claimed SHALL be visible on the map, not just the most recently closed one
 
 ### Requirement: Delight Interaction Moments
 Where the relevant screen exists, the system SHALL implement: paw prints appearing briefly on pull-to-refresh on the map; a bounce plus a "ding" sound when a collectible is tapped and collected; a subtle red outline on overlapping rival territory (the player's own territory stays green) with a "defend" action (walk it again) available on tap; a full-screen celebration with a tail-wag animation and a ticking XP counter on dog level-up; and gentle, not aggressive, confetti at the end of a walk.

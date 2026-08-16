@@ -16,3 +16,6 @@ web-build/
 # Expo prebuild output (managed workflow — regenerated from app.json, not checked in)
 /android/
 /ios/
+
+# Local Java toolchain pin (jenv/asdf), not part of the JS project
+.java-version

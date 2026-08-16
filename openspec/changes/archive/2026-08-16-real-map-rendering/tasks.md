@@ -14,7 +14,7 @@
 
 - [x] 3.1 Replace `<MapCanvas .../>` with `<MapView .../>` in `App.tsx`.
 - [x] 3.2 Delete `src/components/MapCanvas.tsx`.
-- [ ] 3.3 Manual on-device smoke check: start a walk (real or 🧪 mock), confirm real map tiles render, trail draws as you move, closing shows the territory polygon, and starting a new walk clears the old trail/polygon/marker.
+- [x] 3.3 Manual on-device smoke check: start a walk (real or 🧪 mock), confirm real map tiles render, trail draws as you move, closing shows the territory polygon, and starting a new walk clears the old trail/polygon/marker.
 
 ## 4. Wrap-up
 

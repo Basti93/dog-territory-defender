@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 
 const COLORS = {
@@ -21,6 +21,20 @@ export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProp
   useEffect(() => {
     repository.getWalks().then(setWalks);
   }, [repository]);
+
+  const handleDelete = (walk: StoredWalk) => {
+    Alert.alert('Delete walk?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await repository.deleteWalk(walk.id);
+          setWalks((prev) => (prev ? prev.filter((w) => w.id !== walk.id) : prev));
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -48,6 +62,9 @@ export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProp
                 </Text>
                 <Text style={styles.rowPoints}>{item.locations.length} pts</Text>
               </View>
+              <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={8}>
+                <Text style={styles.deleteText}>Delete</Text>
+              </TouchableOpacity>
             </View>
           )}
         />
@@ -108,5 +125,11 @@ const styles = StyleSheet.create({
   rowPoints: {
     fontSize: 12,
     color: COLORS.muted,
+  },
+  deleteText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#E74C3C',
+    marginLeft: 12,
   },
 });
