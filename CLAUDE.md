@@ -37,7 +37,7 @@ Single-screen app, all state in `App.tsx` via `useState`/`useRef` — no navigat
 
 - `src/types.ts` — `Location`, `Walk`, `TerritoryPolygon`, `AppState` interfaces.
 - `src/utils/gps.ts` — thin wrapper over `expo-location`: `requestLocationPermission` (foreground + background), `startWatchingLocation` (1s / 2m interval callback), `getInitialLocation`.
-- `src/utils/geometry.ts` — `getDistance` (haversine), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [openspec/specs/walk-lifecycle/spec.md](openspec/specs/walk-lifecycle/spec.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
+- `src/utils/geometry.ts` — `getDistance` (haversine), `cumulativeDistance` (sums consecutive point-to-point hops — this is what the UI's distance readout uses, not start-to-end), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [openspec/specs/walk-lifecycle/spec.md](openspec/specs/walk-lifecycle/spec.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
 - `src/components/MapView.tsx` — real map: `react-native-webview` hosting `src/web/mapHTML.ts` (Leaflet + OpenStreetMap tiles), driven by a `postMessage` bridge (`UPDATE_LOCATION`/`UPDATE_TRAIL`/`SHOW_TERRITORY`/`RESET`). Requires internet access at walk time. The old SVG-projection `MapCanvas.tsx` placeholder was deleted once this replaced it.
 
 State flow (`App.tsx`): `startWalk()` creates a `Walk`, starts the location subscription → each GPS callback appends to `walk.locations` → `canCloseWalk()` gates the "Close Territory" button → `stopWalk()` runs `locationsToPolygon()` and marks the walk closed → `resetWalk()` clears state for the next walk.

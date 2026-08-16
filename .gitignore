@@ -19,3 +19,6 @@ web-build/
 
 # Local Java toolchain pin (jenv/asdf), not part of the JS project
 .java-version
+
+# adb logcat dumps pulled during on-device field testing
+walk-log*.txt

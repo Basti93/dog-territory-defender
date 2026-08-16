@@ -14,6 +14,19 @@ export function getDistance(lat1: number, lon1: number, lat2: number, lon2: numb
   return R * c;
 }
 
+export function cumulativeDistance(locations: Location[]): number {
+  let total = 0;
+  for (let i = 1; i < locations.length; i++) {
+    total += getDistance(
+      locations[i - 1].latitude,
+      locations[i - 1].longitude,
+      locations[i].latitude,
+      locations[i].longitude
+    );
+  }
+  return total;
+}
+
 export function canCloseWalk(locations: Location[]): boolean {
   if (locations.length < 10) return false;
 

@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { Walk, AppState as AppStateType, Location as LocationType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, getInitialLocation } from './src/utils/gps';
-import { canCloseWalk, locationsToPolygon } from './src/utils/geometry';
+import { canCloseWalk, locationsToPolygon, cumulativeDistance, getDistance } from './src/utils/geometry';
 import { MapView } from './src/components/MapView';
 import { startMockWalk, MockWalkHandle } from './src/utils/mockGps';
 import { mockClosedLoop, mockOpenWalk } from './src/utils/mockWalkFixtures';
@@ -18,7 +18,6 @@ import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomy
 import { applyPassiveAccrual, awardWalkTreats, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
 import { BALANCE } from './src/economy/balanceConfig';
 import { log } from './src/utils/log';
-import { getDistance } from './src/utils/geometry';
 
 const walkRepository = createSqliteWalkRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
@@ -240,11 +239,7 @@ export default function App() {
     });
   };
 
-  const distance = appState.walk
-    ? appState.walk.locations.length > 0
-      ? (appState.walk.locations.length * 2) / 1000 // Rough: ~2m per location point
-      : 0
-    : 0;
+  const distance = appState.walk ? cumulativeDistance(appState.walk.locations) / 1000 : 0;
 
   const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
 
