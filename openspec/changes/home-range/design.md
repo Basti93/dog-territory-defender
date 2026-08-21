@@ -489,3 +489,32 @@ A cell is 400 m², so `cellsPainted · 400` is the walk's real painted footprint
 - **[`lastTracked` is reserved for a Phase 3 mechanic that may never be built]** → 8 bytes per cell for a defence exploit that doesn't exist yet. Cheap insurance; delete it only deliberately.
 - **[Deleting `calculatePolygonArea` breaks the XP area term]** → Called out above with a proposed replacement, but it is a real behaviour change to already-earned XP semantics and needs its own decision, not a footnote.
 - **[K = 0.6 is a judgment call presented as a recommendation]** → The sweep is provided precisely so it can be bounced back. Every value 0.3-1.0 passes every degeneracy, cap and dead-zone check; only the *feel* differs, and that is not my call.
+
+---
+
+## Technical Split Addendum — decisions made converting this to `tasks.md`
+
+Written by the reviewing architect (`senior-app-architect`), not `game-economist` or `game-master` — flagged separately so provenance stays honest: everything above this line was validated by `home-range-prototype.mjs`; everything below was not run through that script and is a plain engineering judgment call, offered in the same spirit as K=0.6 above — bounce it back if it's wrong.
+
+### Split into two sequenced changes, not three
+
+`proposal.md` and this file stay as the single shared design reference for both. Execution splits as:
+
+- **`home-range`** (this change) — the grid model, storage, migration, painting, New Ground detection, the WebView rendering rewrite, and the XP area-term replacement. Ships a working Range/Bloom map with `visits`-driven ghost trails, replacing the polygon entirely. **No Fresh Ground treats bonus yet** — a walk paints and renders correctly but pays exactly what it pays today.
+- **`home-range-rewards`** (sibling change, applied after this one archives) — `bloomMultiplier` wired into `awardWalkTreats`, the manual-log route-refresh feature, the New Ground/Fresh Ground celebration beats, the "Buddy knows N streets" stat surfaced somewhere in the UI, and the `anti-snowball`/`den-economy` spec deltas that record the 0pp-power-budget proof.
+
+Rendering was *not* split into its own third change. Decision 6's rendering rewrite isn't an optional layer on top of the grid — a grid with no picture is strictly worse than what ships today (it paints something the player never sees), so there is no useful milestone that ships the model without the render. `home-range-rewards`, by contrast, layers cleanly on top of an already-visible, already-correct Range/Bloom without touching the model or the renderer again — same shape as this codebase's own precedent (`den-level-xp` shipped the Level/XP number standalone; `virtual-dog-companion` wired it to a payout later, as a separate archived change).
+
+### Resolution: the loop-closure requirement is retired, and the two "floor" thresholds are reconciled
+
+`proposal.md`'s "Why" section already implies this but doesn't say it outright, and neither doc resolves what it means for *rewards*, only for the map picture. Resolving it here:
+
+- **Painting is decoupled from closure.** Any GPS-tracked walk paints the cells it touched — including a walk ended without returning near its start — matching `proposal.md`'s own framing ("a walk that doesn't close into a loop produces nothing to look at" implies it will, under Home Range, produce something).
+- **The three-button model (Close Territory / End Walk / Cancel) collapses to two (Finish Walk / Cancel).** There is nothing left for "Close Territory" to mean once no polygon is computed — the loop-closure test existed only because the shoelace formula needs a closed ring, not for any anti-exploit reason. `canCloseWalk`, `MIN_CLOSURE_RADIUS_M`, and `CLOSURE_ACCURACY_MARGIN_M` in `geometry.ts` are deleted, not preserved as a dead gate.
+- **Reward eligibility moves to Decision 3's existing 25-painted-cell (~200m) floor**, used for exactly one purpose today (suppressing `bloomMultiplier` on a stub walk). This change reuses it as the single qualifying-walk gate for the base treats/XP award too, on a live-tracked "Finish Walk": below 25 painted cells, the walk still saves and still paints (honest — the ground was real), but earns no treats/XP, the same way a sub-10-point walk earns nothing today. This is exactly the reconciliation this file's own Risks section flagged as needed ("If the original floor ever ships, the two must be reconciled") — there is now one floor, not two. Manual logs are unaffected; they already have their own today/yesterday window per `walk-lifecycle`.
+- **Numeric-threshold change, logged per `CLAUDE.md` rule 6:** reward eligibility moves from "≥10 GPS points AND start↔end within ~100m" to "≥25 painted cells (~200m walked, any shape)." This drops the return-to-start requirement entirely — a straight-line 200m walk to a mailbox and back now qualifies where a 200m walk that ended three blocks from home did not before. That is a deliberate loosening (it was only ever an artifact of the polygon math, never a design intent), not an accidental one.
+- **Sequencing note:** `gps-accuracy-aware-closure` (in-flight, 7/8 tasks done, refining `canCloseWalk`'s radius formula) is independently useful and nearly finished — let it land and archive on its own terms rather than blocking it on this change. `home-range` deletes `canCloseWalk` outright once it lands, superseding rather than building on that work; nothing in `gps-accuracy-aware-closure` needs to be undone first, since deletion doesn't conflict with an already-merged prior edit to the same function.
+
+### Migration: existing walks replay into the grid once, at first load after this change ships
+
+Per `proposal.md`'s open question: every stored `Walk` with a real `locations` trail (tracked walks, open or closed) is replayed through the same painting function a live walk uses, once, in a single batch on first app load after this change ships — using each walk's own `startTime` as the cell's initial `lastRefreshed`/`lastTracked` so a year-old walk seeds a year-old (fully wild) patch, not a freshly-painted one. Manual-log walks (`locations: []`) contribute nothing, per `design.md`'s Decision 4 ("manual logs can never discover"). This is a one-time, idempotent backfill (guarded by a flag in the same singleton row pattern `dogName`/`xp` already use), not a recurring job. No new treats/XP are awarded retroactively — this only seeds the Range/Bloom picture, since `home-range` ships before `home-range-rewards` wires any payout to it.

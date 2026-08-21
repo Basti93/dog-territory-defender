@@ -1,6 +1,6 @@
 ## Status
 
-**Concept-stage.** This proposal is deliberately non-technical — it captures the player-experience design and the *why*, not the implementation. `specs/` and `tasks.md` are intentionally not filled in yet; once this concept is agreed it should be split into one or more technical changes each carrying their own specs and tasks. `design.md` is already written: it formalises the geometry and the curves the concept implies, because those numbers had to exist before anyone could judge whether the concept is buildable.
+**Technical split complete, ready to implement.** This proposal and `design.md` remain the non-technical concept + validated geometry/economy reference for both halves of the technical split below. `specs/` and `tasks.md` in this change cover only the first half — the grid model, storage, migration, and rendering rewrite. The Fresh Ground payout, manual-log refresh, New Ground/Fresh Ground celebration copy, and the `anti-snowball`/`den-economy` invariant record ship in a sibling change, `home-range-rewards`, applied after this one archives (see `design.md`'s "Technical Split Addendum" for why it split this way and not into a third rendering-only change).
 
 Drafted by a `game-master` subagent (non-technical, fun-only player-experience persona — see `.claude/agents/game-master.md`). The geometry, curves and payout maths in `design.md` were then produced and validated by a `game-economist` subagent against `home-range-prototype.mjs` in this folder.
 
@@ -70,9 +70,10 @@ The per-walk `TerritoryPolygon` model in `src/utils/geometry.ts` (`locationsToPo
 ## Open Questions for the Technical Split
 
 - **Which phase does this belong to? — Resolved: Phase 1 rebuild, proceed now.** This replaces the already-shipped Phase 1 territory mechanic (closed-perimeter polygon), not new-phase content — same posture as `virtual-dog-companion` touching Phase 1's existing Level mechanic. `game-master` had already resolved that the `visits` brightness channel (nominally Phase 2's "scent strength" language) must ship in the same release as Bloom, not split out (see `design.md`'s FLAG 1) — splitting it away would leave the Phase 1 acceptance-test persona (twice-a-day fixed-loop walker) with a feature that visibly does nothing for them. Decided directly by the user.
-- **What happens to existing saved walks?** There are real recorded walks in local storage with `TerritoryPolygon`s. Their GPS point lists can be replayed into the grid to seed a Range; walks logged manually with no trail cannot. Migration is a technical-split decision.
-- **Does the walk-XP formula's area term survive?** `den-economy/spec.md` requires XP to be "a capped amount scaled by the polygon's enclosed area." With no polygon there is no enclosed area. `design.md` proposes the replacement; it is a spec change either way.
-- **Copy and celebration wording for New Ground**, and the noun behind "Buddy knows 41 streets" — `game-master`'s lane, not settled here.
+- **What happens to existing saved walks? — Resolved.** Every stored walk with a real GPS trail is replayed into the grid once, on first load after this change ships, seeded with that walk's own `startTime` so old ground reads as wild, not fresh. See `design.md`'s Technical Split Addendum.
+- **Does the walk-XP formula's area term survive? — Resolved.** Replaced by `cellsPainted · 400` (a cell's real m² footprint), same shape, same cap, ships in this change (not deferred to `home-range-rewards`) since the area term breaks the moment the polygon is deleted. See `design.md`'s "Consequence that must be resolved" section and its worked replacement formula.
+- **Does the loop-closure requirement (`canCloseWalk`) survive? — Resolved: no, retired.** Painting is decoupled from closure; reward eligibility moves to the existing 25-painted-cell (~200m) qualifying floor instead of "returns near its start." See `design.md`'s Technical Split Addendum for the full reasoning and the numeric-threshold log entry this requires per `CLAUDE.md` rule 6.
+- **Copy and celebration wording for New Ground**, and the noun behind "Buddy knows 41 streets" — `game-master`'s lane, not settled here. Lives in `home-range-rewards`.
 
 ## Source
 
