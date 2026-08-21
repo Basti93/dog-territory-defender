@@ -56,7 +56,7 @@
 
 ## 8. Spec deltas
 
-- [ ] 8.1 **Not done — needs `/opsx:apply`, which this session doesn't have direct access to.** Sections 1-7 are implemented and verified (tests + `tsc` both pass — see this session's report). `/opsx:apply` is this project's own slash-command workflow step (per `CLAUDE.md`: `/opsx:propose` → `/opsx:apply` → `/opsx:archive`/`/opsx:sync`), distinct from the plain `openspec` CLI's `archive` command available in this shell — hand-running a raw CLI command in its place risked doing something other than what that specific project skill does, so left for the user (or a follow-up agent invocation with that skill available) to run now that this change's implementation is ready for it.
+- [x] 8.1 The `specs/` deltas were already written during the architect's planning pass (`openspec status --change home-range` confirms the `specs` artifact is `done`) — nothing to "apply" separately. They sync into the main `openspec/specs/` files at archive time via `/opsx:sync`, same as every prior change in this project (`virtual-dog-companion`, `walk-start-notifications`, `den-level-xp`). That happens once this change is fully verified and archived, not before.
 - [x] 8.2 Updated `README.md`'s territory/closure description (previously referenced the polygon and `canCloseWalk`'s ≥10-points/20m rule) to describe the Range/Bloom model, the two-button Finish Walk/Cancel model, and the 25-cell reward-eligibility floor. Also updated the folder-overview lines for `storage`/`utils`/`web` to mention the new Home Range files, per `CLAUDE.md`'s "update the folder map when adding files" rule.
 
 ## 9. Automated coverage
