@@ -1,6 +1,6 @@
 ## 0. Sequencing
 
-- [ ] 0.1 Confirm `home-range` has archived before starting: this change assumes `HomeRangeRepository`, `paintedCells`/`wildness`/`newGroundCells` (`src/utils/grid.ts`), and the reward-eligibility floor (`walk-lifecycle`'s 25-painted-cell gate) already exist and are wired into a live walk close. Nothing here should need to touch `mapHTML.ts`/`MapView.tsx` again. **Left unchecked deliberately — `home-range` still hasn't archived (blocked on the user's own on-device verification, unrelated to this work). Every piece of code this task depends on is real and live in the codebase today, so sections 1-3/5 were implemented directly per explicit instruction; this box stays open as an honest record that the formal archive hasn't happened, matching this project's `virtual-dog-companion` precedent for the same situation (its task 12.1).**
+- [x] 0.1 Confirm `home-range` has archived before starting. **`home-range` archived — its rendering spike confirmed on a real device (soft edges, plausible fill, no grid blockiness) and its spec deltas are merged into `openspec/specs/`.**
 
 ## 1. Fresh Ground payout
 
@@ -26,7 +26,7 @@
 
 ## 4. Spec deltas
 
-- [ ] 4.1 Apply this change's `specs/` deltas (`den-economy`, `anti-snowball`, `walk-lifecycle`) via `/opsx:apply` once sections 1-3 are implemented and verified. **Left unchecked deliberately — per `virtual-dog-companion`'s task 12.1 precedent and this project's own hard rule ("Do not hand-edit `openspec/specs/` directly"), this only happens through the real `openspec archive` mechanism, and `home-range` itself hasn't archived yet — `openspec/specs/` doesn't yet contain the base requirement text this change's delta is written against. Not something to complete mid-implementation.**
+- [x] 4.1 Apply this change's `specs/` deltas (`den-economy`, `anti-snowball`, `walk-lifecycle`). **Applied — all three merged into `openspec/specs/`, validated clean.**
 - [x] 4.2 Update `README.md` to mention Fresh Ground/manual-log refresh, mirroring how prior changes updated the same section.
 
 ## 5. Automated coverage
