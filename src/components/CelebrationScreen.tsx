@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 
 import { BuildingKey } from '../economy/balanceConfig';
-import { UpgradeTease } from '../economy/denEconomy';
+import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 
 const COLORS = {
@@ -32,6 +32,12 @@ interface CelebrationScreenProps {
   tease: UpgradeTease | null;
   unlockedAchievements?: AchievementId[];
   leveledUpTo?: number | null;
+  /** Buddy's treats-per-walk rate before/after this level-up — both required to render the level-up beat; null whenever leveledUpTo is null. See economy/walkRewards.ts. */
+  oldTreatsPerWalk?: number | null;
+  newTreatsPerWalk?: number | null;
+  /** The one-away cliffhanger's milestone title, when it fires on this walk-close. See economy/milestones.ts — currently always null until milestone titles are game-master-authored. */
+  cliffhangerTitle?: string | null;
+  dogName?: string | null;
   onContinue: () => void;
 }
 
@@ -68,6 +74,10 @@ export function CelebrationScreen({
   tease,
   unlockedAchievements = [],
   leveledUpTo = null,
+  oldTreatsPerWalk = null,
+  newTreatsPerWalk = null,
+  cliffhangerTitle = null,
+  dogName = null,
   onContinue,
 }: CelebrationScreenProps) {
   const confetti = useMemo(
@@ -117,9 +127,20 @@ export function CelebrationScreen({
           </View>
         )}
 
-        {leveledUpTo !== null && (
+        {leveledUpTo !== null && oldTreatsPerWalk !== null && newTreatsPerWalk !== null && (
           <View style={styles.levelBox}>
-            <Text style={styles.levelText}>Level {leveledUpTo} 🐾</Text>
+            {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in. */}
+            <Text style={styles.levelText}>
+              {dogDisplayName(dogName)} reached Level {leveledUpTo} — he brings home {newTreatsPerWalk} treats a walk
+              now, up from {oldTreatsPerWalk}
+            </Text>
+          </View>
+        )}
+
+        {cliffhangerTitle !== null && (
+          <View style={styles.levelBox}>
+            {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), title filled in. */}
+            <Text style={styles.levelText}>One more walk and he's a {cliffhangerTitle}</Text>
           </View>
         )}
 

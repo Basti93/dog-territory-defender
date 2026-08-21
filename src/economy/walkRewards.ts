@@ -1,10 +1,13 @@
 import { Walk } from '../types';
 import { log } from '../utils/log';
+import { cumulativeDistance } from '../utils/geometry';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { WalkRepository } from '../storage/WalkRepository';
 import { calendarDayKey } from '../utils/manualWalkLog';
 import { awardWalkTreats, awardWalkXp, DenEconomyState, getUpgradeTease, UpgradeTease } from './denEconomy';
+import { buddyTreatsPerWalk, xpAwardForWalk } from './formulas';
+import { shouldFireCliffhanger, titleForLevel } from './milestones';
 import { AchievementId, recordTreatsEarned, recordWalkClosed } from './personalStats';
 import { BALANCE } from './balanceConfig';
 
@@ -50,6 +53,44 @@ async function walkOrderForDay(walk: Walk, walkRepository: WalkRepository): Prom
   return priorWalksToday + 1;
 }
 
+/**
+ * "Trailing 5-walk average XP" yardstick for the one-away cliffhanger (see
+ * economy/milestones.ts's shouldFireCliffhanger and design.md's "falls back
+ * to 82.5 XP before 5 walks exist" decision). Includes this walk's own
+ * (undiscounted) XP award plus up to 4 prior closed walks — mirroring
+ * walkOrderForDay's pattern above of excluding this walk by id from the
+ * repository scan (it may not be persisted yet for a tracked walk close;
+ * both call sites in App.tsx save the walk before or without awaiting
+ * relative to this reward path) and supplying its own distance/area
+ * directly instead. Judgment call, since design.md doesn't pin down whether
+ * the average should use each walk's real (post-daily-multiplier) awarded
+ * XP or its full undiscounted potential — this uses the latter, consistent
+ * with design.md's own worked examples always using the undiscounted
+ * "typical walk" value (82.5 XP).
+ */
+async function trailingAverageXp(
+  walkRepository: WalkRepository,
+  walk: Walk,
+  currentDistanceMeters: number,
+  currentAreaM2: number
+): Promise<number> {
+  const allWalks = await walkRepository.getWalks();
+  const priorClosed = allWalks
+    .filter((w) => w.closed && w.id !== walk.id)
+    .sort((a, b) => b.startTime - a.startTime)
+    .slice(0, 4);
+
+  const samples = [
+    xpAwardForWalk(currentDistanceMeters, currentAreaM2),
+    ...priorClosed.map((w) => xpAwardForWalk(cumulativeDistance(w.locations), w.territory?.area ?? 0)),
+  ];
+
+  if (samples.length < 5) {
+    return BALANCE.leveling.cliffhangerFallbackXp;
+  }
+  return samples.reduce((sum, xp) => sum + xp, 0) / samples.length;
+}
+
 export interface WalkRewardsCelebration {
   areaM2: number;
   /** False for a manually-logged walk — no real GPS trail means no honest territory polygon. Drives CelebrationScreen copy. */
@@ -58,6 +99,12 @@ export interface WalkRewardsCelebration {
   tease: UpgradeTease | null;
   unlockedAchievements: AchievementId[];
   leveledUpTo: number | null;
+  /** Buddy's treats-per-walk rate *before* this walk's own level-up (the "up from K" half of the level-up beat). Null whenever leveledUpTo is null. */
+  oldTreatsPerWalk: number | null;
+  /** Buddy's treats-per-walk rate at the new level (the "brings home M treats a walk now" half). Null whenever leveledUpTo is null. */
+  newTreatsPerWalk: number | null;
+  /** The one-away cliffhanger's milestone title ("One more walk and he's a...") when it fires on this walk-close — see economy/milestones.ts. Null otherwise, including when the trigger condition is met but no game-master-authored title exists yet for that milestone (tasks.md task 5.3). */
+  cliffhangerTitle: string | null;
 }
 
 export interface AwardWalkRewardsResult {
@@ -97,10 +144,16 @@ export async function awardWalkRewards(
 
   const walkOrderToday = await walkOrderForDay(walk, walkRepository);
   const multiplier = dailyRewardMultiplier(walkOrderToday);
-  const treatsAwarded = Math.round(BALANCE.treatsPerWalk * multiplier);
 
   const denState = await denEconomyRepository.getState();
-  const rewarded = awardWalkTreats(denState, multiplier);
+  const levelBeforeThisWalk = denState.level;
+  // awardWalkTreats reads state.level/sniffGardenLevel as they stood before
+  // this walk's own awardWalkXp call below, so a level-up earned on this
+  // very walk changes the rate starting next walk, not retroactively (see
+  // denEconomy.ts's awardWalkTreats and tasks.md task 10.2). Its returned
+  // treatsAwarded is the single source of truth for the celebration/log/
+  // stats figure — tasks.md task 3.4's de-duplication fix.
+  const { state: rewarded, treatsAwarded } = awardWalkTreats(denState, multiplier);
   log('TREATS_AWARD', {
     walkId: walk.id,
     startSource: walk.startSource,
@@ -130,18 +183,46 @@ export async function awardWalkRewards(
     walkOrderToday,
     dailyMultiplier: multiplier,
   });
-  await denEconomyRepository.saveState(leveledState);
+
+  // One-away cliffhanger ("One more walk and he's a [Title]") — only
+  // considered on a walk that did NOT itself level up (a level-up already
+  // has its own beat), only once per approaching milestone level
+  // (cliffhangerShownForLevel bookkeeping), and only when real
+  // game-master-authored title copy exists for that milestone (see
+  // economy/milestones.ts — MILESTONE_TITLES is empty until then, so this
+  // is currently inert by design, not a bug).
+  let finalState = leveledState;
+  let cliffhangerTitle: string | null = null;
+  if (!leveledUp && leveledState.level < BALANCE.leveling.maxLevel) {
+    const nextLevel = leveledState.level + 1;
+    const title = titleForLevel(nextLevel);
+    if (title && leveledState.cliffhangerShownForLevel !== nextLevel) {
+      const trailingAvg = await trailingAverageXp(walkRepository, walk, distanceMeters, areaM2);
+      if (shouldFireCliffhanger(leveledState.level, leveledState.xp, trailingAvg)) {
+        cliffhangerTitle = title;
+        finalState = { ...leveledState, cliffhangerShownForLevel: nextLevel };
+      }
+    }
+  }
+
+  await denEconomyRepository.saveState(finalState);
+
+  const oldTreatsPerWalk = leveledUp ? buddyTreatsPerWalk(levelBeforeThisWalk, finalState.sniffGardenLevel) : null;
+  const newTreatsPerWalk = leveledUp ? buddyTreatsPerWalk(finalState.level, finalState.sniffGardenLevel) : null;
 
   return {
-    denEconomyState: leveledState,
+    denEconomyState: finalState,
     newlyUnlockedAchievements,
     celebration: {
       areaM2,
       hasTerritory: walk.territory !== undefined,
       treatsEarned: treatsAwarded,
-      tease: getUpgradeTease(leveledState),
+      tease: getUpgradeTease(finalState),
       unlockedAchievements: newlyUnlockedAchievements,
-      leveledUpTo: leveledUp ? leveledState.level : null,
+      leveledUpTo: leveledUp ? finalState.level : null,
+      oldTreatsPerWalk,
+      newTreatsPerWalk,
+      cliffhangerTitle,
     },
   };
 }

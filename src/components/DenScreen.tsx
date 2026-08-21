@@ -7,10 +7,11 @@ import {
   upgradeCost,
   storageCap,
   passiveTreatsPerHour,
-  softCapBonusPercent,
+  buddyPayout,
+  buddyTreatsPerWalk,
   cumulativeXpForLevel,
 } from '../economy/formulas';
-import { DenEconomyState, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
+import { DenEconomyState, dogDisplayName, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
@@ -27,19 +28,31 @@ const COLORS = {
 const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; color: string; lightColor: string }> = {
   doghouse: { name: 'Doghouse', sub: 'Treat storage', color: '#8B6F47', lightColor: '#D4A76A' },
   bakery: { name: 'Treat Bakery', sub: 'Passive treats', color: '#C87941', lightColor: '#F5CBA7' },
-  sniffGarden: { name: 'Sniff Garden', sub: 'Collectible bonus', color: '#3A9E5F', lightColor: '#A8D5A2' },
+  sniffGarden: { name: 'Sniff Garden', sub: 'Helps Buddy find more on a walk', color: '#3A9E5F', lightColor: '#A8D5A2' },
 };
 
 const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
 
-function effectText(building: BuildingKey, level: number): string {
+/**
+ * `level` is the building's own level being described (either its current
+ * level, or level+1 for the "Next:" preview) — `state` supplies the other
+ * context (Buddy's level, the other buildings' levels) needed now that
+ * storage/passive/Sniff-Garden all read Buddy's Level too (see
+ * openspec/changes/virtual-dog-companion/design.md).
+ */
+function effectText(building: BuildingKey, level: number, state: DenEconomyState): string {
   switch (building) {
     case 'doghouse':
-      return `Storage: ${storageCap(level)} treats`;
+      return `Storage: ${storageCap(level, state.level, state.bakeryLevel, state.sniffGardenLevel)} treats`;
     case 'bakery':
-      return `+${passiveTreatsPerHour(level).toFixed(1)} treats/hour`;
-    case 'sniffGarden':
-      return `+${softCapBonusPercent(level).toFixed(0)}% collectibles`;
+      return `+${passiveTreatsPerHour(level, state.level).toFixed(1)} treats/hour`;
+    case 'sniffGarden': {
+      // TODO: game-master copy pass — placeholder wording below; the numbers are real (tasks.md task 6.2).
+      const withGarden = buddyTreatsPerWalk(state.level, level);
+      const withoutGarden = buddyPayout(state.level);
+      const extra = withGarden - withoutGarden;
+      return `Buddy comes home with ${extra} more a walk`;
+    }
   }
 }
 
@@ -68,7 +81,7 @@ export function DenScreen({
   useEffect(() => {
     repository.getState().then((s) => {
       setState(s);
-      if (s.treats >= storageCap(s.doghouseLevel)) {
+      if (s.treats >= storageCap(s.doghouseLevel, s.level, s.bakeryLevel, s.sniffGardenLevel)) {
         setShowOverflowNotice(true);
       }
     });
@@ -141,13 +154,15 @@ export function DenScreen({
         <View style={styles.treatsRow}>
           <Text style={styles.treatsLabel}>Treats</Text>
           <Text style={styles.treatsValue}>
-            {Math.floor(state.treats)} / {storageCap(state.doghouseLevel)}
+            {Math.floor(state.treats)} / {storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel)}
           </Text>
         </View>
 
         <View style={styles.levelBar}>
           <View style={styles.levelBarHeader}>
-            <Text style={styles.levelBarLabel}>Level {state.level}</Text>
+            <Text style={styles.levelBarLabel}>
+              {dogDisplayName(state.dogName)} — Level {state.level}
+            </Text>
             {state.level < BALANCE.leveling.maxLevel && (
               <Text style={styles.levelBarSub}>
                 {Math.floor(state.xp - cumulativeXpForLevel(state.level))} /{' '}
@@ -173,6 +188,14 @@ export function DenScreen({
               ]}
             />
           </View>
+          {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
+          <Text style={styles.levelBarRate}>
+            {dogDisplayName(state.dogName)} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a
+            walk.
+            {state.level < BALANCE.leveling.maxLevel
+              ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.`
+              : ''}
+          </Text>
         </View>
 
         <View style={styles.denScene}>
@@ -204,11 +227,11 @@ export function DenScreen({
                 <Text style={styles.cardName}>{display.name}</Text>
                 <Text style={styles.cardSub}>{display.sub}</Text>
                 <Text style={styles.cardEffect}>
-                  Level {level} — {effectText(building, level)}
+                  Level {level} — {effectText(building, level, state)}
                 </Text>
                 {!maxed ? (
                   <>
-                    <Text style={styles.cardNextEffect}>Next: {effectText(building, level + 1)}</Text>
+                    <Text style={styles.cardNextEffect}>Next: {effectText(building, level + 1, state)}</Text>
                     <Text style={[styles.cardCost, { color: display.color }]}>
                       {isTease ? 'Next upgrade: ' : 'Upgrade: '}
                       {cost} treats
@@ -310,6 +333,11 @@ const styles = StyleSheet.create({
   levelBarFill: {
     height: '100%',
     backgroundColor: COLORS.green,
+  },
+  levelBarRate: {
+    marginTop: 6,
+    fontSize: 12,
+    color: COLORS.muted,
   },
   denScene: {
     alignItems: 'center',

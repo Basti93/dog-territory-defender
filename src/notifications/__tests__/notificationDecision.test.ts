@@ -12,21 +12,21 @@ const NOW = 1_700_000_000_000;
 
 describe('shouldFireOverflowNotification', () => {
   it('fires when treats are at/over the storage cap and the overflow has not been surfaced yet', () => {
-    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1) };
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) };
     const bookkeeping = defaultNotificationBookkeepingState();
 
     expect(shouldFireOverflowNotification(denState, bookkeeping)).toBe(true);
   });
 
   it('stays silent when treats are below the storage cap', () => {
-    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1) - 1 };
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) - 1 };
     const bookkeeping = defaultNotificationBookkeepingState();
 
     expect(shouldFireOverflowNotification(denState, bookkeeping)).toBe(false);
   });
 
   it('stays silent when the current overflow has already been surfaced', () => {
-    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1) };
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) };
     const bookkeeping = { ...defaultNotificationBookkeepingState(), overflowSurfaced: true };
 
     expect(shouldFireOverflowNotification(denState, bookkeeping)).toBe(false);
@@ -35,7 +35,7 @@ describe('shouldFireOverflowNotification', () => {
 
 describe('resetSurfacedFlagIfOverflowCleared', () => {
   it('clears the surfaced flag once treats drop back below the cap', () => {
-    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1) - 5 };
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) - 5 };
     const bookkeeping = { ...defaultNotificationBookkeepingState(), overflowSurfaced: true };
 
     const result = resetSurfacedFlagIfOverflowCleared(denState, bookkeeping);
@@ -44,7 +44,7 @@ describe('resetSurfacedFlagIfOverflowCleared', () => {
   });
 
   it('leaves the surfaced flag untouched while still overflowing', () => {
-    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1) };
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) };
     const bookkeeping = { ...defaultNotificationBookkeepingState(), overflowSurfaced: true };
 
     const result = resetSurfacedFlagIfOverflowCleared(denState, bookkeeping);

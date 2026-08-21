@@ -15,6 +15,8 @@ interface DenEconomyRow {
   lastTickAt: number;
   xp: number;
   level: number;
+  dogName: string | null;
+  cliffhangerShownForLevel: number | null;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -26,6 +28,8 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     lastTickAt: row.lastTickAt,
     xp: row.xp,
     level: row.level,
+    dogName: row.dogName,
+    cliffhangerShownForLevel: row.cliffhangerShownForLevel,
   };
 }
 
@@ -53,12 +57,20 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         sniffGardenLevel INTEGER NOT NULL,
         lastTickAt INTEGER NOT NULL,
         xp REAL NOT NULL DEFAULT 0,
-        level INTEGER NOT NULL DEFAULT 1
+        level INTEGER NOT NULL DEFAULT 1,
+        dogName TEXT,
+        cliffhangerShownForLevel INTEGER
       );
     `);
     // Migration for rows created before xp/level existed (e.g. an already-installed app).
     await addColumnIfMissing(db, 'den_economy', 'xp REAL NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'den_economy', 'level INTEGER NOT NULL DEFAULT 1');
+    // Migration for rows created before dogName/cliffhangerShownForLevel existed
+    // (openspec/changes/virtual-dog-companion) — both nullable, so an existing
+    // row's default is exactly the "not set yet" state (task 1.3's fallback,
+    // "cliffhanger not yet shown for any level").
+    await addColumnIfMissing(db, 'den_economy', 'dogName TEXT');
+    await addColumnIfMissing(db, 'den_economy', 'cliffhangerShownForLevel INTEGER');
     return db;
   });
 
@@ -72,8 +84,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
 
       const initial = defaultDenEconomyState(Date.now());
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         SINGLETON_ID,
         initial.treats,
         initial.doghouseLevel,
@@ -81,7 +93,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         initial.sniffGardenLevel,
         initial.lastTickAt,
         initial.xp,
-        initial.level
+        initial.level,
+        initial.dogName,
+        initial.cliffhangerShownForLevel
       );
       return initial;
     },
@@ -89,8 +103,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
@@ -98,7 +112,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
            sniffGardenLevel = excluded.sniffGardenLevel,
            lastTickAt = excluded.lastTickAt,
            xp = excluded.xp,
-           level = excluded.level`,
+           level = excluded.level,
+           dogName = excluded.dogName,
+           cliffhangerShownForLevel = excluded.cliffhangerShownForLevel`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
@@ -106,7 +122,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         state.sniffGardenLevel,
         state.lastTickAt,
         state.xp,
-        state.level
+        state.level,
+        state.dogName,
+        state.cliffhangerShownForLevel
       );
     },
   };

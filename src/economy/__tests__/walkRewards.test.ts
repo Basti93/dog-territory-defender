@@ -4,6 +4,7 @@ import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPer
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { WalkRepository } from '../../storage/WalkRepository';
 import { BALANCE } from '../balanceConfig';
+import { buddyPayout, buddyTreatsPerWalk, cumulativeXpForLevel } from '../formulas';
 import { awardWalkRewards } from '../walkRewards';
 
 function makeTrackedWalk(overrides: Partial<Walk> = {}): Walk {
@@ -61,8 +62,8 @@ describe('awardWalkRewards', () => {
 
     const result = await awardWalkRewards(walk, 500, 500, deps);
 
-    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
-    expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + BALANCE.treatsPerWalk);
+    expect(result.celebration.treatsEarned).toBe(buddyPayout(1));
+    expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + buddyPayout(1));
   });
 
   it('awards the identical flat per-walk treats amount for a manually-logged walk', async () => {
@@ -71,8 +72,8 @@ describe('awardWalkRewards', () => {
 
     const result = await awardWalkRewards(walk, 0, 0, deps);
 
-    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
-    expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + BALANCE.treatsPerWalk);
+    expect(result.celebration.treatsEarned).toBe(buddyPayout(1));
+    expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + buddyPayout(1));
   });
 
   it('awards the same base XP for a manual-log walk (distance/area terms are zero) as the base component of a tracked walk', async () => {
@@ -138,7 +139,7 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
     const walk = makeManualWalk({ id: 'today-walk', startTime: DAY_ANCHOR + 999 * 1000 });
     const result = await awardWalkRewards(walk, 0, 0, deps);
 
-    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
+    expect(result.celebration.treatsEarned).toBe(buddyPayout(1));
     expect(result.denEconomyState.xp).toBe(BALANCE.xp.perWalkBase);
   });
 
@@ -155,7 +156,7 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
       const result = await awardWalkRewards(walk, 0, 0, deps);
 
       const multiplier = expectedMultipliers[walkNumber - 1];
-      expect(result.celebration.treatsEarned).toBe(Math.round(BALANCE.treatsPerWalk * multiplier));
+      expect(result.celebration.treatsEarned).toBe(Math.round(buddyPayout(1) * multiplier));
       expect(result.denEconomyState.xp).toBeCloseTo(BALANCE.xp.perWalkBase * multiplier);
 
       // Persist this walk so the next iteration sees it as a "prior walk today".
@@ -183,7 +184,61 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
     const nextDayWalk = makeManualWalk({ id: 'next-day-walk', startTime: DAY_ANCHOR + ONE_DAY_MS });
     const result = await awardWalkRewards(nextDayWalk, 0, 0, deps);
 
-    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
+    expect(result.celebration.treatsEarned).toBe(buddyPayout(1));
     expect(result.denEconomyState.xp).toBe(BALANCE.xp.perWalkBase);
+  });
+});
+
+// openspec/changes/virtual-dog-companion/design.md's level-up beat and
+// one-away cliffhanger decisions.
+describe('awardWalkRewards — level-up celebration fields', () => {
+  it('leaves oldTreatsPerWalk/newTreatsPerWalk/leveledUpTo null when no level-up occurs', async () => {
+    const deps = makeDeps();
+    const result = await awardWalkRewards(makeTrackedWalk(), 500, 500, deps);
+
+    expect(result.celebration.leveledUpTo).toBeNull();
+    expect(result.celebration.oldTreatsPerWalk).toBeNull();
+    expect(result.celebration.newTreatsPerWalk).toBeNull();
+  });
+
+  it('reports the old and new per-walk rate together when a walk crosses a level threshold, and this walk itself is still paid at the old rate (tasks.md task 10.2)', async () => {
+    const denEconomyRepository = createInMemoryDenEconomyRepository();
+    const seeded = await denEconomyRepository.getState();
+    await denEconomyRepository.saveState({ ...seeded, xp: cumulativeXpForLevel(2) - 5 });
+    const deps = {
+      denEconomyRepository,
+      personalStatsRepository: createInMemoryPersonalStatsRepository(),
+      walkRepository: createInMemoryWalkRepository(),
+    };
+
+    // 20 (flat base) + 15 (1km) = 35 XP — enough to cross the 5-XP gap to level 2.
+    const result = await awardWalkRewards(makeTrackedWalk(), 1000, 0, deps);
+
+    expect(result.celebration.leveledUpTo).toBe(2);
+    expect(result.celebration.oldTreatsPerWalk).toBe(buddyTreatsPerWalk(1, 1));
+    expect(result.celebration.newTreatsPerWalk).toBe(buddyTreatsPerWalk(2, 1));
+    expect(result.celebration.newTreatsPerWalk!).toBeGreaterThan(result.celebration.oldTreatsPerWalk!);
+    expect(result.celebration.treatsEarned).toBe(buddyTreatsPerWalk(1, 1));
+  });
+
+  it('cliffhangerTitle stays null while MILESTONE_TITLES has no game-master-authored copy yet, even when the trigger condition is met (tasks.md task 5.3)', async () => {
+    const denEconomyRepository = createInMemoryDenEconomyRepository();
+    const seeded = await denEconomyRepository.getState();
+    // cumulativeXpForLevel(2) = 100 (at xpGrowth=1.10) — 25 short, so a 20-XP
+    // walk leaves it 5 short of level 2 (a milestone level) after this walk.
+    await denEconomyRepository.saveState({ ...seeded, xp: cumulativeXpForLevel(2) - 25 });
+    const walkRepository = createInMemoryWalkRepository();
+    // 4 prior closed walks, dated well outside this test walk's calendar day
+    // so they don't affect its own daily-multiplier order, but do count
+    // toward the cliffhanger's trailing-5-walk average.
+    for (let i = 0; i < 4; i++) {
+      await walkRepository.saveWalk(makeManualWalk({ id: `prior-${i}`, startTime: 1000 + i * 1000 }));
+    }
+    const deps = { denEconomyRepository, personalStatsRepository: createInMemoryPersonalStatsRepository(), walkRepository };
+
+    const result = await awardWalkRewards(makeManualWalk({ id: 'today', startTime: DAY_ANCHOR }), 0, 0, deps);
+
+    expect(result.celebration.leveledUpTo).toBeNull(); // still 5 XP short of level 2 this walk
+    expect(result.celebration.cliffhangerTitle).toBeNull();
   });
 });

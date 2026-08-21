@@ -16,10 +16,11 @@ import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
 import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
+import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
 import { createSqliteNotificationRepository } from './src/storage/sqliteNotificationRepository';
-import { applyPassiveAccrual } from './src/economy/denEconomy';
+import { applyPassiveAccrual, dogDisplayName, reconcileBuddyLevelCatchUp } from './src/economy/denEconomy';
 import { AchievementId, recordTreatsEarned } from './src/economy/personalStats';
 import { awardWalkRewards, WalkRewardsCelebration } from './src/economy/walkRewards';
 import { checkAndScheduleEarnedTriggerNotification } from './src/notifications/earnedTrigger';
@@ -53,6 +54,8 @@ export default function App() {
   const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
+  const [dogName, setDogName] = useState<string | null>(null);
+  const [needsDogName, setNeedsDogName] = useState(false);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   const [celebration, setCelebration] = useState<WalkRewardsCelebration | null>(null);
 
@@ -97,19 +100,33 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
-  // Apply passive treat accrual since last open, then load the balance
+  // Apply passive treat accrual since last open, reconcile Buddy's Level
+  // against the current xpGrowth curve (tasks.md task 7.2 — see
+  // reconcileBuddyLevelCatchUp's doc comment for why this can lag), then
+  // load the balance.
   useEffect(() => {
     (async () => {
       const state = await denEconomyRepository.getState();
       const accrued = applyPassiveAccrual(state, Date.now());
-      await denEconomyRepository.saveState(accrued);
+      const { state: reconciled, caughtUpToLevel } = reconcileBuddyLevelCatchUp(accrued);
+      await denEconomyRepository.saveState(reconciled);
       log('TREATS_PASSIVE_ACCRUAL', {
         before: state.treats,
         after: accrued.treats,
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
-      setTreats(accrued.treats);
-      setLevel(accrued.level);
+      setTreats(reconciled.treats);
+      setLevel(reconciled.level);
+      setDogName(reconciled.dogName);
+      setNeedsDogName(reconciled.dogName === null);
+
+      if (caughtUpToLevel !== null) {
+        log('LEVEL_CURVE_CATCH_UP', { before: state.level, caughtUpToLevel });
+        // Accepted verbatim copy shape (openspec/changes/virtual-dog-companion) —
+        // distinct from the normal per-walk level-up beat, since no walk
+        // earned this jump (a curve retune did). See design.md task 7.2/7.3.
+        Alert.alert(`${dogDisplayName(reconciled.dogName)} caught up — Level ${caughtUpToLevel}`);
+      }
 
       const accruedDelta = accrued.treats - state.treats;
       if (accruedDelta > 0) {
@@ -123,6 +140,14 @@ export default function App() {
       }
     })();
   }, []);
+
+  const submitDogName = async (name: string) => {
+    const state = await denEconomyRepository.getState();
+    const next = { ...state, dogName: name };
+    await denEconomyRepository.saveState(next);
+    setDogName(name);
+    setNeedsDogName(false);
+  };
 
   const startWalk = async () => {
     const initialLoc = await getInitialLocation();
@@ -296,6 +321,16 @@ export default function App() {
 
   const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
 
+  if (needsDogName) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <DogNamePromptScreen onSubmit={submitDogName} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   if (celebration) {
     return (
       <SafeAreaProvider>
@@ -307,6 +342,10 @@ export default function App() {
             tease={celebration.tease}
             unlockedAchievements={celebration.unlockedAchievements}
             leveledUpTo={celebration.leveledUpTo}
+            oldTreatsPerWalk={celebration.oldTreatsPerWalk}
+            newTreatsPerWalk={celebration.newTreatsPerWalk}
+            cliffhangerTitle={celebration.cliffhangerTitle}
+            dogName={dogName}
             onContinue={() => setCelebration(null)}
           />
         </SafeAreaView>
@@ -409,8 +448,8 @@ export default function App() {
           <Text style={[styles.statLabel, { marginLeft: 20 }]}>Treats</Text>
           <Text style={styles.statValue}>{treats !== null ? Math.floor(treats) : '…'}</Text>
 
-          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Lv.</Text>
-          <Text style={styles.statValue}>{level !== null ? level : '…'}</Text>
+          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Level</Text>
+          <Text style={styles.statValue}>{level !== null ? `${dogDisplayName(dogName)} — Level ${level}` : '…'}</Text>
 
           {canClose && <Text style={[styles.statLabel, { marginLeft: 20, color: COLORS.green }]}>🔄 Can close!</Text>}
         </View>

@@ -20,7 +20,7 @@ export function defaultNotificationBookkeepingState(): NotificationBookkeepingSt
 }
 
 function isOverflowing(denState: DenEconomyState): boolean {
-  return denState.treats >= storageCap(denState.doghouseLevel);
+  return denState.treats >= storageCap(denState.doghouseLevel, denState.level, denState.bakeryLevel, denState.sniffGardenLevel);
 }
 
 /**

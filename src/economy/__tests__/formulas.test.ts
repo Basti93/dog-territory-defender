@@ -4,6 +4,9 @@ import {
   storageCap,
   passiveTreatsPerHour,
   softCapBonusPercent,
+  buddyPayout,
+  sniffGardenPct,
+  buddyTreatsPerWalk,
   xpAwardForWalk,
   xpForNextLevel,
   cumulativeXpForLevel,
@@ -27,19 +30,105 @@ describe('upgradeCost', () => {
   });
 });
 
+describe('buddyPayout', () => {
+  it('matches design.md\'s worked level ladder (round(50 * 1.055^(L-1)))', () => {
+    const expected: Record<number, number> = { 1: 50, 2: 53, 10: 81, 20: 138, 30: 236, 50: 689, 100: 10022 };
+    for (const [level, value] of Object.entries(expected)) {
+      expect(buddyPayout(Number(level))).toBe(value);
+    }
+  });
+
+  it('level 1 is bit-identical to the flat 50 treats/walk this game shipped with (tasks.md task 3.6)', () => {
+    expect(buddyPayout(1)).toBe(50);
+  });
+
+  it('steps by a whole digit at every level up to 100 (the fun-floor design.md proves by construction)', () => {
+    for (let level = 1; level < 100; level++) {
+      expect(buddyPayout(level + 1)).toBeGreaterThan(buddyPayout(level));
+    }
+  });
+});
+
+describe('sniffGardenPct', () => {
+  it('matches design.md\'s worked building-level table (renormalized curveRate=25 shape)', () => {
+    expect(sniffGardenPct(1)).toBeCloseTo(0.32, 1);
+    expect(sniffGardenPct(10)).toBeCloseTo(2.69, 1);
+    expect(sniffGardenPct(25)).toBeCloseTo(5.15, 1);
+    expect(sniffGardenPct(50)).toBeCloseTo(7.05, 1);
+    expect(sniffGardenPct(100)).toBeCloseTo(8.0, 1);
+  });
+
+  it('is exactly 8pp (the full anti-snowball budget) at maxBuildingLevel', () => {
+    expect(sniffGardenPct(BALANCE.maxBuildingLevel)).toBeCloseTo(BALANCE.sniffGarden.maxBonusPercent, 6);
+  });
+
+  it('is monotonically increasing and diminishes above level 50 (den-economy spec scenario)', () => {
+    let prev = sniffGardenPct(0);
+    for (let level = 1; level <= 100; level++) {
+      const next = sniffGardenPct(level);
+      expect(next).toBeGreaterThan(prev);
+      prev = next;
+    }
+    const marginalAt50 = sniffGardenPct(50) - sniffGardenPct(49);
+    const marginalAt51 = sniffGardenPct(51) - sniffGardenPct(50);
+    expect(marginalAt51).toBeLessThan(marginalAt50);
+  });
+});
+
+describe('buddyTreatsPerWalk', () => {
+  it('at buddyLevel=1, sniffGardenLevel=1 rounds to exactly 50 — bit-identical to what shipped before this feature (tasks.md task 3.6)', () => {
+    expect(buddyTreatsPerWalk(1, 1)).toBe(50);
+  });
+
+  it('combines buddyPayout and sniffGardenPct — the sole source of truth for the walk payout (tasks.md task 3.3)', () => {
+    const level = 10;
+    const sniffGardenLevel = 25;
+    const expected = Math.round(buddyPayout(level) * (1 + sniffGardenPct(sniffGardenLevel) / 100));
+    expect(buddyTreatsPerWalk(level, sniffGardenLevel)).toBe(expected);
+  });
+
+  it('increases with the Sniff Garden level alone, holding Buddy\'s level fixed', () => {
+    expect(buddyTreatsPerWalk(20, 50)).toBeGreaterThan(buddyTreatsPerWalk(20, 1));
+  });
+});
+
 describe('storageCap', () => {
-  it('scales linearly with Doghouse level', () => {
-    expect(storageCap(0)).toBe(100);
-    expect(storageCap(1)).toBe(200);
-    expect(storageCap(5)).toBe(600);
+  it('matches today\'s shipped values at buddyLevel=1 (tasks.md task 8.3)', () => {
+    expect(storageCap(1, 1, 1, 1)).toBe(200);
+    expect(storageCap(2, 1, 1, 1)).toBe(300);
+  });
+
+  it('never falls below 1.25x the cheapest currently-available upgrade (the never-softlock guarantee)', () => {
+    // A high Doghouse level with a low Buddy level: the income-based term is
+    // small, so the never-softlock floor must be the one doing the work.
+    const doghouseLevel = 10;
+    const buddyLevel = 1;
+    const bakeryLevel = 1;
+    const sniffGardenLevel = 1;
+    const cheapestUpgrade = Math.min(
+      upgradeCost('doghouse', doghouseLevel + 1),
+      upgradeCost('bakery', bakeryLevel + 1),
+      upgradeCost('sniffGarden', sniffGardenLevel + 1)
+    );
+    expect(storageCap(doghouseLevel, buddyLevel, bakeryLevel, sniffGardenLevel)).toBeGreaterThanOrEqual(
+      1.25 * cheapestUpgrade
+    );
+  });
+
+  it('grows with Buddy\'s level at a fixed Doghouse level, so income growth never stalls capacity', () => {
+    expect(storageCap(5, 50, 5, 5)).toBeGreaterThan(storageCap(5, 1, 5, 5));
   });
 });
 
 describe('passiveTreatsPerHour', () => {
-  it('scales linearly with Bakery level', () => {
-    expect(passiveTreatsPerHour(0)).toBe(0);
-    expect(passiveTreatsPerHour(1)).toBe(1);
-    expect(passiveTreatsPerHour(12)).toBe(12);
+  it('scales linearly with Bakery level at buddyLevel=1 — bit-identical to before this feature', () => {
+    expect(passiveTreatsPerHour(0, 1)).toBe(0);
+    expect(passiveTreatsPerHour(1, 1)).toBe(1);
+    expect(passiveTreatsPerHour(12, 1)).toBe(12);
+  });
+
+  it('scales with Buddy\'s payout rate so the Bakery does not go stale at high levels', () => {
+    expect(passiveTreatsPerHour(5, 50)).toBeGreaterThan(passiveTreatsPerHour(5, 1));
   });
 });
 
