@@ -47,11 +47,13 @@ function effectText(building: BuildingKey, level: number, state: DenEconomyState
     case 'bakery':
       return `+${passiveTreatsPerHour(level, state.level).toFixed(1)} treats/hour`;
     case 'sniffGarden': {
-      // TODO: game-master copy pass — placeholder wording below; the numbers are real (tasks.md task 6.2).
       const withGarden = buddyTreatsPerWalk(state.level, level);
       const withoutGarden = buddyPayout(state.level);
       const extra = withGarden - withoutGarden;
-      return `Buddy comes home with ${extra} more a walk`;
+      if (extra < 1) {
+        return "Buddy's nose is just getting warmed up";
+      }
+      return `Buddy sniffs out ${extra} more treat${extra === 1 ? '' : 's'} a walk`;
     }
   }
 }

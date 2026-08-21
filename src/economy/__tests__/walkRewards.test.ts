@@ -221,7 +221,7 @@ describe('awardWalkRewards — level-up celebration fields', () => {
     expect(result.celebration.treatsEarned).toBe(buddyTreatsPerWalk(1, 1));
   });
 
-  it('cliffhangerTitle stays null while MILESTONE_TITLES has no game-master-authored copy yet, even when the trigger condition is met (tasks.md task 5.3)', async () => {
+  it('cliffhangerTitle is the authored title for the upcoming milestone when the trigger condition is met (tasks.md task 5.3)', async () => {
     const denEconomyRepository = createInMemoryDenEconomyRepository();
     const seeded = await denEconomyRepository.getState();
     // cumulativeXpForLevel(2) = 100 (at xpGrowth=1.10) — 25 short, so a 20-XP
@@ -239,6 +239,6 @@ describe('awardWalkRewards — level-up celebration fields', () => {
     const result = await awardWalkRewards(makeManualWalk({ id: 'today', startTime: DAY_ANCHOR }), 0, 0, deps);
 
     expect(result.celebration.leveledUpTo).toBeNull(); // still 5 XP short of level 2 this walk
-    expect(result.celebration.cliffhangerTitle).toBeNull();
+    expect(result.celebration.cliffhangerTitle).toBe('Doorstep Sniffer');
   });
 });

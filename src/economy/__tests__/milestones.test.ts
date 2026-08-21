@@ -26,10 +26,24 @@ describe('milestoneIndexForLevel / isMilestoneLevel', () => {
 });
 
 describe('titleForLevel', () => {
-  it('returns null for every level while MILESTONE_TITLES has no authored copy yet (tasks.md task 5.3: "do not invent placeholder title copy")', () => {
-    for (const level of [2, 4, 7, 11, 16, 22, 29, 37, 45]) {
-      expect(titleForLevel(level)).toBeNull();
+  it('returns the game-master-authored title for each of the first 8 milestone levels', () => {
+    const expectedTitles = [
+      [2, 'Doorstep Sniffer'],
+      [4, 'Block Wanderer'],
+      [7, 'Neighborhood Explorer'],
+      [11, 'Trail Regular'],
+      [16, 'Seasoned Rambler'],
+      [22, 'Rain-or-Shine Wayfarer'],
+      [29, 'Boundless Roamer'],
+      [37, 'Horizon Chaser'],
+    ] as const;
+    for (const [level, title] of expectedTitles) {
+      expect(titleForLevel(level)).toBe(title);
     }
+  });
+
+  it('returns null for a milestone level past the authored titles (9th milestone, level 45)', () => {
+    expect(titleForLevel(45)).toBeNull();
   });
 
   it('returns null for a non-milestone level regardless of copy state', () => {

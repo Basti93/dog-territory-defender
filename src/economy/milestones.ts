@@ -41,16 +41,22 @@ export function isMilestoneLevel(level: number): boolean {
 
 /**
  * Game-master-authored milestone titles, in level order (index 0 = the
- * first milestone level, level 2). Per
- * openspec/changes/virtual-dog-companion/tasks.md task 5.3: "Get
- * game-master-authored copy for the first 8 titles before shipping (do not
- * invent placeholder title copy)." No titles have been authored yet, so
- * this stays empty and titleForLevel() returns null for every level — no
- * milestone-title or cliffhanger UI renders until this is populated with
- * real copy. The milestone LEVEL FORMULA above is fully built and tested
- * independent of this array; only the copy is missing.
+ * first milestone level, level 2 — levels 2, 4, 7, 11, 16, 22, 29, 37).
+ * Every title deliberately starts with a consonant sound so the hard-coded
+ * "he's now a ___" / "he's a ___" render templates never break. No
+ * "Master"/"Champion"/"Legend"/"Elder" — the ladder continues past 37
+ * forever, so nothing here reads as an arrival.
  */
-export const MILESTONE_TITLES: string[] = [];
+export const MILESTONE_TITLES: string[] = [
+  'Doorstep Sniffer',
+  'Block Wanderer',
+  'Neighborhood Explorer',
+  'Trail Regular',
+  'Seasoned Rambler',
+  'Rain-or-Shine Wayfarer',
+  'Boundless Roamer',
+  'Horizon Chaser',
+];
 
 /** The authored title for `level`, or null if `level` isn't a milestone or has no authored copy yet. */
 export function titleForLevel(level: number): string | null {
