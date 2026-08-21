@@ -20,7 +20,7 @@ The Den SHALL support exactly these 10 buildings, unlocking progressively:
 |---|---|---|---|
 | 1 | Doghouse (HQ) | Treat storage capacity + base | Start |
 | 2 | Treat Bakery | Passive treats per hour (idle generator) | Start |
-| 3 | Sniff Garden | +X% collectibles found on walks | Start |
+| 3 | Sniff Garden | +X% treats found on a walk | Start |
 | 4 | Training Yard | +X% XP per walk | Den Level 5 |
 | 5 | Watch Tower | +X% territory defense | Den Level 10 |
 | 6 | Friend Lounge | Chance for visiting dogs to leave gifts | Den Level 15 |
@@ -86,17 +86,35 @@ XP required to advance from Den Level N to N+1 SHALL grow geometrically, consist
 - **WHEN** a player's lifetime XP exceeds the cumulative XP required for Den Level 100
 - **THEN** the player's Den Level SHALL remain 100 and SHALL NOT increase further
 
-### Requirement: Phase 1 Level Payoff Is Non-Percentage and Visually Secondary
-In Phase 1, leveling up SHALL grant only a flat one-time treats bonus and a visible level-up notice; it SHALL NOT grant any percentage bonus to treats, XP, collectibles, or any other rate, reserving percentage-based Den Level bonuses for the Phase 4 buildings gated by it. The Den Level readout and any level-up notice SHALL be visually secondary to the walk's own territory-claimed outcome wherever both appear together, consistent with the `visual-design` capability's Success Criteria that claiming territory SHALL feel like making a mark on the neighborhood, not leveling up a metric.
+### Requirement: Phase 1 Level Payoff Is Buddy's Per-Walk Income Rate, Never a Capped Power Bonus
+In Phase 1, Buddy's Level (the player-facing name for Den Level) SHALL determine the flat treats payout awarded per walk, via a per-level curve that increases by a constant relative percentage at every level with no upper limit, displayed to the player as a concrete per-walk figure (e.g. "Buddy brings home N treats a walk"). This is an income effect, not a capped power bonus: it SHALL NOT be summed into the `anti-snowball` capability's `Hard Power Gap Soft-Cap` budget, and no capped percentage bonus anywhere in the game (building, Pack, or badge) SHALL ever be a function of Buddy's Level or of a player's treat balance. The Den Level readout and any level-up notice SHALL remain visually secondary to the walk's own territory-claimed outcome wherever both appear together, consistent with `visual-design`'s Success Criteria.
 
-#### Scenario: Level-up reward in Phase 1
-- **WHEN** a player's Den Level increases during Phase 1
-- **THEN** the system SHALL award a flat, fixed amount of treats (capped by Doghouse storage), and SHALL NOT apply any percentage modifier to future treats, XP, or collectible rates as a result
+#### Scenario: Level-up changes the walk's treat payout
+- **WHEN** Buddy's Level increases
+- **THEN** the per-walk treats payout SHALL increase by a visible whole number of treats, and the post-walk celebration SHALL show the old and new per-walk rate together
+
+#### Scenario: Level income never counts toward the power cap
+- **WHEN** the `anti-snowball` `Hard Power Gap Soft-Cap` is evaluated for a level-100 player versus a level-1 player
+- **THEN** Buddy's Level's contribution to that capped total SHALL be 0%
 
 #### Scenario: Level-up notice does not overshadow territory claimed
 - **WHEN** a walk that closes into a territory also crosses a Den Level threshold
-- **THEN** the post-walk celebration SHALL present the territory-claimed outcome as the primary moment, and any level-up notice SHALL be shown at or below the visual weight of the existing upgrade tease
+- **THEN** the post-walk celebration SHALL present the territory-claimed outcome as the primary moment, and the level-up notice SHALL be shown at or below the visual weight of the existing upgrade tease
 
 #### Scenario: No early unlock-ladder disclosure
 - **WHEN** a player views their Den Level in Phase 1
 - **THEN** the system SHALL NOT display which building or feature unlocks at any future Den Level
+
+### Requirement: Doghouse Storage Never Permanently Softlocks
+The Doghouse's storage capacity SHALL scale so that it never falls below a fixed multiple of the cheapest currently-available upgrade cost across all owned buildings, so a player can never be permanently unable to save enough treats to afford any further upgrade.
+
+#### Scenario: Storage capacity tracks upgrade cost growth
+- **WHEN** the cheapest available building upgrade's cost grows as buildings are upgraded
+- **THEN** the Doghouse's storage capacity SHALL grow at least proportionally, so the cheapest available upgrade always remains within reach of a full storage bank
+
+### Requirement: Milestone Titles Are Front-Loaded and Never Final
+At a front-loaded, ever-widening sequence of levels, Buddy SHALL earn a text-only title with no fixed final title, no numeric maximum shown (no "/100", no percentage), and no state that forecloses future growth.
+
+#### Scenario: Title sequence has no final entry
+- **WHEN** a player reaches the highest currently-authored milestone title
+- **THEN** the system SHALL NOT present this as a final or maximum achievement, and the milestone sequence SHALL continue to be computable (even if uncopy-written) beyond that level
