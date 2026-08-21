@@ -1,0 +1,38 @@
+## 1. Dependency and permission plumbing
+- [ ] 1.1 Add `expo-notifications` to `package.json` and configure its Expo config plugin in `app.json` (Android + iOS notification permission entries).
+- [ ] 1.2 Implement lazy notification-permission request at the point the feature is first used — when the earned-trigger check is first about to schedule/send a notification (see `design.md` Decisions) — not at app launch.
+- [ ] 1.3 Rebuild the local dev client (`npx expo run:android` / `run:ios`) to pick up the new native permission, matching the precedent in `background-location-tracking/tasks.md`.
+## 2. `Walk.startSource` tag
+- [ ] 2.1 Add `startSource: 'button' | 'manual-log'` to `Walk` in `src/types.ts`.
+- [ ] 2.2 Set `startSource: 'button'` at the existing live-tracked walk-creation call site in `App.tsx`; confirm no other call site is left unset.
+- [ ] 2.3 Confirm the existing `sqliteWalkRepository`/`inMemoryWalkRepository` persist and round-trip the new field (extend their contract test, `walkRepository.contract.test.ts`, to cover both `startSource` values).
+## 3. "Log a walk we missed" entry point
+- [ ] 3.1 Add an in-app button/screen for manually logging a missed walk (placement left to the implementer — candidates: the main screen near "Start Walk," or `WalkHistoryScreen`). Zero-friction data entry only — no route drawing, no map interaction; see `design.md`'s look-back-window decision for what's collectable (a "this happened earlier today/yesterday" style input, not a free-text date).
+- [ ] 3.2 Enforce the look-back window decided in `design.md` (current or previous calendar day only) — reject or hide the option for anything older.
+- [ ] 3.3 Extract the reward-awarding logic currently inline in `App.tsx`'s `stopWalk` closure (`awardWalkTreats`, `recordWalkClosed`/`recordTreatsEarned`, `awardWalkXp`, celebration payload assembly) into a shared, callable function — it is not already a reusable seam (see `design.md` Decisions). Update `stopWalk` to call it, with no behavior change for tracked walks.
+- [ ] 3.4 Wire the manual log to call that shared function with `startSource: 'manual-log'`, `territory: undefined`, and zero distance/area, per `design.md`. This is a standalone, one-step, direct-reward action — it does not schedule or interact with any notification (see `proposal.md`'s scope cut).
+- [ ] 3.5 Resolve the celebration-screen tension flagged in `design.md` (no real territory polygon for a manual-log walk, i.e. what the "`{areaM2} m² is now yours`" line and title say when `territory` is `undefined`) — get a short game-master pass on the exact copy before finalizing, per the "never lesser" guardrail in `openspec/changes/walk-start-experience/proposal.md`.
+- [ ] 3.6 Confirm a manually-logged walk shows up correctly (and distinguishably in storage only, not visually) in `WalkHistoryScreen` and `StatsScreen`.
+## 4. Earned-trigger notification path (Den-economy overflow only — see `proposal.md`'s scope cut)
+- [ ] 4.1 Implement the earned-trigger check: reads existing Den-economy state only (an overflow not yet surfaced, per `DenEconomyRepository`) — no new "was a walk missed" inference, and no read of manually-logged walks (that trigger is out of scope for this MVP). Add a small new local persistence for notification bookkeeping (whether the current overflow has already been surfaced) per `design.md`.
+- [ ] 4.2 Implement the coarse time-of-day bucket (morning/midday/evening) learned from past walk start times in `WalkRepository`, and use it to time notification delivery.
+- [ ] 4.3 Wire the overflow trigger condition into the notification-scheduling path — one earned-trigger notification per day maximum, silent on days with nothing to report.
+- [ ] 4.4 Use the exact accepted copy string for the overflow case from `openspec/changes/walk-start-experience/proposal.md`, "Notification Timing (resolved)" section — do not paraphrase or invent new copy. Confirm the rejected-copy patterns listed in that same section are not present anywhere in the implementation.
+- [ ] 4.5 Confirm tapping the notification opens the app to a sensible place (e.g., the Den screen) — exact destination left to the implementer.
+## 5. Automated coverage (where it actually applies)
+- [ ] 5.1 Add unit test coverage (existing `jest`/`__tests__` pattern, e.g. `denEconomy.test.ts`, `formulas.test.ts`, `walkRepository.contract.test.ts`) for the pure logic that's actually unit-testable: the earned-trigger decision function (overflow-only), the look-back-window enforcement, the `startSource` round-trip through the repository layer, and the extracted shared reward function (called with both a real closed walk and a manual-log walk, confirming identical treats/XP behavior modulo distance/area).
+- [ ] 5.2 Do not attempt to automate notification permission prompts or actual OS-level notification delivery/timing — that's inherently on-device/OS behavior outside this project's `jest` setup; covered by manual verification below instead.
+## 6. Manual on-device verification
+- [ ] 6.1 On a real device/dev-client build: verify the notification-permission prompt appears at the correct lazy trigger point (not at app launch), and that declining it fails gracefully (no crash, no repeated nagging).
+- [ ] 6.2 Log a missed walk via the new button, confirm treats/XP/personal-stats/achievements update identically to a normal closed walk, and review the resulting celebration-screen presentation against the "never lesser" guardrail.
+- [ ] 6.3 Force the Den-economy overflow condition and confirm the notification fires with the correct accepted copy, near the learned time-of-day bucket, and does not fire on a day with nothing to report.
+- [ ] 6.4 Confirm the look-back window is actually enforced in the UI (cannot log a walk older than the decided cutoff).
+- [ ] 6.5 Confirm logging a missed walk via the button never triggers a notification (the scope cut in `proposal.md`/`design.md`) — reward happens immediately and silently in-app only.
+- [ ] 6.6 Confirm a rebuilt dev client still runs the rest of the app (walk tracking, Den, stats) without regression after the new native notification permission is added.
+## 7. Wrap-up
+- [ ] 7.1 File the specs delta this change implies (see `proposal.md`'s "Modified Capabilities" and the specs-delta recommendation below) via `/opsx:apply` — do not hand-edit `openspec/specs/` directly.
+- [ ] 7.2 Update `README.md` if the dev-client build/permission-prompt behavior described there needs amending (matches the precedent in `background-location-tracking/tasks.md` 6.1).
+
+## Specs-delta recommendation
+
+Do not use `skip_specs: true`. This change introduces a genuinely new capability (manual-log walk creation, no existing requirement/scenario covers it) and a contestable phase-assignment claim (Phase 1 vs Phase 2), both of which `CLAUDE.md`'s own table says should go through real spec deltas, not silent drift. Only the den-economy overflow-notification-mechanism part alone would be implementation-detail-only.
