@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
 
 import { Walk, AppState as AppStateType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, stopWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { canCloseWalk, locationsToPolygon, cumulativeDistance, getDistance } from './src/utils/geometry';
+import { isWithinManualLogWindow, MissedWalkTiming, startTimeForMissedWalk } from './src/utils/manualWalkLog';
 import { MapView } from './src/components/MapView';
 import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
@@ -13,16 +15,21 @@ import { DenScreen } from './src/components/DenScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
+import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
-import { applyPassiveAccrual, awardWalkTreats, awardWalkXp, getUpgradeTease, UpgradeTease } from './src/economy/denEconomy';
-import { AchievementId, recordTreatsEarned, recordWalkClosed } from './src/economy/personalStats';
-import { BALANCE } from './src/economy/balanceConfig';
+import { createSqliteNotificationRepository } from './src/storage/sqliteNotificationRepository';
+import { applyPassiveAccrual } from './src/economy/denEconomy';
+import { AchievementId, recordTreatsEarned } from './src/economy/personalStats';
+import { awardWalkRewards, WalkRewardsCelebration } from './src/economy/walkRewards';
+import { checkAndScheduleEarnedTriggerNotification } from './src/notifications/earnedTrigger';
+import { DEN_OVERFLOW_NOTIFICATION_DATA } from './src/notifications/scheduler';
 import { log } from './src/utils/log';
 
 const walkRepository = createSqliteWalkRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
 const personalStatsRepository = createSqlitePersonalStatsRepository();
+const notificationRepository = createSqliteNotificationRepository();
 
 const COLORS = {
   green: '#2ECC71',
@@ -42,17 +49,12 @@ export default function App() {
   const [showDen, setShowDen] = useState(false);
   const [showDebugLog, setShowDebugLog] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showLogMissedWalk, setShowLogMissedWalk] = useState(false);
   const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
-  const [celebration, setCelebration] = useState<{
-    areaM2: number;
-    treatsEarned: number;
-    tease: UpgradeTease | null;
-    unlockedAchievements: AchievementId[];
-    leveledUpTo: number | null;
-  } | null>(null);
+  const [celebration, setCelebration] = useState<WalkRewardsCelebration | null>(null);
 
   // Initialize location permission
   useEffect(() => {
@@ -65,6 +67,34 @@ export default function App() {
         }));
       }
     })();
+  }, []);
+
+  // Recompute/reschedule the earned-trigger notification each time the app opens
+  // (see openspec/changes/walk-start-notifications/design.md's accepted check cadence —
+  // there's no backend to wake the app while it's closed).
+  useEffect(() => {
+    checkAndScheduleEarnedTriggerNotification({ denEconomyRepository, walkRepository, notificationRepository }).catch(
+      (err) => log('NOTIFICATION_CHECK_ERROR', { error: String(err) })
+    );
+  }, []);
+
+  // Tapping the earned-trigger notification opens the Den screen — both for a
+  // response received while the app is running/backgrounded, and for a cold
+  // start launched by tapping the notification.
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.notification.request.content.data?.type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+        setShowDen(true);
+      }
+    });
+
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response?.notification.request.content.data?.type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+        setShowDen(true);
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   // Apply passive treat accrual since last open, then load the balance
@@ -106,6 +136,7 @@ export default function App() {
       startTime: Date.now(),
       locations: [initialLoc],
       closed: false,
+      startSource: 'button',
     };
 
     log('WALK_START', { id: newWalk.id, lat: initialLoc.latitude, lon: initialLoc.longitude });
@@ -164,36 +195,12 @@ export default function App() {
             log('STORAGE_WALK_SAVE_ERROR', { id: closedWalk.id, error: String(err) });
           });
 
-        denEconomyRepository
-          .getState()
-          .then(async (state) => {
-            const rewarded = awardWalkTreats(state);
-            log('TREATS_AWARD', { amount: BALANCE.treatsPerWalk, before: state.treats, after: rewarded.treats });
-            setTreats(rewarded.treats);
-
-            const personalStats = await personalStatsRepository.getState();
-            const walkResult = recordWalkClosed(personalStats, closedWalk);
-            const treatsResult = recordTreatsEarned(walkResult.stats, BALANCE.treatsPerWalk);
-            const newlyUnlocked = [...walkResult.newlyUnlocked, ...treatsResult.newlyUnlocked];
-            await personalStatsRepository.saveState(treatsResult.stats);
-            if (newlyUnlocked.length > 0) {
-              await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
-            }
-
-            const distanceMeters = cumulativeDistance(closedWalk.locations);
-            const { state: leveledState, leveledUp } = awardWalkXp(rewarded, distanceMeters, polygon?.area ?? 0);
-            log('XP_AWARD', { xp: leveledState.xp, level: leveledState.level, leveledUp });
-            setLevel(leveledState.level);
-            setTreats(leveledState.treats);
-
-            setCelebration({
-              areaM2: polygon?.area ?? 0,
-              treatsEarned: BALANCE.treatsPerWalk,
-              tease: getUpgradeTease(leveledState),
-              unlockedAchievements: newlyUnlocked,
-              leveledUpTo: leveledUp ? leveledState.level : null,
-            });
-            return denEconomyRepository.saveState(leveledState);
+        const distanceMeters = cumulativeDistance(closedWalk.locations);
+        awardWalkRewards(closedWalk, distanceMeters, polygon?.area ?? 0, { denEconomyRepository, personalStatsRepository })
+          .then((result) => {
+            setTreats(result.denEconomyState.treats);
+            setLevel(result.denEconomyState.level);
+            setCelebration(result.celebration);
           })
           .catch((err) => console.error('Failed to award walk treats:', err));
       } else {
@@ -203,6 +210,45 @@ export default function App() {
           isTracking: false,
         }));
       }
+    }
+  };
+
+  // "Log a walk we missed" — a standalone, one-step, direct-reward action.
+  // No live GPS trail, no polygon, no notification tied to it (see
+  // openspec/changes/walk-start-notifications/proposal.md's scope cut).
+  // Reuses the exact same reward path a tracked walk gets, via awardWalkRewards.
+  const logMissedWalk = async (timing: MissedWalkTiming) => {
+    const now = Date.now();
+    const startTime = startTimeForMissedWalk(timing, now);
+
+    if (!isWithinManualLogWindow(startTime, now)) {
+      Alert.alert('Too far back', 'Missed walks can only be logged from today or yesterday.');
+      return;
+    }
+
+    const manualWalk: Walk = {
+      id: `manual-${now}`,
+      startTime,
+      locations: [],
+      closed: true,
+      territory: undefined,
+      startSource: 'manual-log',
+    };
+
+    log('WALK_MANUAL_LOG', { id: manualWalk.id, timing });
+
+    try {
+      await walkRepository.saveWalk(manualWalk);
+      log('STORAGE_WALK_SAVED', { id: manualWalk.id, closed: true, startSource: 'manual-log' });
+
+      const result = await awardWalkRewards(manualWalk, 0, 0, { denEconomyRepository, personalStatsRepository });
+      setTreats(result.denEconomyState.treats);
+      setLevel(result.denEconomyState.level);
+      setShowLogMissedWalk(false);
+      setCelebration(result.celebration);
+    } catch (err) {
+      console.error('Failed to log missed walk:', err);
+      log('WALK_MANUAL_LOG_ERROR', { id: manualWalk.id, error: String(err) });
     }
   };
 
@@ -248,6 +294,7 @@ export default function App() {
         <SafeAreaView style={styles.container}>
           <CelebrationScreen
             areaM2={celebration.areaM2}
+            hasTerritory={celebration.hasTerritory}
             treatsEarned={celebration.treatsEarned}
             tease={celebration.tease}
             unlockedAchievements={celebration.unlockedAchievements}
@@ -316,6 +363,16 @@ export default function App() {
     );
   }
 
+  if (showLogMissedWalk) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <LogMissedWalkScreen onLog={logMissedWalk} onClose={() => setShowLogMissedWalk(false)} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
     <SafeAreaView style={styles.container}>
@@ -355,6 +412,12 @@ export default function App() {
             <>
               <TouchableOpacity style={[styles.button, styles.startButton]} onPress={startWalk}>
                 <Text style={styles.buttonText}>Start Walk</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.logMissedWalkButton]}
+                onPress={() => setShowLogMissedWalk(true)}
+              >
+                <Text style={styles.buttonText}>Log a walk we missed</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.historyButton]} onPress={() => setShowHistory(true)}>
                 <Text style={styles.buttonText}>View Past Walks</Text>
@@ -441,6 +504,9 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: COLORS.green,
+  },
+  logMissedWalkButton: {
+    backgroundColor: '#F39C12',
   },
   stopButton: {
     backgroundColor: COLORS.blue,

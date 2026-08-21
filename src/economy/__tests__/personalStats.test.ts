@@ -7,6 +7,7 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
     id: 'walk-1',
     startTime: 1000,
     closed: true,
+    startSource: 'button',
     locations: [
       { latitude: 52.5, longitude: 13.4, timestamp: 0, accuracy: 5 },
       { latitude: 52.501, longitude: 13.4, timestamp: 1000, accuracy: 5 },

@@ -5,12 +5,15 @@ export interface Location {
   accuracy: number;
 }
 
+export type WalkStartSource = 'button' | 'manual-log';
+
 export interface Walk {
   id: string;
   startTime: number;
   locations: Location[];
   territory?: TerritoryPolygon;
   closed: boolean;
+  startSource: WalkStartSource;
 }
 
 export interface TerritoryPolygon {

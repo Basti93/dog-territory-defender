@@ -8,6 +8,7 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
     locations: overrides.locations ?? [{ latitude: 52.5, longitude: 13.4, timestamp: 1000, accuracy: 5 }],
     closed: overrides.closed ?? false,
     territory: overrides.territory,
+    startSource: overrides.startSource ?? 'button',
   };
 }
 
@@ -80,5 +81,27 @@ describe('WalkRepository contract', () => {
     const result = await repo.getWalk('walk-1');
 
     expect(result).toBeNull();
+  });
+
+  it('round-trips startSource: button for a live-tracked walk', async () => {
+    const repo = createInMemoryWalkRepository();
+    await repo.saveWalk(makeWalk({ id: 'tracked', startSource: 'button' }));
+
+    const saved = await repo.getWalk('tracked');
+
+    expect(saved?.startSource).toBe('button');
+  });
+
+  it('round-trips startSource: manual-log for a manually-logged walk', async () => {
+    const repo = createInMemoryWalkRepository();
+    await repo.saveWalk(
+      makeWalk({ id: 'manual', startSource: 'manual-log', locations: [], territory: undefined, closed: true })
+    );
+
+    const saved = await repo.getWalk('manual');
+
+    expect(saved?.startSource).toBe('manual-log');
+    expect(saved?.territory).toBeUndefined();
+    expect(saved?.locations).toEqual([]);
   });
 });

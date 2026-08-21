@@ -32,7 +32,13 @@
         }
       ],
       "expo-splash-screen",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-notifications",
+        {
+          "color": "#2ECC71"
+        }
+      ]
     ],
     "extra": {
       "eas": {
