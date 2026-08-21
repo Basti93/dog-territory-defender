@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
-import { CELL_M, NEW_GROUND_MIN_CELLS } from '../utils/grid';
+import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../utils/grid';
 
 const COLORS = {
   green: '#2ECC71',
@@ -122,8 +122,9 @@ export function CelebrationScreen({
             openspec/changes/home-range-rewards/tasks.md task 3.2. */}
         {bloomMultiplier >= BALANCE.freshGround.displayThresholdMultiplier && (
           <View style={styles.levelBox}>
-            {/* TODO: game-master copy pass — Fresh Ground beat copy not yet authored (openspec/changes/home-range-rewards proposal.md's Open Questions / tasks.md task 3.2). Placeholder surfaces only the raw multiplier so the mechanic is testable on-device. */}
-            <Text style={styles.levelText}>Fresh Ground bonus: ×{bloomMultiplier.toFixed(2)} treats this walk</Text>
+            <Text style={styles.levelText}>
+              That ground had gone lovely and wild again — {dogDisplayName(dogName)} brought home extra treats for it.
+            </Text>
           </View>
         )}
 
@@ -132,8 +133,10 @@ export function CelebrationScreen({
             openspec/changes/home-range-rewards/tasks.md task 3.1. */}
         {newGroundCellCount >= NEW_GROUND_MIN_CELLS && (
           <View style={styles.levelBox}>
-            {/* TODO: game-master copy pass — New Ground celebration copy not yet authored (openspec/changes/home-range-rewards proposal.md's Open Questions / tasks.md task 3.1). Placeholder is functional only. */}
-            <Text style={styles.levelText}>New ground! Buddy explored somewhere new today.</Text>
+            <Text style={styles.levelText}>
+              New ground! {dogDisplayName(dogName)} learned {streetsKnown(newGroundCellCount)} new street
+              {streetsKnown(newGroundCellCount) === 1 ? '' : 's'} today.
+            </Text>
           </View>
         )}
 

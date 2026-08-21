@@ -62,19 +62,16 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
 
         {routeRefreshAvailable && routes.length > 0 && (
           <View style={styles.routePicker}>
-            {/* Functional copy only — the route picker's exact wording isn't locked by
-                design.md/tasks.md (proposal.md's Open Questions leaves the picker UX itself
-                unresolved); this is the minimal honest description of what picking a route does. */}
             <Text style={styles.prompt}>
-              Optionally, refresh a route you've walked before — this won't discover new ground, just freshen one you
-              already know.
+              Which way did he go? A route he's walked before gets a fresh start — no new ground, just a familiar
+              street remembered.
             </Text>
             <TouchableOpacity
               style={[styles.option, selectedRouteId === null && styles.optionSelected]}
               onPress={() => setSelectedRouteId(null)}
             >
               <Text style={[styles.optionText, selectedRouteId === null && styles.optionTextSelected]}>
-                Don't refresh a route
+                Somewhere else this time
               </Text>
             </TouchableOpacity>
             {routes.map((route) => (

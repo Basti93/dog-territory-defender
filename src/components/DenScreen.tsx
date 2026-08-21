@@ -209,14 +209,12 @@ export function DenScreen({
               ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.`
               : ''}
           </Text>
-          {/* "Buddy knows N streets" (openspec/changes/home-range/design.md Decision 5's headline
-              stat) — TODO: game-master copy pass, noun/placement not yet authored (see
-              proposal.md's Open Questions / tasks.md task 3.3). Placeholder is functional only;
-              hidden entirely until the Home Range cell count has loaded. */}
+          {/* "Buddy knows N streets by heart" (openspec/changes/home-range/design.md Decision 5's
+              headline stat) — hidden entirely until the Home Range cell count has loaded. */}
           {rangeCellCount !== null && (
             <Text style={styles.levelBarRate}>
               {dogDisplayName(state.dogName)} knows {streetsKnown(rangeCellCount)} street
-              {streetsKnown(rangeCellCount) === 1 ? '' : 's'}.
+              {streetsKnown(rangeCellCount) === 1 ? '' : 's'} by heart.
             </Text>
           )}
         </View>
