@@ -93,6 +93,28 @@ Written at Finish Walk, in the same `App.tsx` call site that already computes `n
 
 **Label for the New Ground state** uses the same resolution chain as Decision 3 (reverse-geocode a point from the discovering walk's own trail — already have exact GPS fixes for this state, no anchor-cell-centre approximation needed at all), independently cached.
 
+### Card copy, finalized by `game-master`
+
+**New Ground state.** Does *not* require a resolved place name (unlike the wild-cluster state below, which is meaningless without one) — the count plus the day is a complete sentence on its own; render the card either way rather than withholding a discovery celebration because a geocoder blinked:
+
+```
+with place:    {dog} learned {n} new street{s} by {place} {dayPhrase}.
+without place: {dog} learned {n} new street{s} {dayPhrase}.
+```
+`dayPhrase` = `today` | `yesterday` | `on {Weekday}` (the 48h window can reach two calendar days back).
+
+**Wild-cluster state.** Requires a resolved place name — no name, no card, per Decision 3's rule (this state alone). Rotate through 4 variants so the same walk-back suggestion doesn't read identically for weeks:
+
+```
+A: {place} is looking wild — great sniffing over there.
+B: {place} has gone lovely and overgrown — worth a wander.
+C: Something wild is happening over by {place}.
+D: {place} is greening up again — {dog} would love a look.
+```
+Selection: `index = hash(anchorCellId + variantEpoch) % 4`, where `variantEpoch` only advances when the winning cluster (Decision 2's `wildestCluster()`) changes — stable within a session (no flicker on re-foreground), fresh when the wild spot itself moves.
+
+Both states hold the project-wide copy rule locked earlier in this session: the subject is always the place or the dog, never "you" — no "you haven't," no day-count-as-guilt.
+
 ## Decision 5 — Reverse geocoding: `expo-location`'s native call, no new dependency, cached
 
 `expo-location` (already a dependency, already used for foreground/background permission and tracking) exports `reverseGeocodeAsync(location)`, backed by the OS's own geocoder (Android `Geocoder` / iOS `CLGeocoder`) — not a new package, not a new backend service, not an API key. This fits the project's no-backend constraint the same way the existing Leaflet/OpenStreetMap tile fetch already does: it needs network access at the moment it's called (already true for the map generally, per `CLAUDE.md`'s "Requires internet access at walk time" note on `MapView.tsx`), but introduces no new external account, key, or server.
