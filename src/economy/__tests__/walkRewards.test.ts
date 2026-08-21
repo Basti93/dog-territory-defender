@@ -4,7 +4,7 @@ import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPer
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { WalkRepository } from '../../storage/WalkRepository';
 import { BALANCE } from '../balanceConfig';
-import { buddyPayout, buddyTreatsPerWalk, cumulativeXpForLevel } from '../formulas';
+import { buddyPayout, buddyTreatsPerWalk, cumulativeXpForLevel, xpAwardForWalk } from '../formulas';
 import { awardWalkRewards } from '../walkRewards';
 
 function makeTrackedWalk(overrides: Partial<Walk> = {}): Walk {
@@ -255,5 +255,91 @@ describe('awardWalkRewards — level-up celebration fields', () => {
 
     expect(result.celebration.leveledUpTo).toBeNull(); // still 5 XP short of level 2 this walk
     expect(result.celebration.cliffhangerTitle).toBe('Doorstep Sniffer');
+  });
+});
+
+// openspec/changes/home-range-rewards/tasks.md section 1 + task 5.1 — the
+// Home Range's Fresh Ground payout (bloomMultiplier), wired through the full
+// walk-close reward path.
+describe('awardWalkRewards — Fresh Ground bloomMultiplier', () => {
+  it('carries bloomMultiplier through to the celebration, defaulting to 1 when the caller omits it', async () => {
+    const deps = makeDeps();
+    const result = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps);
+    expect(result.celebration.bloomMultiplier).toBe(1);
+  });
+
+  it('credits treats matching buddyTreatsPerWalk(...) * bloomMultiplier * dailyMultiplier, rounded once (not compounded through two roundings)', async () => {
+    const deps = makeDeps();
+    const bloom = 1.465; // design.md's "a route last walked a week ago" worked example
+    const denStateBefore = await deps.denEconomyRepository.getState();
+
+    const result = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps, 0, bloom);
+
+    const fullPayout = buddyTreatsPerWalk(denStateBefore.level, denStateBefore.sniffGardenLevel);
+    // This is walk 1 of the day, so dailyMultiplier is 1 — isolates the bloom's own arithmetic.
+    // (The "rounded once, not compounded through two roundings" guarantee itself is covered by
+    // denEconomy.test.ts's awardWalkTreats test, using a level whose payout makes the two paths
+    // actually diverge — at dailyMultiplier=1 exactly they're arithmetically indistinguishable.)
+    expect(result.celebration.treatsEarned).toBe(Math.round(fullPayout * bloom));
+  });
+
+  it('a higher bloomMultiplier earns strictly more treats than an otherwise-identical walk with no bloom effect', async () => {
+    const lowDeps = makeDeps();
+    const lowResult = await awardWalkRewards(makeTrackedWalk({ id: 'w1' }), 500, 30, lowDeps, 0, 1);
+
+    const highDeps = makeDeps();
+    const highResult = await awardWalkRewards(makeTrackedWalk({ id: 'w2' }), 500, 30, highDeps, 0, 1.6);
+
+    expect(highResult.celebration.treatsEarned).toBeGreaterThan(lowResult.celebration.treatsEarned);
+  });
+
+  // tasks.md task 1.3 — the easiest place for a future edit to accidentally
+  // wire bloomMultiplier into XP too; this pins it down as a regression test.
+  it('never applies bloomMultiplier to XP, only to treats', async () => {
+    const noBloomDeps = makeDeps();
+    const noBloomResult = await awardWalkRewards(makeTrackedWalk({ id: 'w1' }), 500, 30, noBloomDeps, 0, 1);
+
+    const withBloomDeps = makeDeps();
+    const withBloomResult = await awardWalkRewards(makeTrackedWalk({ id: 'w2' }), 500, 30, withBloomDeps, 0, 1.6);
+
+    expect(withBloomResult.denEconomyState.xp).toBe(noBloomResult.denEconomyState.xp);
+    expect(withBloomResult.denEconomyState.xp).toBe(xpAwardForWalk(500, 30));
+    // But treats DID differ — confirms the bloom was actually applied somewhere, just not here.
+    expect(withBloomResult.celebration.treatsEarned).toBeGreaterThan(noBloomResult.celebration.treatsEarned);
+  });
+});
+
+// openspec/changes/home-range-rewards/tasks.md task 5.2 — automates
+// openspec/changes/home-range/design.md Decision 7's "0.000000 pp" proof:
+// bloomMultiplier has no level/building/treat-balance term, so on an
+// equivalent walk (same painted-cell wildness) it's the same factor on both
+// sides of the Level-100-vs-Level-1 ratio and cancels out identically.
+describe('anti-snowball — bloomMultiplier spends 0pp of the Hard Power Gap Soft-Cap budget', () => {
+  it('the Level-100 vs Level-1 treats ratio on an equivalent walk is identical with and without the bloom applied', async () => {
+    const bloom = 1.465; // "a route last walked a week ago", design.md's own worked example
+
+    async function treatsAt(level: number, bloomMultiplier: number): Promise<number> {
+      const deps = makeDeps();
+      const seeded = await deps.denEconomyRepository.getState();
+      await deps.denEconomyRepository.saveState({ ...seeded, level });
+      const result = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps, 0, bloomMultiplier);
+      return result.celebration.treatsEarned;
+    }
+
+    const l1WithBloom = await treatsAt(1, bloom);
+    const l100WithBloom = await treatsAt(100, bloom);
+    const l1NoBloom = await treatsAt(1, 1);
+    const l100NoBloom = await treatsAt(100, 1);
+
+    const ratioWithBloom = l100WithBloom / l1WithBloom;
+    const ratioWithoutBloom = l100NoBloom / l1NoBloom;
+    const relativeDrift = Math.abs(ratioWithBloom - ratioWithoutBloom) / ratioWithoutBloom;
+
+    // Rounded-treats ratios can't be bit-identical (each side's treats figure
+    // is independently rounded to a whole treat), but that's a rounding
+    // artifact of testing through the real award path, not a real
+    // level/building/treat-balance term sneaking into bloomMultiplier — well
+    // under 1% drift at these magnitudes proves the latter, not the former.
+    expect(relativeDrift).toBeLessThan(0.01);
   });
 });

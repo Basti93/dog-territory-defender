@@ -4,15 +4,19 @@ import {
   applyPassiveAccrual,
   awardWalkTreats,
   awardWalkXp,
+  canOfferRouteRefreshToday,
   defaultDenEconomyState,
   dogDisplayName,
+  evaluateManualLogQuota,
   getUpgradeTease,
+  recordManualLogUsage,
   reconcileBuddyLevelCatchUp,
   upgradeBuilding,
 } from '../denEconomy';
 
 const NOW = 1_700_000_000_000;
 const HOUR = 1000 * 60 * 60;
+const DAY = 24 * HOUR;
 
 describe('defaultDenEconomyState', () => {
   it('starts with the configured starting treats and all buildings at level 1', () => {
@@ -77,6 +81,27 @@ describe('awardWalkTreats', () => {
     const state = { ...defaultDenEconomyState(NOW), treats: cap - 10 };
     const { state: after } = awardWalkTreats(state);
     expect(after.treats).toBe(cap);
+  });
+
+  // openspec/changes/home-range-rewards/tasks.md task 1.2/5.1 — bloomMultiplier
+  // composes multiplicatively with the daily multiplier in a single Math.round.
+  it('bloomMultiplier defaults to 1 (no effect) when omitted', () => {
+    const state = defaultDenEconomyState(NOW);
+    expect(awardWalkTreats(state).treatsAwarded).toBe(awardWalkTreats(state, 1, 1).treatsAwarded);
+  });
+
+  it('applies bloomMultiplier multiplicatively alongside the daily multiplier, rounded once', () => {
+    // level 2 (fullPayout=53) deliberately chosen so the naive
+    // round-then-round path disagrees with rounding once at the end.
+    const state = { ...defaultDenEconomyState(NOW), level: 2 };
+    const fullPayout = buddyTreatsPerWalk(state.level, state.sniffGardenLevel);
+    expect(fullPayout).toBe(53);
+
+    const { treatsAwarded } = awardWalkTreats(state, 0.5, 1.465);
+
+    expect(treatsAwarded).toBe(Math.round(fullPayout * 0.5 * 1.465));
+    // Not the same as rounding each factor separately.
+    expect(treatsAwarded).not.toBe(Math.round(Math.round(fullPayout * 0.5) * 1.465));
   });
 });
 
@@ -210,5 +235,67 @@ describe('getUpgradeTease', () => {
     };
 
     expect(getUpgradeTease(state)).toBeNull();
+  });
+});
+
+// openspec/changes/home-range-rewards/tasks.md task 2.5 — manual-log/route-refresh caps.
+// design.md Decision 4: at most BALANCE.freshGround.maxManualLogsPerDay manual logs per
+// calendar day, of which at most BALANCE.freshGround.maxRouteRefreshesPerDay may refresh a route.
+describe('evaluateManualLogQuota / recordManualLogUsage', () => {
+  it('a fresh day allows a manual log and, if requested, a route refresh', () => {
+    const state = defaultDenEconomyState(NOW);
+    const quota = evaluateManualLogQuota(state, NOW, true);
+    expect(quota.allowed).toBe(true);
+    expect(quota.canRefreshRoute).toBe(true);
+  });
+
+  it('does not offer a route refresh when the caller does not ask for one', () => {
+    const state = defaultDenEconomyState(NOW);
+    expect(evaluateManualLogQuota(state, NOW, false).canRefreshRoute).toBe(false);
+  });
+
+  it('allows up to maxManualLogsPerDay manual logs, then rejects the next one on the same day', () => {
+    let state = defaultDenEconomyState(NOW);
+    for (let i = 0; i < BALANCE.freshGround.maxManualLogsPerDay; i++) {
+      expect(evaluateManualLogQuota(state, NOW + i * 1000, false).allowed).toBe(true);
+      state = recordManualLogUsage(state, NOW + i * 1000, false);
+    }
+    // One more, same day: rejected outright (walk-lifecycle: "a third manual log ... is rejected").
+    expect(evaluateManualLogQuota(state, NOW + 999_000, false).allowed).toBe(false);
+  });
+
+  it('a second same-day manual log is still allowed but silently offers no route refresh once the daily refresh cap is used', () => {
+    let state = defaultDenEconomyState(NOW);
+    state = recordManualLogUsage(state, NOW, true); // 1st log, with a refresh
+
+    const secondLogQuota = evaluateManualLogQuota(state, NOW + 1000, true);
+    expect(secondLogQuota.allowed).toBe(true); // still accepted and rewarded
+    expect(secondLogQuota.canRefreshRoute).toBe(false); // but no refresh offered
+  });
+
+  it('resets both counters on a new calendar day', () => {
+    let state = defaultDenEconomyState(NOW);
+    for (let i = 0; i < BALANCE.freshGround.maxManualLogsPerDay; i++) {
+      state = recordManualLogUsage(state, NOW + i * 1000, i === 0);
+    }
+    expect(evaluateManualLogQuota(state, NOW, false).allowed).toBe(false); // maxed out today
+
+    const nextDay = evaluateManualLogQuota(state, NOW + DAY, true);
+    expect(nextDay.allowed).toBe(true);
+    expect(nextDay.canRefreshRoute).toBe(true); // refresh cap also reset
+  });
+
+  it('canOfferRouteRefreshToday mirrors evaluateManualLogQuota(..., true).canRefreshRoute', () => {
+    let state = defaultDenEconomyState(NOW);
+    expect(canOfferRouteRefreshToday(state, NOW)).toBe(true);
+
+    state = recordManualLogUsage(state, NOW, true);
+    expect(canOfferRouteRefreshToday(state, NOW)).toBe(false);
+  });
+
+  it('recordManualLogUsage never marks a route refresh used when usedRouteRefresh is false, even on a log that could have carried one', () => {
+    const state = defaultDenEconomyState(NOW);
+    const after = recordManualLogUsage(state, NOW, false);
+    expect(canOfferRouteRefreshToday(after, NOW)).toBe(true);
   });
 });

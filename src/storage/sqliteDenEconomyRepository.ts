@@ -18,6 +18,9 @@ interface DenEconomyRow {
   dogName: string | null;
   cliffhangerShownForLevel: number | null;
   homeRangeBackfillComplete: number;
+  manualLogDayKey: string | null;
+  manualLogCountToday: number;
+  routeRefreshDayKey: string | null;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -32,6 +35,9 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     dogName: row.dogName,
     cliffhangerShownForLevel: row.cliffhangerShownForLevel,
     homeRangeBackfillComplete: row.homeRangeBackfillComplete === 1,
+    manualLogDayKey: row.manualLogDayKey,
+    manualLogCountToday: row.manualLogCountToday,
+    routeRefreshDayKey: row.routeRefreshDayKey,
   };
 }
 
@@ -62,7 +68,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         level INTEGER NOT NULL DEFAULT 1,
         dogName TEXT,
         cliffhangerShownForLevel INTEGER,
-        homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0
+        homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0,
+        manualLogDayKey TEXT,
+        manualLogCountToday INTEGER NOT NULL DEFAULT 0,
+        routeRefreshDayKey TEXT
       );
     `);
     // Migration for rows created before xp/level existed (e.g. an already-installed app).
@@ -79,6 +88,13 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     // which is exactly what an existing install needs: it has real walk
     // history sitting unbackfilled until the app runs the migration once.
     await addColumnIfMissing(db, 'den_economy', 'homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0');
+    // Migration for rows created before the manual-log/route-refresh caps
+    // existed (openspec/changes/home-range-rewards) — all default to "never
+    // used yet" (null day key / 0 count), which is exactly the correct
+    // starting state for an existing install.
+    await addColumnIfMissing(db, 'den_economy', 'manualLogDayKey TEXT');
+    await addColumnIfMissing(db, 'den_economy', 'manualLogCountToday INTEGER NOT NULL DEFAULT 0');
+    await addColumnIfMissing(db, 'den_economy', 'routeRefreshDayKey TEXT');
     return db;
   });
 
@@ -111,8 +127,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete, manualLogDayKey, manualLogCountToday, routeRefreshDayKey)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
@@ -123,7 +139,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
            level = excluded.level,
            dogName = excluded.dogName,
            cliffhangerShownForLevel = excluded.cliffhangerShownForLevel,
-           homeRangeBackfillComplete = excluded.homeRangeBackfillComplete`,
+           homeRangeBackfillComplete = excluded.homeRangeBackfillComplete,
+           manualLogDayKey = excluded.manualLogDayKey,
+           manualLogCountToday = excluded.manualLogCountToday,
+           routeRefreshDayKey = excluded.routeRefreshDayKey`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
@@ -134,7 +153,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         state.level,
         state.dogName,
         state.cliffhangerShownForLevel,
-        state.homeRangeBackfillComplete ? 1 : 0
+        state.homeRangeBackfillComplete ? 1 : 0,
+        state.manualLogDayKey,
+        state.manualLogCountToday,
+        state.routeRefreshDayKey
       );
     },
   };

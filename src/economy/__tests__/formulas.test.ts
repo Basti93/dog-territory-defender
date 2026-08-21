@@ -1,17 +1,27 @@
 import { BALANCE } from '../balanceConfig';
+import { CellId, MIN_CELLS_FOR_REWARD } from '../../utils/grid';
 import {
-  upgradeCost,
-  storageCap,
-  passiveTreatsPerHour,
-  softCapBonusPercent,
+  bloomMultiplier,
   buddyPayout,
-  sniffGardenPct,
   buddyTreatsPerWalk,
-  xpAwardForWalk,
-  xpForNextLevel,
   cumulativeXpForLevel,
   levelForXp,
+  manualLogBloomMultiplier,
+  passiveTreatsPerHour,
+  sniffGardenPct,
+  softCapBonusPercent,
+  storageCap,
+  upgradeCost,
+  xpAwardForWalk,
+  xpForNextLevel,
 } from '../formulas';
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** N distinct synthetic cell ids, only ever used as opaque Set/Map keys here — no real grid geometry needed to exercise bloomMultiplier's math. */
+function cellIds(count: number): CellId[] {
+  return Array.from({ length: count }, (_, i) => `${i},0`);
+}
 
 describe('upgradeCost', () => {
   it('matches costBase * costMult^(level-1) for each building', () => {
@@ -212,5 +222,86 @@ describe('levelForXp / cumulativeXpForLevel', () => {
 
   it('never exceeds maxLevel regardless of how much XP is passed in', () => {
     expect(levelForXp(Number.MAX_SAFE_INTEGER)).toBe(BALANCE.leveling.maxLevel);
+  });
+});
+
+// openspec/changes/home-range-rewards/tasks.md task 1.4 — worked table from
+// openspec/changes/home-range/design.md Decision 3 (K = 0.6).
+describe('bloomMultiplier', () => {
+  const NOW = 1_700_000_000_000;
+
+  it('below MIN_CELLS_FOR_REWARD painted cells, the multiplier is always exactly 1 regardless of wildness', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD - 1);
+    // Every cell is entirely new ground (not in the Range at all) — the
+    // wildest possible input, and the multiplier must still be 1.
+    expect(bloomMultiplier(new Set(ids), new Map(), NOW)).toBe(1);
+  });
+
+  it('same loop walked yesterday (all painted cells refreshed exactly 1 day ago) -> ~x1.112', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    const range = new Map(ids.map((id) => [id, NOW - ONE_DAY_MS]));
+    expect(bloomMultiplier(new Set(ids), range, NOW)).toBeCloseTo(1.112, 2);
+  });
+
+  it('same loop 3 days ago -> ~x1.278', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    const range = new Map(ids.map((id) => [id, NOW - 3 * ONE_DAY_MS]));
+    expect(bloomMultiplier(new Set(ids), range, NOW)).toBeCloseTo(1.278, 2);
+  });
+
+  it('a route last walked a week ago -> ~x1.465', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    const range = new Map(ids.map((id) => [id, NOW - 7 * ONE_DAY_MS]));
+    expect(bloomMultiplier(new Set(ids), range, NOW)).toBeCloseTo(1.465, 2);
+  });
+
+  it('a route 3+ weeks old is at the x1.600 ceiling, same as entirely new ground', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    const oldRange = new Map(ids.map((id) => [id, NOW - 30 * ONE_DAY_MS]));
+    expect(bloomMultiplier(new Set(ids), oldRange, NOW)).toBeCloseTo(1.6, 2);
+
+    // Entirely new ground: none of the painted cells are in the Range at all.
+    expect(bloomMultiplier(new Set(ids), new Map(), NOW)).toBeCloseTo(1.6, 2);
+  });
+
+  it('never exceeds the x1.600 ceiling (K=0.6, max wildness=1)', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD * 2);
+    expect(bloomMultiplier(new Set(ids), new Map(), NOW)).toBeLessThanOrEqual(1 + BALANCE.freshGround.k);
+  });
+
+  it('never drops below 1.0 (bigger reward for returning, never a penalty for having left)', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    // Every cell refreshed this instant — the freshest possible walk.
+    const range = new Map(ids.map((id) => [id, NOW]));
+    expect(bloomMultiplier(new Set(ids), range, NOW)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('averages wildness across a mix of Range and brand-new cells, not just the new ones', () => {
+    const halfKnown = cellIds(MIN_CELLS_FOR_REWARD / 2 + 1);
+    const halfNew = cellIds(MIN_CELLS_FOR_REWARD / 2 + 1).map((id) => `new-${id}`);
+    const range = new Map(halfKnown.map((id) => [id, NOW])); // freshly refreshed -> wildness 0
+    const painted = new Set([...halfKnown, ...halfNew]); // halfNew -> wildness 1 (not in Range)
+
+    const result = bloomMultiplier(painted, range, NOW);
+    // Roughly half wild, half fresh -> somewhere strictly between the floor and the ceiling.
+    expect(result).toBeGreaterThan(1);
+    expect(result).toBeLessThan(1 + BALANCE.freshGround.k);
+  });
+});
+
+describe('manualLogBloomMultiplier', () => {
+  it('matches the exact same value bloomMultiplier would give for a walk refreshed exactly 1 day ago', () => {
+    const ids = cellIds(MIN_CELLS_FOR_REWARD);
+    const now = 1_700_000_000_000;
+    const range = new Map(ids.map((id) => [id, now - ONE_DAY_MS]));
+    expect(manualLogBloomMultiplier()).toBeCloseTo(bloomMultiplier(new Set(ids), range, now), 10);
+  });
+
+  it('is a true constant, independent of any notion of "now"', () => {
+    expect(manualLogBloomMultiplier()).toBe(manualLogBloomMultiplier());
+  });
+
+  it('matches design.md\'s worked ~x1.112 figure', () => {
+    expect(manualLogBloomMultiplier()).toBeCloseTo(1.112, 2);
   });
 });

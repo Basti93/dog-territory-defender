@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
-import { MissedWalkTiming } from '../utils/manualWalkLog';
+import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
+import { eligibleRefreshRoutes, MissedWalkTiming } from '../utils/manualWalkLog';
 
 const COLORS = {
   green: '#2ECC71',
@@ -12,8 +13,12 @@ const COLORS = {
 };
 
 interface LogMissedWalkScreenProps {
-  onLog: (timing: MissedWalkTiming) => void;
+  onLog: (timing: MissedWalkTiming, refreshRouteWalkId?: string) => void;
   onClose: () => void;
+  /** Fetches the player's own previously-tracked walks to offer as route-refresh candidates (see utils/manualWalkLog.ts's eligibleRefreshRoutes). */
+  walkRepository: WalkRepository;
+  /** Whether "Log a walk we missed" may currently offer a route refresh at all (openspec/changes/home-range/design.md Decision 4's "at most 1 route refresh per calendar day" cap) — when false, the picker section is hidden entirely rather than offered and then rejected at submit time. */
+  routeRefreshAvailable: boolean;
 }
 
 const OPTIONS: { timing: MissedWalkTiming; label: string }[] = [
@@ -21,8 +26,15 @@ const OPTIONS: { timing: MissedWalkTiming; label: string }[] = [
   { timing: 'yesterday', label: 'Yesterday' },
 ];
 
-export function LogMissedWalkScreen({ onLog, onClose }: LogMissedWalkScreenProps) {
+export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefreshAvailable }: LogMissedWalkScreenProps) {
   const [selected, setSelected] = useState<MissedWalkTiming | null>(null);
+  const [routes, setRoutes] = useState<StoredWalk[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!routeRefreshAvailable) return;
+    walkRepository.getWalks().then((walks) => setRoutes(eligibleRefreshRoutes(walks)));
+  }, [walkRepository, routeRefreshAvailable]);
 
   return (
     <View style={styles.container}>
@@ -48,10 +60,41 @@ export function LogMissedWalkScreen({ onLog, onClose }: LogMissedWalkScreenProps
           </TouchableOpacity>
         ))}
 
+        {routeRefreshAvailable && routes.length > 0 && (
+          <View style={styles.routePicker}>
+            {/* Functional copy only — the route picker's exact wording isn't locked by
+                design.md/tasks.md (proposal.md's Open Questions leaves the picker UX itself
+                unresolved); this is the minimal honest description of what picking a route does. */}
+            <Text style={styles.prompt}>
+              Optionally, refresh a route you've walked before — this won't discover new ground, just freshen one you
+              already know.
+            </Text>
+            <TouchableOpacity
+              style={[styles.option, selectedRouteId === null && styles.optionSelected]}
+              onPress={() => setSelectedRouteId(null)}
+            >
+              <Text style={[styles.optionText, selectedRouteId === null && styles.optionTextSelected]}>
+                Don't refresh a route
+              </Text>
+            </TouchableOpacity>
+            {routes.map((route) => (
+              <TouchableOpacity
+                key={route.id}
+                style={[styles.option, selectedRouteId === route.id && styles.optionSelected]}
+                onPress={() => setSelectedRouteId(route.id)}
+              >
+                <Text style={[styles.optionText, selectedRouteId === route.id && styles.optionTextSelected]}>
+                  Walked {new Date(route.startTime).toLocaleDateString()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.logButton, !selected && styles.logButtonDisabled]}
           disabled={!selected}
-          onPress={() => selected && onLog(selected)}
+          onPress={() => selected && onLog(selected, selectedRouteId ?? undefined)}
         >
           <Text style={styles.logButtonText}>Log this walk 🐾</Text>
         </TouchableOpacity>
@@ -85,6 +128,10 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: 24,
+    gap: 12,
+  },
+  routePicker: {
+    marginTop: 12,
     gap: 12,
   },
   prompt: {

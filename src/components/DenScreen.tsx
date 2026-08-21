@@ -14,7 +14,9 @@ import {
 import { DenEconomyState, dogDisplayName, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
+import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
+import { streetsKnown } from '../utils/grid';
 
 const COLORS = {
   green: '#2ECC71',
@@ -61,6 +63,8 @@ function effectText(building: BuildingKey, level: number, state: DenEconomyState
 interface DenScreenProps {
   repository: DenEconomyRepository;
   personalStatsRepository: PersonalStatsRepository;
+  /** Optional so existing tests/callers that don't care about the "Buddy knows N streets" stat (tasks.md task 3.3) don't need to supply a Home Range repository — omitted means the stat line simply doesn't render. */
+  homeRangeRepository?: HomeRangeRepository;
   pendingAchievements?: AchievementId[];
   onAcknowledgePendingAchievements?: () => void;
   onClose: () => void;
@@ -70,6 +74,7 @@ interface DenScreenProps {
 export function DenScreen({
   repository,
   personalStatsRepository,
+  homeRangeRepository,
   pendingAchievements = [],
   onAcknowledgePendingAchievements,
   onClose,
@@ -79,6 +84,7 @@ export function DenScreen({
   const [message, setMessage] = useState<string | null>(null);
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
   const [achievementNotices, setAchievementNotices] = useState<AchievementId[]>([]);
+  const [rangeCellCount, setRangeCellCount] = useState<number | null>(null);
 
   useEffect(() => {
     repository.getState().then((s) => {
@@ -88,6 +94,11 @@ export function DenScreen({
       }
     });
   }, [repository]);
+
+  useEffect(() => {
+    if (!homeRangeRepository) return;
+    homeRangeRepository.getCells().then((cells) => setRangeCellCount(cells.length));
+  }, [homeRangeRepository]);
 
   useEffect(() => {
     if (pendingAchievements.length > 0) {
@@ -198,6 +209,16 @@ export function DenScreen({
               ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.`
               : ''}
           </Text>
+          {/* "Buddy knows N streets" (openspec/changes/home-range/design.md Decision 5's headline
+              stat) — TODO: game-master copy pass, noun/placement not yet authored (see
+              proposal.md's Open Questions / tasks.md task 3.3). Placeholder is functional only;
+              hidden entirely until the Home Range cell count has loaded. */}
+          {rangeCellCount !== null && (
+            <Text style={styles.levelBarRate}>
+              {dogDisplayName(state.dogName)} knows {streetsKnown(rangeCellCount)} street
+              {streetsKnown(rangeCellCount) === 1 ? '' : 's'}.
+            </Text>
+          )}
         </View>
 
         <View style={styles.denScene}>

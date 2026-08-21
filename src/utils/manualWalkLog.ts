@@ -3,6 +3,8 @@
 // decision: a manually-logged walk must have started within the current or
 // previous calendar day — not an open-ended backfill.
 
+import { StoredWalk } from '../storage/WalkRepository';
+
 export type MissedWalkTiming = 'today' | 'yesterday';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -30,4 +32,21 @@ export function isWithinManualLogWindow(startTime: number, now: number = Date.no
   const todayKey = calendarDayKey(now);
   const yesterdayKey = calendarDayKey(now - ONE_DAY_MS);
   return startKey === todayKey || startKey === yesterdayKey;
+}
+
+/**
+ * Walks eligible to be picked as a manual-log route refresh target (see
+ * openspec/changes/home-range/design.md Decision 4, rule 1: "the cell set
+ * of a previously-completed tracked walk, chosen from walk history"). A
+ * manual log itself has `locations: []`, so filtering on a non-empty trail
+ * is sufficient to exclude prior manual logs without needing to also check
+ * `startSource` — kept as an explicit check anyway since it's the more
+ * honest statement of intent and doesn't depend on that implementation
+ * detail staying true. Most-recent-first, so the picker's default framing
+ * favours the walk a player is most likely to actually recognise.
+ */
+export function eligibleRefreshRoutes(walks: StoredWalk[]): StoredWalk[] {
+  return walks
+    .filter((w) => w.startSource === 'button' && w.locations.length > 0)
+    .sort((a, b) => b.startTime - a.startTime);
 }

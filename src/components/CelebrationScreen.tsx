@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 
-import { BuildingKey } from '../economy/balanceConfig';
+import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
-import { CELL_M } from '../utils/grid';
+import { CELL_M, NEW_GROUND_MIN_CELLS } from '../utils/grid';
 
 const COLORS = {
   green: '#2ECC71',
@@ -39,6 +39,10 @@ interface CelebrationScreenProps {
   newTreatsPerWalk?: number | null;
   /** The one-away cliffhanger's milestone title, when it fires on this walk-close. See economy/milestones.ts — currently always null until milestone titles are game-master-authored. */
   cliffhangerTitle?: string | null;
+  /** This walk's own New Ground cell count (see utils/grid.ts's newGroundCells) — the New Ground beat below fires when this reaches NEW_GROUND_MIN_CELLS. 0 for a manual log or a walk that only re-covered known ground. */
+  newGroundCellCount?: number;
+  /** The Home Range's Fresh Ground payout multiplier actually applied to this walk's treats (see economy/formulas.ts's bloomMultiplier). The Fresh Ground beat below is suppressed entirely below BALANCE.freshGround.displayThresholdMultiplier — design.md Decision 3's UI rule, not a display nicety (closes the fixed-loop-walker dead zone, FLAG 1). */
+  bloomMultiplier?: number;
   dogName?: string | null;
   onContinue: () => void;
 }
@@ -79,6 +83,8 @@ export function CelebrationScreen({
   oldTreatsPerWalk = null,
   newTreatsPerWalk = null,
   cliffhangerTitle = null,
+  newGroundCellCount = 0,
+  bloomMultiplier = 1,
   dogName = null,
   onContinue,
 }: CelebrationScreenProps) {
@@ -109,6 +115,27 @@ export function CelebrationScreen({
         <View style={styles.treatsRow}>
           <Text style={styles.treatsEarned}>+{treatsEarned} treats</Text>
         </View>
+
+        {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier
+            (design.md Decision 3's UI rule): a routine walk shows the treats total above with
+            no multiplier line at all, not "×1.00," nothing. See
+            openspec/changes/home-range-rewards/tasks.md task 3.2. */}
+        {bloomMultiplier >= BALANCE.freshGround.displayThresholdMultiplier && (
+          <View style={styles.levelBox}>
+            {/* TODO: game-master copy pass — Fresh Ground beat copy not yet authored (openspec/changes/home-range-rewards proposal.md's Open Questions / tasks.md task 3.2). Placeholder surfaces only the raw multiplier so the mechanic is testable on-device. */}
+            <Text style={styles.levelText}>Fresh Ground bonus: ×{bloomMultiplier.toFixed(2)} treats this walk</Text>
+          </View>
+        )}
+
+        {/* New Ground beat — fires once this walk's New Ground cell count clears the
+            dilated-set-difference threshold (design.md Decision 5). See
+            openspec/changes/home-range-rewards/tasks.md task 3.1. */}
+        {newGroundCellCount >= NEW_GROUND_MIN_CELLS && (
+          <View style={styles.levelBox}>
+            {/* TODO: game-master copy pass — New Ground celebration copy not yet authored (openspec/changes/home-range-rewards proposal.md's Open Questions / tasks.md task 3.1). Placeholder is functional only. */}
+            <Text style={styles.levelText}>New ground! Buddy explored somewhere new today.</Text>
+          </View>
+        )}
 
         {tease && (
           <View style={styles.teaseBox}>

@@ -43,6 +43,25 @@ export const BALANCE = {
     // and the 25-cell reward-eligibility floor.
     areaCapM2: 20000,
   },
+  // The Home Range's Fresh Ground payout — bloomMultiplier = 1 + k*B, treats
+  // only, never XP. See openspec/changes/home-range/design.md's Decision 3
+  // and openspec/changes/home-range-rewards/tasks.md sections 1-2.
+  freshGround: {
+    // K in `bloomMultiplier = 1 + K·B`. Confirmed by game-master against the
+    // sweep in design.md's "K = 0.6 — confirmed by game-master" section —
+    // this is a decision record, not a footnote; do not dial it down
+    // without a new logged decision (see that section's reasoning for why a
+    // lower K would invert anti-snowball's own "the walk itself SHALL
+    // dominate outcomes" principle).
+    k: 0.6,
+    // UI suppression floor (design.md Decision 3's UI rule / FLAG 1's
+    // resolution): below this, the walk-close screen shows no Fresh Ground
+    // multiplier line at all — not "×1.00," nothing to notice as absent.
+    displayThresholdMultiplier: 1.25,
+    // Manual-log route-refresh caps — design.md Decision 4's exact rule.
+    maxRouteRefreshesPerDay: 1,
+    maxManualLogsPerDay: 2,
+  },
   leveling: {
     xpBase: 100,
     // 1.10, not the originally-shipped 1.13 — retuned in

@@ -23,7 +23,15 @@ import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
 import { createSqliteNotificationRepository } from './src/storage/sqliteNotificationRepository';
-import { applyPassiveAccrual, dogDisplayName, reconcileBuddyLevelCatchUp } from './src/economy/denEconomy';
+import {
+  applyPassiveAccrual,
+  canOfferRouteRefreshToday,
+  dogDisplayName,
+  evaluateManualLogQuota,
+  recordManualLogUsage,
+  reconcileBuddyLevelCatchUp,
+} from './src/economy/denEconomy';
+import { bloomMultiplier, manualLogBloomMultiplier } from './src/economy/formulas';
 import { AchievementId, recordTreatsEarned } from './src/economy/personalStats';
 import { awardWalkRewards, WalkRewardsCelebration } from './src/economy/walkRewards';
 import { checkAndScheduleEarnedTriggerNotification } from './src/notifications/earnedTrigger';
@@ -62,6 +70,19 @@ export default function App() {
   const [needsDogName, setNeedsDogName] = useState(false);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   const [celebration, setCelebration] = useState<WalkRewardsCelebration | null>(null);
+  const [routeRefreshAvailable, setRouteRefreshAvailable] = useState(false);
+
+  // Recomputed each time "Log a walk we missed" opens — see
+  // src/economy/denEconomy.ts's canOfferRouteRefreshToday and
+  // openspec/changes/home-range/design.md Decision 4's "at most 1 route
+  // refresh per calendar day" cap. LogMissedWalkScreen only offers the
+  // route picker when this is true.
+  useEffect(() => {
+    if (!showLogMissedWalk) return;
+    denEconomyRepository.getState().then((state) => {
+      setRouteRefreshAvailable(canOfferRouteRefreshToday(state, Date.now()));
+    });
+  }, [showLogMissedWalk]);
 
   // Initialize location permission
   useEffect(() => {
@@ -221,12 +242,14 @@ export default function App() {
     const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
 
     // Snapshot the Range before painting this walk's cells, so New Ground
-    // detection compares against what existed *before* this walk (design.md
-    // Decision 5) — painting below would otherwise make every cell "already
-    // in the Range."
+    // detection AND the Fresh Ground bloomMultiplier both compare against
+    // what existed *before* this walk (design.md Decisions 3 and 5) —
+    // painting below would otherwise make every cell "already refreshed."
     const rangeBefore = await homeRangeRepository.getCells();
     const rangeBeforeSet = new Set(rangeBefore.map((c) => cellKey(c.ix, c.iy)));
+    const rangeBeforeLastRefreshed = new Map(rangeBefore.map((c) => [cellKey(c.ix, c.iy), c.lastRefreshed]));
     const newGround = newGroundCells(painted, rangeBeforeSet);
+    const bloom = bloomMultiplier(painted, rangeBeforeLastRefreshed, Date.now());
 
     const now = Date.now();
     if (painted.size > 0) {
@@ -280,7 +303,8 @@ export default function App() {
         distanceMeters,
         painted.size,
         { denEconomyRepository, personalStatsRepository, walkRepository },
-        newGround.size
+        newGround.size,
+        bloom
       );
       setTreats(result.denEconomyState.treats);
       setLevel(result.denEconomyState.level);
@@ -293,13 +317,25 @@ export default function App() {
   // "Log a walk we missed" — a standalone, one-step, direct-reward action.
   // No live GPS trail, no polygon, no notification tied to it (see
   // openspec/changes/walk-start-notifications/proposal.md's scope cut).
-  // Reuses the exact same reward path a tracked walk gets, via awardWalkRewards.
-  const logMissedWalk = async (timing: MissedWalkTiming) => {
+  // Reuses the exact same reward path a tracked walk gets, via
+  // awardWalkRewards. `refreshRouteWalkId` (optional) is a previously
+  // GPS-tracked walk's id the player picked to refresh — see
+  // openspec/changes/home-range/design.md Decision 4 and
+  // src/economy/denEconomy.ts's evaluateManualLogQuota/recordManualLogUsage
+  // for the exact cap rules this enforces.
+  const logMissedWalk = async (timing: MissedWalkTiming, refreshRouteWalkId?: string) => {
     const now = Date.now();
     const startTime = startTimeForMissedWalk(timing, now);
 
     if (!isWithinManualLogWindow(startTime, now)) {
       Alert.alert('Too far back', 'Missed walks can only be logged from today or yesterday.');
+      return;
+    }
+
+    const denStateBefore = await denEconomyRepository.getState();
+    const quota = evaluateManualLogQuota(denStateBefore, now, !!refreshRouteWalkId);
+    if (!quota.allowed) {
+      Alert.alert('Already logged today', "You've already logged the most missed walks we allow for one day.");
       return;
     }
 
@@ -311,17 +347,50 @@ export default function App() {
       startSource: 'manual-log',
     };
 
-    log('WALK_MANUAL_LOG', { id: manualWalk.id, timing });
+    log('WALK_MANUAL_LOG', { id: manualWalk.id, timing, refreshRouteWalkId, canRefreshRoute: quota.canRefreshRoute });
 
     try {
       await walkRepository.saveWalk(manualWalk);
       log('STORAGE_WALK_SAVED', { id: manualWalk.id, closed: true, startSource: 'manual-log' });
 
-      const result = await awardWalkRewards(manualWalk, 0, 0, {
-        denEconomyRepository,
-        personalStatsRepository,
-        walkRepository,
-      });
+      let bloom = 1;
+      let refreshApplied = false;
+      if (quota.canRefreshRoute && refreshRouteWalkId) {
+        const routeWalk = await walkRepository.getWalk(refreshRouteWalkId);
+        // The picker only ever offers the player's own previously-tracked
+        // walks (App.tsx's eligibleRefreshRoutes filter), so this should
+        // always resolve — defensive null-check only, no user-facing error.
+        if (routeWalk) {
+          const routeCells = paintedCells(routeWalk.locations);
+          if (routeCells.size > 0) {
+            await homeRangeRepository.paintCells(
+              Array.from(routeCells).map((id) => {
+                const { ix, iy } = parseCellKey(id);
+                return { ix, iy, refreshedAt: now, tracked: false };
+              })
+            );
+            setHomeRangeRefreshKey((k) => k + 1);
+            bloom = manualLogBloomMultiplier();
+            refreshApplied = true;
+          }
+        }
+      }
+
+      // Record the manual log (and, if used, the route refresh) before
+      // awarding rewards below, so awardWalkRewards's own getState()/
+      // saveState() round-trip picks up and preserves this bookkeeping
+      // (denEconomy.ts's recordManualLogUsage doc comment explains why the
+      // ordering matters).
+      await denEconomyRepository.saveState(recordManualLogUsage(denStateBefore, now, refreshApplied));
+
+      const result = await awardWalkRewards(
+        manualWalk,
+        0,
+        0,
+        { denEconomyRepository, personalStatsRepository, walkRepository },
+        0,
+        bloom
+      );
       setTreats(result.denEconomyState.treats);
       setLevel(result.denEconomyState.level);
       setShowLogMissedWalk(false);
@@ -370,6 +439,8 @@ export default function App() {
             oldTreatsPerWalk={celebration.oldTreatsPerWalk}
             newTreatsPerWalk={celebration.newTreatsPerWalk}
             cliffhangerTitle={celebration.cliffhangerTitle}
+            newGroundCellCount={celebration.newGroundCellCount}
+            bloomMultiplier={celebration.bloomMultiplier}
             dogName={dogName}
             onContinue={() => setCelebration(null)}
           />
@@ -401,6 +472,7 @@ export default function App() {
           <DenScreen
             repository={denEconomyRepository}
             personalStatsRepository={personalStatsRepository}
+            homeRangeRepository={homeRangeRepository}
             pendingAchievements={pendingDenAchievements}
             onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
             onClose={() => setShowDen(false)}
@@ -439,7 +511,12 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <LogMissedWalkScreen onLog={logMissedWalk} onClose={() => setShowLogMissedWalk(false)} />
+          <LogMissedWalkScreen
+            onLog={logMissedWalk}
+            onClose={() => setShowLogMissedWalk(false)}
+            walkRepository={walkRepository}
+            routeRefreshAvailable={routeRefreshAvailable}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );

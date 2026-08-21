@@ -1,5 +1,5 @@
 import { BALANCE, BuildingKey } from './balanceConfig';
-import { CELL_M } from '../utils/grid';
+import { CELL_M, CellId, MIN_CELLS_FOR_REWARD, wildness } from '../utils/grid';
 
 const BUILDING_KEYS: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
 
@@ -142,6 +142,64 @@ export function xpAwardForWalk(distanceMeters: number, cellsPainted: number, bas
   const paintedAreaM2 = cellsPainted * CELL_M * CELL_M;
   const cappedAreaM2 = Math.min(paintedAreaM2, areaCapM2);
   return perWalkBase * baseMultiplier + perKm * distanceKm + per1000m2 * (cappedAreaM2 / 1000);
+}
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Fresh Ground payout multiplier — treats only, never XP (see
+ * denEconomy.ts's awardWalkTreats and openspec/changes/home-range/design.md
+ * Decision 3). `B` is the mean wildness over the walk's own painted cells;
+ * a painted cell that wasn't already in the pre-walk Range counts as
+ * wildness 1.0 — "new ground is weighted 1.0, the same as a three-week-old
+ * patch, not more" (design.md's own framing, not a bigger bonus for
+ * discovery — the celebration beat is discovery's payoff, not this number).
+ *
+ * `rangeLastRefreshed` MUST be the Range snapshotted *before* this walk's
+ * own paint lands (the same snapshot New Ground detection uses at the
+ * App.tsx call site) — passing the post-paint Range would make every one of
+ * this walk's own cells read as "just refreshed" and silently zero out the
+ * whole mechanic on every walk.
+ *
+ * Suppressed to exactly 1 below MIN_CELLS_FOR_REWARD painted cells (the
+ * same qualifying-walk floor `walk-lifecycle` gates base rewards on), so a
+ * short GPS stub on brand-new ground can't collect the ×1.60 ceiling.
+ */
+export function bloomMultiplier(
+  paintedCellIds: ReadonlySet<CellId>,
+  rangeLastRefreshed: ReadonlyMap<CellId, number>,
+  now: number
+): number {
+  if (paintedCellIds.size < MIN_CELLS_FOR_REWARD) {
+    return 1;
+  }
+
+  let totalWildness = 0;
+  for (const id of paintedCellIds) {
+    const lastRefreshed = rangeLastRefreshed.get(id);
+    totalWildness += lastRefreshed === undefined ? 1 : wildness(lastRefreshed, now);
+  }
+  const meanWildness = totalWildness / paintedCellIds.size;
+  return 1 + BALANCE.freshGround.k * meanWildness;
+}
+
+/**
+ * The fixed Fresh Ground multiplier a manual-log route refresh always
+ * earns, regardless of which previously-tracked route is picked or how
+ * wild it actually was — the exploit-closing rule from
+ * openspec/changes/home-range/design.md Decision 4 ("Can route-picking be
+ * farmed?"). A manual log has no GPS evidence of what was actually walked,
+ * so it can never be allowed to *choose* a better multiplier the way a real
+ * walk's own bloomMultiplier can.
+ *
+ * Deliberately NOT `bloomMultiplier` called on the picked route's real cell
+ * set — this is the one exact value an honest tracked walk of a routine
+ * loop (refreshed the day before) would have earned. Because `wildness(d)`
+ * only depends on elapsed days, this is a true constant (≈ ×1.112 at
+ * K = 0.6, design.md's worked table), not a function of `now`.
+ */
+export function manualLogBloomMultiplier(): number {
+  return 1 + BALANCE.freshGround.k * wildness(0, ONE_DAY_MS);
 }
 
 export function xpForNextLevel(level: number): number {

@@ -1,6 +1,19 @@
-import { isWithinManualLogWindow, startTimeForMissedWalk } from '../manualWalkLog';
+import { StoredWalk } from '../../storage/WalkRepository';
+import { eligibleRefreshRoutes, isWithinManualLogWindow, startTimeForMissedWalk } from '../manualWalkLog';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function makeStoredWalk(overrides: Partial<StoredWalk> = {}): StoredWalk {
+  return {
+    id: 'walk-1',
+    startTime: 1000,
+    closed: true,
+    startSource: 'button',
+    locations: [{ latitude: 52.5, longitude: 13.4, timestamp: 1000, accuracy: 5 }],
+    syncedAt: null,
+    ...overrides,
+  };
+}
 
 // A fixed mid-afternoon local time, well clear of midnight boundaries.
 const NOW = new Date(2026, 0, 15, 15, 0, 0).getTime(); // Jan 15 2026, 15:00 local
@@ -45,5 +58,32 @@ describe('isWithinManualLogWindow', () => {
 
   it('accepts a startTime that is exactly now', () => {
     expect(isWithinManualLogWindow(NOW, NOW)).toBe(true);
+  });
+});
+
+// openspec/changes/home-range/design.md Decision 4, rule 1: a manual-log
+// route refresh may only pick "the cell set of a previously-completed
+// tracked walk" — never a manual log itself (no GPS evidence to refresh
+// from) and never an empty-trail walk.
+describe('eligibleRefreshRoutes', () => {
+  it('includes a previously-tracked walk with a real GPS trail', () => {
+    const tracked = makeStoredWalk({ id: 'tracked', startSource: 'button' });
+    expect(eligibleRefreshRoutes([tracked])).toEqual([tracked]);
+  });
+
+  it('excludes manual-log walks, even a "closed" one', () => {
+    const manual = makeStoredWalk({ id: 'manual', startSource: 'manual-log', locations: [] });
+    expect(eligibleRefreshRoutes([manual])).toEqual([]);
+  });
+
+  it('excludes a tracked walk with no locations (defensive — should not exist in practice, but never eligible if it does)', () => {
+    const emptyTracked = makeStoredWalk({ id: 'empty-tracked', startSource: 'button', locations: [] });
+    expect(eligibleRefreshRoutes([emptyTracked])).toEqual([]);
+  });
+
+  it('sorts most-recent-first', () => {
+    const older = makeStoredWalk({ id: 'older', startTime: 1000 });
+    const newer = makeStoredWalk({ id: 'newer', startTime: 5000 });
+    expect(eligibleRefreshRoutes([older, newer]).map((w) => w.id)).toEqual(['newer', 'older']);
   });
 });

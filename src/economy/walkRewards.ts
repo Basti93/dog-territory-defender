@@ -120,6 +120,15 @@ export interface WalkRewardsCelebration {
    * discover new ground).
    */
   newGroundCellCount: number;
+  /**
+   * The Home Range's Fresh Ground payout multiplier actually applied to
+   * this walk's treats (see formulas.ts's bloomMultiplier /
+   * manualLogBloomMultiplier) — always 1 for a walk below the qualifying
+   * floor or a manual log with no route refresh. Callers decide whether to
+   * surface the Fresh Ground beat by comparing this against
+   * BALANCE.freshGround.displayThresholdMultiplier, not by re-deriving it.
+   */
+  bloomMultiplier: number;
 }
 
 export interface AwardWalkRewardsResult {
@@ -155,7 +164,15 @@ export async function awardWalkRewards(
   cellsPainted: number,
   deps: AwardWalkRewardsDeps,
   /** This walk's own New Ground cell count (see utils/grid.ts's newGroundCells) — 0 for a manual log. See WalkRewardsCelebration.newGroundCellCount's doc comment. */
-  newGroundCellCount: number = 0
+  newGroundCellCount: number = 0,
+  /**
+   * The Home Range's Fresh Ground payout multiplier for this walk's treats
+   * (see formulas.ts's bloomMultiplier for a tracked walk, or
+   * manualLogBloomMultiplier for a manual log's route refresh) — 1 (no
+   * effect) when omitted, matching "no bloom involvement at all" for a
+   * short walk or a manual log with no route picked.
+   */
+  bloomMultiplier: number = 1
 ): Promise<AwardWalkRewardsResult> {
   const { denEconomyRepository, personalStatsRepository, walkRepository } = deps;
 
@@ -169,14 +186,17 @@ export async function awardWalkRewards(
   // very walk changes the rate starting next walk, not retroactively (see
   // denEconomy.ts's awardWalkTreats and tasks.md task 10.2). Its returned
   // treatsAwarded is the single source of truth for the celebration/log/
-  // stats figure — tasks.md task 3.4's de-duplication fix.
-  const { state: rewarded, treatsAwarded } = awardWalkTreats(denState, multiplier);
+  // stats figure — tasks.md task 3.4's de-duplication fix. bloomMultiplier
+  // composes multiplicatively with the daily multiplier in one Math.round
+  // (see denEconomy.ts's awardWalkTreats doc comment) — never applied to XP.
+  const { state: rewarded, treatsAwarded } = awardWalkTreats(denState, multiplier, bloomMultiplier);
   log('TREATS_AWARD', {
     walkId: walk.id,
     startSource: walk.startSource,
     amount: treatsAwarded,
     walkOrderToday,
     dailyMultiplier: multiplier,
+    bloomMultiplier,
     before: denState.treats,
     after: rewarded.treats,
   });
@@ -241,6 +261,7 @@ export async function awardWalkRewards(
       newTreatsPerWalk,
       cliffhangerTitle,
       newGroundCellCount,
+      bloomMultiplier,
     },
   };
 }

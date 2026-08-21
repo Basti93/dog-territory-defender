@@ -1,5 +1,6 @@
 import { BALANCE, BuildingKey } from './balanceConfig';
 import { buddyTreatsPerWalk, passiveTreatsPerHour, storageCap, upgradeCost, xpAwardForWalk, levelForXp } from './formulas';
+import { calendarDayKey } from '../utils/manualWalkLog';
 
 export interface DenEconomyState {
   treats: number;
@@ -15,6 +16,12 @@ export interface DenEconomyState {
   cliffhangerShownForLevel: number | null;
   /** One-time guard for the Home Range migration backfill (openspec/changes/home-range/design.md's "Technical Split Addendum" migration section) — every previously saved tracked walk is replayed into the Home Range grid exactly once, on first load after this feature ships. False until that replay has run. See storage/homeRangeMigration.ts. */
   homeRangeBackfillComplete: boolean;
+  /** Local calendar-day key (see utils/manualWalkLog.ts's calendarDayKey) of the most recent manual log, paired with manualLogCountToday — enforces walk-lifecycle's "at most 2 manual logs per calendar day" cap (openspec/changes/home-range/design.md Decision 4). Null until the first manual log ever logged. See evaluateManualLogQuota below. */
+  manualLogDayKey: string | null;
+  /** How many manual logs have been recorded on manualLogDayKey. Meaningless (stale) once the current calendar day no longer matches manualLogDayKey — evaluateManualLogQuota always re-derives the real count-for-today from this pair, never reads it in isolation. */
+  manualLogCountToday: number;
+  /** Local calendar-day key of the most recent manual-log route refresh — enforces "at most 1 route refresh per calendar day" (design.md Decision 4). Null until the first refresh ever performed. */
+  routeRefreshDayKey: string | null;
 }
 
 export type UpgradeError = 'insufficient-treats' | 'max-level';
@@ -31,6 +38,9 @@ export function defaultDenEconomyState(now: number): DenEconomyState {
     dogName: null,
     cliffhangerShownForLevel: null,
     homeRangeBackfillComplete: false,
+    manualLogDayKey: null,
+    manualLogCountToday: 0,
+    routeRefreshDayKey: null,
   };
 }
 
@@ -104,16 +114,25 @@ export interface AwardWalkTreatsResult {
 
 /**
  * multiplier is the per-day diminishing-returns multiplier — see
- * economy/walkRewards.ts. Uses state.level (Buddy's level *before* this
- * walk's own awardWalkXp call, since walkRewards.ts always awards treats
- * before XP) and state.sniffGardenLevel via buddyTreatsPerWalk, so a
- * level-up earned on this very walk changes the rate starting next walk,
- * not retroactively — see tasks.md task 10.2.
+ * economy/walkRewards.ts. bloomMultiplier is the Home Range's Fresh Ground
+ * payout (openspec/changes/home-range/design.md Decision 3) — a second,
+ * independent multiplicative factor, never XP (see formulas.ts's
+ * bloomMultiplier doc comment). Both factors are applied together in a
+ * single Math.round, not compounded through two separate roundings (see
+ * openspec/changes/home-range-rewards/tasks.md task 5.1). Uses state.level
+ * (Buddy's level *before* this walk's own awardWalkXp call, since
+ * walkRewards.ts always awards treats before XP) and state.sniffGardenLevel
+ * via buddyTreatsPerWalk, so a level-up earned on this very walk changes the
+ * rate starting next walk, not retroactively — see tasks.md task 10.2.
  */
-export function awardWalkTreats(state: DenEconomyState, multiplier: number = 1): AwardWalkTreatsResult {
+export function awardWalkTreats(
+  state: DenEconomyState,
+  multiplier: number = 1,
+  bloomMultiplier: number = 1
+): AwardWalkTreatsResult {
   const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
   const fullPayout = buddyTreatsPerWalk(state.level, state.sniffGardenLevel);
-  const treatsAwarded = Math.round(fullPayout * multiplier);
+  const treatsAwarded = Math.round(fullPayout * multiplier * bloomMultiplier);
   return {
     state: { ...state, treats: Math.min(cap, state.treats + treatsAwarded) },
     treatsAwarded,
@@ -204,4 +223,60 @@ export function upgradeBuilding(
     treats: state.treats - cost,
     [key]: currentLevel + 1,
   };
+}
+
+export interface ManualLogEligibility {
+  /** False once manualLogCountToday (for today's calendar day) has already reached BALANCE.freshGround.maxManualLogsPerDay — walk-lifecycle's "a third manual log in one calendar day is rejected" rule. */
+  allowed: boolean;
+  /** True only when the caller wants a route refresh, this log itself is allowed, AND no route refresh has already been used today. When false, a requested route refresh is silently skipped — the log itself still proceeds if `allowed` is true (walk-lifecycle: "the second manual log SHALL still be accepted and rewarded, but SHALL NOT offer or apply a route refresh"). */
+  canRefreshRoute: boolean;
+}
+
+/**
+ * Pure eligibility check for "Log a walk we missed" — openspec/changes/
+ * home-range/design.md Decision 4's exact caps: at most
+ * BALANCE.freshGround.maxManualLogsPerDay manual logs per local calendar
+ * day, of which at most BALANCE.freshGround.maxRouteRefreshesPerDay may
+ * carry a route refresh. `now` determines "today" — deliberately the
+ * moment the log is being created, not the walk's own (possibly
+ * yesterday-dated) startTime, since the cap exists to bound how often the
+ * feature itself can be used in one real sitting.
+ */
+export function evaluateManualLogQuota(
+  state: DenEconomyState,
+  now: number,
+  wantsRouteRefresh: boolean
+): ManualLogEligibility {
+  const todayKey = calendarDayKey(now);
+  const countToday = state.manualLogDayKey === todayKey ? state.manualLogCountToday : 0;
+  const allowed = countToday < BALANCE.freshGround.maxManualLogsPerDay;
+  const refreshAlreadyUsedToday = state.routeRefreshDayKey === todayKey;
+  const canRefreshRoute = allowed && wantsRouteRefresh && !refreshAlreadyUsedToday;
+
+  return { allowed, canRefreshRoute };
+}
+
+/**
+ * Records that a manual log (and, optionally, a route refresh) just
+ * happened, bumping the same day-scoped counters evaluateManualLogQuota
+ * reads. Callers MUST persist the returned state before awarding this
+ * walk's treats/XP (economy/walkRewards.ts's awardWalkRewards reads/writes
+ * DenEconomyState too, and spreads unrelated fields through unchanged, so
+ * sequencing this save first is what keeps the bookkeeping from being lost).
+ */
+export function recordManualLogUsage(state: DenEconomyState, now: number, usedRouteRefresh: boolean): DenEconomyState {
+  const todayKey = calendarDayKey(now);
+  const countToday = state.manualLogDayKey === todayKey ? state.manualLogCountToday : 0;
+
+  return {
+    ...state,
+    manualLogDayKey: todayKey,
+    manualLogCountToday: countToday + 1,
+    routeRefreshDayKey: usedRouteRefresh ? todayKey : state.routeRefreshDayKey,
+  };
+}
+
+/** Whether "Log a walk we missed" should even offer the route-refresh picker right now — used by the UI to decide whether to show the option at all, distinct from evaluateManualLogQuota's per-submission check (which also runs defense-in-depth at submit time). */
+export function canOfferRouteRefreshToday(state: DenEconomyState, now: number): boolean {
+  return evaluateManualLogQuota(state, now, true).canRefreshRoute;
 }
