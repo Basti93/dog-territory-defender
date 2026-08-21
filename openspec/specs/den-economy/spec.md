@@ -62,11 +62,11 @@ In Phase 1 of the phased build plan (`game-phases`), the Den SHALL expose only 3
 - **THEN** it SHALL show exactly the Doghouse, Treat Bakery, and Sniff Garden buildings and no others
 
 ### Requirement: Walk-Derived XP
-The system SHALL award Den XP for every closed walk, computed only from that walk's own distance and enclosed territory area, with no dependency on Den building levels, treats spent, or Pack bonuses. The contribution of enclosed area to the XP award SHALL be capped per walk, so a single outsized or GPS-anomalous polygon cannot produce a disproportionate XP or level jump.
+The system SHALL award Den XP for every reward-eligible closed walk (see `walk-lifecycle`'s `Reward Eligibility Is Ground Covered, Not Loop Closure`), computed only from that walk's own distance and the real ground it painted into the Home Range (see `home-range`), with no dependency on Den building levels, treats spent, or Pack bonuses. The contribution of painted ground to the XP award SHALL be capped per walk, so a single outsized or GPS-anomalous walk cannot produce a disproportionate XP or level jump.
 
 #### Scenario: XP awarded on walk close
-- **WHEN** a walk is closed into a territory polygon
-- **THEN** the system SHALL award XP equal to a flat base plus an amount scaled by the walk's total distance plus a capped amount scaled by the polygon's enclosed area, with no building-derived or treats-derived multiplier applied
+- **WHEN** a walk is finished and meets the reward-eligibility floor
+- **THEN** the system SHALL award XP equal to a flat base plus an amount scaled by the walk's total distance plus a capped amount scaled by the walk's painted Home Range footprint, with no building-derived or treats-derived multiplier applied
 
 ### Requirement: Den Level Is Standalone and XP-Derived
 Den Level SHALL be derived only from a player's own lifetime accumulated XP (per Walk-Derived XP above), and SHALL NOT be derived from the sum, average, or presence of any Den building's level, so that Den Level never depends on the buildings it gates in later phases.
