@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
+import { CELL_M } from '../utils/grid';
 
 const COLORS = {
   green: '#2ECC71',
@@ -25,8 +26,9 @@ const BUILDING_NAMES: Record<BuildingKey, string> = {
 };
 
 interface CelebrationScreenProps {
-  areaM2: number;
-  /** False for a manually-logged walk (no real GPS trail, so no honest territory polygon) — swaps the title/area line for copy that doesn't claim ground that wasn't actually mapped. */
+  /** This walk's real Home Range footprint (cellsPainted, see utils/grid.ts's paintedCells) — 0 for a manual log. */
+  cellsPainted: number;
+  /** False for a manually-logged walk (no real GPS trail, so no ground was actually painted) — swaps the title/area line for copy that doesn't claim ground that wasn't actually mapped. */
   hasTerritory: boolean;
   treatsEarned: number;
   tease: UpgradeTease | null;
@@ -68,7 +70,7 @@ function ConfettiPiece({ left, color, delay }: { left: number; color: string; de
 }
 
 export function CelebrationScreen({
-  areaM2,
+  cellsPainted,
   hasTerritory,
   treatsEarned,
   tease,
@@ -100,7 +102,9 @@ export function CelebrationScreen({
 
       <View style={styles.content}>
         <Text style={styles.title}>{hasTerritory ? 'Territory claimed! 🌱' : 'Walk claimed! 🌱'}</Text>
-        <Text style={styles.area}>{hasTerritory ? `${areaM2.toFixed(0)} m² is now yours` : 'Every step of it is yours'}</Text>
+        <Text style={styles.area}>
+          {hasTerritory ? `${(cellsPainted * CELL_M * CELL_M).toFixed(0)} m² is now yours` : 'Every step of it is yours'}
+        </Text>
 
         <View style={styles.treatsRow}>
           <Text style={styles.treatsEarned}>+{treatsEarned} treats</Text>

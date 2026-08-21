@@ -1,6 +1,7 @@
 import { Walk } from '../types';
 import { log } from '../utils/log';
 import { cumulativeDistance } from '../utils/geometry';
+import { paintedCells } from '../utils/grid';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { WalkRepository } from '../storage/WalkRepository';
@@ -72,7 +73,7 @@ async function trailingAverageXp(
   walkRepository: WalkRepository,
   walk: Walk,
   currentDistanceMeters: number,
-  currentAreaM2: number
+  currentCellsPainted: number
 ): Promise<number> {
   const allWalks = await walkRepository.getWalks();
   const priorClosed = allWalks
@@ -81,8 +82,12 @@ async function trailingAverageXp(
     .slice(0, 4);
 
   const samples = [
-    xpAwardForWalk(currentDistanceMeters, currentAreaM2),
-    ...priorClosed.map((w) => xpAwardForWalk(cumulativeDistance(w.locations), w.territory?.area ?? 0)),
+    xpAwardForWalk(currentDistanceMeters, currentCellsPainted),
+    // Recomputed from each prior walk's own recorded trail — there is no
+    // longer a stored per-walk area to read (see home-range's design.md;
+    // the polygon this used to read, w.territory?.area, is deleted). A
+    // manual-log walk's empty locations array correctly yields 0 cells here.
+    ...priorClosed.map((w) => xpAwardForWalk(cumulativeDistance(w.locations), paintedCells(w.locations).size)),
   ];
 
   if (samples.length < 5) {
@@ -92,8 +97,9 @@ async function trailingAverageXp(
 }
 
 export interface WalkRewardsCelebration {
-  areaM2: number;
-  /** False for a manually-logged walk — no real GPS trail means no honest territory polygon. Drives CelebrationScreen copy. */
+  /** This walk's real Home Range footprint — cellsPainted * CELL_M * CELL_M (see utils/grid.ts). 0 for a manual log. Replaces the deleted polygon's areaM2. */
+  cellsPainted: number;
+  /** False for a manually-logged walk — no real GPS trail means no ground was actually painted. Drives CelebrationScreen copy. Was `hasTerritory` guarding a polygon; now guards "did this walk paint any Home Range ground." */
   hasTerritory: boolean;
   treatsEarned: number;
   tease: UpgradeTease | null;
@@ -105,6 +111,15 @@ export interface WalkRewardsCelebration {
   newTreatsPerWalk: number | null;
   /** The one-away cliffhanger's milestone title ("One more walk and he's a...") when it fires on this walk-close — see economy/milestones.ts. Null otherwise, including when the trigger condition is met but no game-master-authored title exists yet for that milestone (tasks.md task 5.3). */
   cliffhangerTitle: string | null;
+  /**
+   * Count of this walk's painted cells that are New Ground (see
+   * utils/grid.ts's newGroundCells) — computed and carried here per
+   * openspec/changes/home-range/tasks.md task 6.1, even though the
+   * celebration beat/copy for it ships in the sibling change
+   * home-range-rewards. Always 0 for a manual log (structurally cannot
+   * discover new ground).
+   */
+  newGroundCellCount: number;
 }
 
 export interface AwardWalkRewardsResult {
@@ -122,11 +137,11 @@ export interface AwardWalkRewardsDeps {
 /**
  * The reward path for a walk that's ready to be rewarded — treats, XP,
  * personal stats, achievements. Shared by both a normally-closed tracked
- * walk (App.tsx's stopWalk) and a manually-logged walk (App.tsx's
- * logMissedWalk): a manual log passes distanceMeters/areaM2 as 0 (no real
- * GPS trail), which awardWalkXp/recordWalkClosed already treat correctly —
- * the walk still earns the same flat per-walk treats and the XP formula's
- * flat per-walk base component. See
+ * walk (App.tsx's finishWalk) and a manually-logged walk (App.tsx's
+ * logMissedWalk): a manual log passes distanceMeters/cellsPainted as 0 (no
+ * real GPS trail), which awardWalkXp/recordWalkClosed already treat
+ * correctly — the walk still earns the same flat per-walk treats and the XP
+ * formula's flat per-walk base component. See
  * openspec/changes/walk-start-notifications/design.md's "existing
  * closed-walk reward logic needs extracting" decision.
  *
@@ -137,8 +152,10 @@ export interface AwardWalkRewardsDeps {
 export async function awardWalkRewards(
   walk: Walk,
   distanceMeters: number,
-  areaM2: number,
-  deps: AwardWalkRewardsDeps
+  cellsPainted: number,
+  deps: AwardWalkRewardsDeps,
+  /** This walk's own New Ground cell count (see utils/grid.ts's newGroundCells) — 0 for a manual log. See WalkRewardsCelebration.newGroundCellCount's doc comment. */
+  newGroundCellCount: number = 0
 ): Promise<AwardWalkRewardsResult> {
   const { denEconomyRepository, personalStatsRepository, walkRepository } = deps;
 
@@ -165,7 +182,7 @@ export async function awardWalkRewards(
   });
 
   const personalStats = await personalStatsRepository.getState();
-  const walkResult = recordWalkClosed(personalStats, walk);
+  const walkResult = recordWalkClosed(personalStats, walk, cellsPainted);
   const treatsResult = recordTreatsEarned(walkResult.stats, treatsAwarded);
   const newlyUnlockedAchievements = [...walkResult.newlyUnlocked, ...treatsResult.newlyUnlocked];
   await personalStatsRepository.saveState(treatsResult.stats);
@@ -173,7 +190,7 @@ export async function awardWalkRewards(
     await personalStatsRepository.unlockAchievements(newlyUnlockedAchievements, Date.now());
   }
 
-  const { state: leveledState, leveledUp } = awardWalkXp(rewarded, distanceMeters, areaM2, multiplier);
+  const { state: leveledState, leveledUp } = awardWalkXp(rewarded, distanceMeters, cellsPainted, multiplier);
   log('XP_AWARD', {
     walkId: walk.id,
     startSource: walk.startSource,
@@ -197,7 +214,7 @@ export async function awardWalkRewards(
     const nextLevel = leveledState.level + 1;
     const title = titleForLevel(nextLevel);
     if (title && leveledState.cliffhangerShownForLevel !== nextLevel) {
-      const trailingAvg = await trailingAverageXp(walkRepository, walk, distanceMeters, areaM2);
+      const trailingAvg = await trailingAverageXp(walkRepository, walk, distanceMeters, cellsPainted);
       if (shouldFireCliffhanger(leveledState.level, leveledState.xp, trailingAvg)) {
         cliffhangerTitle = title;
         finalState = { ...leveledState, cliffhangerShownForLevel: nextLevel };
@@ -214,8 +231,8 @@ export async function awardWalkRewards(
     denEconomyState: finalState,
     newlyUnlockedAchievements,
     celebration: {
-      areaM2,
-      hasTerritory: walk.territory !== undefined,
+      cellsPainted,
+      hasTerritory: cellsPainted > 0,
       treatsEarned: treatsAwarded,
       tease: getUpgradeTease(finalState),
       unlockedAchievements: newlyUnlockedAchievements,
@@ -223,6 +240,7 @@ export async function awardWalkRewards(
       oldTreatsPerWalk,
       newTreatsPerWalk,
       cliffhangerTitle,
+      newGroundCellCount,
     },
   };
 }

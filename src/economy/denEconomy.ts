@@ -13,6 +13,8 @@ export interface DenEconomyState {
   dogName: string | null;
   /** The next-level target the one-away cliffhanger ("One more walk and he's a...") has already been shown for, so it fires at most once per approaching milestone level. Null until the first cliffhanger fires. See economy/walkRewards.ts. */
   cliffhangerShownForLevel: number | null;
+  /** One-time guard for the Home Range migration backfill (openspec/changes/home-range/design.md's "Technical Split Addendum" migration section) — every previously saved tracked walk is replayed into the Home Range grid exactly once, on first load after this feature ships. False until that replay has run. See storage/homeRangeMigration.ts. */
+  homeRangeBackfillComplete: boolean;
 }
 
 export type UpgradeError = 'insufficient-treats' | 'max-level';
@@ -28,6 +30,7 @@ export function defaultDenEconomyState(now: number): DenEconomyState {
     level: 1,
     dogName: null,
     cliffhangerShownForLevel: null,
+    homeRangeBackfillComplete: false,
   };
 }
 
@@ -67,10 +70,10 @@ export interface AwardWalkXpResult {
 export function awardWalkXp(
   state: DenEconomyState,
   distanceMeters: number,
-  areaM2: number,
+  cellsPainted: number,
   baseXpMultiplier: number = 1
 ): AwardWalkXpResult {
-  const xpGained = xpAwardForWalk(distanceMeters, areaM2, baseXpMultiplier);
+  const xpGained = xpAwardForWalk(distanceMeters, cellsPainted, baseXpMultiplier);
   const nextXp = state.xp + xpGained;
   const nextLevel = levelForXp(nextXp);
   const leveledUp = nextLevel > state.level;

@@ -23,7 +23,13 @@ export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProp
   }, [repository]);
 
   const handleDelete = (walk: StoredWalk) => {
-    Alert.alert('Delete walk?', 'This cannot be undone.', [
+    // PLACEHOLDER COPY — a game-master question, not settled here (see
+    // openspec/changes/home-range/tasks.md task 2.5.1). Functional
+    // requirement only: this must not claim deleting the walk record undoes
+    // its effect on the Home Range map, since it no longer does (deleting a
+    // walk removes only its own record — the cells it painted stay in the
+    // separately-stored Home Range grid).
+    Alert.alert('Delete walk?', "This removes it from your history. It won't undo any ground already on the map.", [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -57,8 +63,12 @@ export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProp
             <View style={styles.row}>
               <Text style={styles.rowDate}>{new Date(item.startTime).toLocaleString()}</Text>
               <View style={styles.rowMeta}>
+                {/* item.closed now means "covered enough ground to qualify for a reward" (the
+                    25-painted-cell floor), not "formed a closed loop" — see
+                    openspec/changes/home-range/specs/walk-lifecycle/spec.md. Wording lifted
+                    directly from that spec delta's own language, not invented here. */}
                 <Text style={[styles.rowStatus, { color: item.closed ? COLORS.green : COLORS.muted }]}>
-                  {item.closed ? '✓ Closed' : 'Open'}
+                  {item.closed ? '✓ Rewarded' : 'Too short'}
                 </Text>
                 <Text style={styles.rowPoints}>{item.locations.length} pts</Text>
               </View>

@@ -1,4 +1,5 @@
 import { BALANCE, BuildingKey } from './balanceConfig';
+import { CELL_M } from '../utils/grid';
 
 const BUILDING_KEYS: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
 
@@ -125,11 +126,21 @@ export function softCapBonusPercent(level: number): number {
  * distance/area terms are never discounted, so a genuinely long walk always
  * earns its full distance/area XP regardless of how many walks happened
  * earlier that day.
+ *
+ * The area term reads `cellsPainted` (the walk's real Home Range footprint,
+ * see utils/grid.ts's paintedCells) rather than a shoelace polygon's
+ * enclosed area — see openspec/changes/home-range/design.md's "Consequence
+ * that must be resolved" section. `cellsPainted * CELL_M * CELL_M` is the
+ * walk's true painted ground in m², a more honest "ground covered" measure
+ * than a polygon that claimed block interiors the dog never entered. The
+ * areaCapM2 cap is unchanged in magnitude but now binds at 50 painted cells
+ * (~450m walked) — see BALANCE.xp.areaCapM2's doc comment.
  */
-export function xpAwardForWalk(distanceMeters: number, areaM2: number, baseMultiplier: number = 1): number {
+export function xpAwardForWalk(distanceMeters: number, cellsPainted: number, baseMultiplier: number = 1): number {
   const { perWalkBase, perKm, per1000m2, areaCapM2 } = BALANCE.xp;
   const distanceKm = distanceMeters / 1000;
-  const cappedAreaM2 = Math.min(areaM2, areaCapM2);
+  const paintedAreaM2 = cellsPainted * CELL_M * CELL_M;
+  const cappedAreaM2 = Math.min(paintedAreaM2, areaCapM2);
   return perWalkBase * baseMultiplier + perKm * distanceKm + per1000m2 * (cappedAreaM2 / 1000);
 }
 

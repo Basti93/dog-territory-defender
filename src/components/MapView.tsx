@@ -2,28 +2,40 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
-import { Location, TerritoryPolygon } from '../types';
+import { Location } from '../types';
 import { mapHTML } from '../web/mapHTML';
+import { buildHomeRangeRasterPayload, cellIdsToCoords } from '../web/homeRangeRaster';
 import { log } from '../utils/log';
-import { WalkRepository } from '../storage/WalkRepository';
+import { paintedCells } from '../utils/grid';
+import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 
 interface MapViewProps {
   locations: Location[];
-  territory?: TerritoryPolygon;
   currentLocation?: Location;
-  walkRepository?: WalkRepository;
-  territoryRefreshKey?: number;
+  homeRangeRepository?: HomeRangeRepository;
+  /** True while a walk is actively being tracked — drives the live-walk Home Range preview (tasks.md task 5.3): this walk's own painted cells are shown immediately, well before Finish Walk persists them. */
+  isTracking?: boolean;
+  /** Bump to force a re-fetch of the persisted Home Range (e.g. after Finish Walk paints new cells, or after returning from Walk History). */
+  homeRangeRefreshKey?: number;
 }
 
 export function MapView({
   locations,
-  territory,
   currentLocation,
-  walkRepository,
-  territoryRefreshKey,
+  homeRangeRepository,
+  isTracking = false,
+  homeRangeRefreshKey,
 }: MapViewProps) {
   const webViewRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
+  // The persisted Home Range, fetched once per refresh trigger (not on
+  // every GPS fix) — the live-walk overlay below is layered on top of this
+  // cached snapshot locally, so a walk in progress doesn't re-query storage
+  // every second. See design.md Decision 1's "incremental per-fix cost is
+  // ~1/750th of a full repaint" budget, which is what makes recomputing
+  // paintedCells(locations) on every fix affordable; re-fetching from
+  // storage on every fix would not be.
+  const persistedCellsRef = useRef<Cell[]>([]);
 
   const post = (type: string, payload: unknown) => {
     webViewRef.current?.postMessage(JSON.stringify({ type, payload }));
@@ -38,23 +50,41 @@ export function MapView({
     }
   };
 
+  const postHomeRange = (fitBounds: boolean) => {
+    const liveOverlay = isTracking && locations.length > 0 ? cellIdsToCoords(paintedCells(locations)) : [];
+    const raster = buildHomeRangeRasterPayload(persistedCellsRef.current, Date.now(), liveOverlay);
+    post('SHOW_HOME_RANGE', { raster, fitBounds });
+  };
+
   // Messages posted before the WebView finishes loading its page are silently
   // dropped (its message listener isn't registered yet) — every effect below
   // is gated on isReady, and re-runs once the WebView actually signals it's loaded.
+  //
+  // Gated on `!isTracking` (not `locations.length === 0`): a just-finished
+  // walk keeps its trail in `appState.walk` until "New Walk" is pressed
+  // (unchanged UX from before this change), but its newly-painted cells
+  // still need to appear in the persisted Home Range render right away —
+  // otherwise the player finishes a walk and the Bloom doesn't visibly
+  // reflect it until they reset. Only re-fits the map to the full Range
+  // when the walk is also fully cleared (`locations.length === 0`); right
+  // after finishing, the map stays where the player's trail is.
   useEffect(() => {
-    if (!isReady || locations.length !== 0) return;
+    if (!isReady || isTracking) return;
 
-    log('MAP_RESET');
-    post('RESET', {});
+    if (locations.length === 0) {
+      log('MAP_RESET');
+      post('RESET', {});
+    }
 
-    if (walkRepository) {
-      walkRepository.getWalks().then((walks) => {
-        const territories = walks.filter((w) => w.closed && w.territory).map((w) => w.territory!);
-        log('MAP_SHOW_ALL_TERRITORIES', { count: territories.length });
-        post('SHOW_ALL_TERRITORIES', { territories });
+    if (homeRangeRepository) {
+      homeRangeRepository.getCells().then((cells) => {
+        persistedCellsRef.current = cells;
+        log('MAP_SHOW_HOME_RANGE', { cellCount: cells.length });
+        postHomeRange(locations.length === 0);
       });
     }
-  }, [isReady, locations.length === 0, walkRepository, territoryRefreshKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, isTracking, locations.length === 0, homeRangeRepository, homeRangeRefreshKey]);
 
   useEffect(() => {
     if (!isReady || !currentLocation) return;
@@ -66,11 +96,15 @@ export function MapView({
     post('UPDATE_TRAIL', { locations });
   }, [isReady, locations]);
 
+  // Live-walk painting preview (tasks.md task 5.3): while tracking, overlay
+  // this walk's own painted cells (fully fresh) on top of the last-fetched
+  // persisted Range, without writing anything to storage yet — the DB write
+  // still only happens once, at Finish Walk (section 2.2's batch write).
   useEffect(() => {
-    if (!isReady || !territory) return;
-    log('MAP_SHOW_TERRITORY', { points: territory.coordinates.length, areaM2: territory.area });
-    post('SHOW_TERRITORY', { coordinates: territory.coordinates });
-  }, [isReady, territory]);
+    if (!isReady || !isTracking) return;
+    postHomeRange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, isTracking, locations]);
 
   return (
     <View style={{ flex: 1 }}>

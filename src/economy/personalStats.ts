@@ -1,5 +1,6 @@
 import { Walk } from '../types';
 import { cumulativeDistance } from '../utils/geometry';
+import { CELL_M } from '../utils/grid';
 import { DenEconomyState } from './denEconomy';
 
 export interface PersonalStatsState {
@@ -254,9 +255,27 @@ export function getAchievementProgress(
   return { current: atFive, target: 3, hint: `All 3 buildings at level 5 — you're at ${atFive}/3` };
 }
 
-export function recordWalkClosed(stats: PersonalStatsState, walk: Walk): RecordResult {
+/**
+ * `cellsPainted` is this walk's real Home Range footprint (see
+ * utils/grid.ts's paintedCells), 0 for a manual log — replaces the deleted
+ * `walk.territory?.area` polygon reading. See
+ * openspec/changes/home-range/design.md's "Consequence that must be
+ * resolved" section (written about the XP formula, applied here for the
+ * same reason: there is no polygon area left to read).
+ *
+ * NOTE (flagged, not resolved here): BIGGEST_TERRITORY_ACHIEVEMENTS'
+ * thresholds (50/1000/5000 m²) were tuned against the old polygon's
+ * continuous area. A cell's real footprint is 400 m² and the reward-eligible
+ * floor is 25 cells (10,000 m²), so every one of these thresholds is now
+ * cleared by any single qualifying walk — they've stopped meaning "your
+ * biggest walk" and become "did you have one real walk." This is a genuine
+ * balance consequence the introducing change's design.md never addressed
+ * (it only worked the XP formula's replacement, not personal-stats'); it
+ * needs its own numeric-threshold decision, not a silent implementer fix.
+ */
+export function recordWalkClosed(stats: PersonalStatsState, walk: Walk, cellsPainted: number): RecordResult {
   const distanceMeters = cumulativeDistance(walk.locations);
-  const areaM2 = walk.territory?.area ?? 0;
+  const areaM2 = cellsPainted * CELL_M * CELL_M;
 
   const beforeWalks = stats.totalWalksClosed;
   const beforeDistance = stats.lifetimeDistanceMeters;

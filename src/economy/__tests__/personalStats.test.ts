@@ -12,7 +12,6 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
       { latitude: 52.5, longitude: 13.4, timestamp: 0, accuracy: 5 },
       { latitude: 52.501, longitude: 13.4, timestamp: 1000, accuracy: 5 },
     ],
-    territory: { coordinates: [[52.5, 13.4]], area: 100 },
     ...overrides,
   };
 }
@@ -21,11 +20,11 @@ describe('recordWalkClosed', () => {
   it('unlocks first-steps exactly once, on the first walk only', () => {
     let stats = defaultPersonalStatsState();
 
-    const first = recordWalkClosed(stats, makeWalk());
+    const first = recordWalkClosed(stats, makeWalk(), 30);
     expect(first.newlyUnlocked).toContain('first-steps');
     stats = first.stats;
 
-    const second = recordWalkClosed(stats, makeWalk({ id: 'walk-2' }));
+    const second = recordWalkClosed(stats, makeWalk({ id: 'walk-2' }), 30);
     expect(second.newlyUnlocked).not.toContain('first-steps');
   });
 
@@ -34,28 +33,28 @@ describe('recordWalkClosed', () => {
     let lastResult: ReturnType<typeof recordWalkClosed> | null = null;
 
     for (let i = 0; i < 10; i++) {
-      lastResult = recordWalkClosed(stats, makeWalk({ id: `walk-${i}` }));
+      lastResult = recordWalkClosed(stats, makeWalk({ id: `walk-${i}` }), 30);
       stats = lastResult.stats;
     }
 
     expect(lastResult!.newlyUnlocked).toContain('paws-on-the-pavement');
 
-    const eleventh = recordWalkClosed(stats, makeWalk({ id: 'walk-11' }));
+    const eleventh = recordWalkClosed(stats, makeWalk({ id: 'walk-11' }), 30);
     expect(eleventh.newlyUnlocked).not.toContain('paws-on-the-pavement');
   });
 
-  it('unlocks ground-claimed the first time a walk territory reaches 50m2', () => {
+  it('unlocks ground-claimed the first time a walk paints enough cells to clear 50m2', () => {
     let stats = defaultPersonalStatsState();
 
-    const small = recordWalkClosed(stats, makeWalk({ territory: { coordinates: [], area: 10 } }));
+    const small = recordWalkClosed(stats, makeWalk(), 0); // 0 cells = 0 m² (e.g. a manual log)
     expect(small.newlyUnlocked).not.toContain('ground-claimed');
     stats = small.stats;
 
-    const big = recordWalkClosed(stats, makeWalk({ id: 'walk-2', territory: { coordinates: [], area: 60 } }));
+    const big = recordWalkClosed(stats, makeWalk({ id: 'walk-2' }), 1); // 1 cell = 400 m², clears the 50m² bar
     expect(big.newlyUnlocked).toContain('ground-claimed');
     stats = big.stats;
 
-    const again = recordWalkClosed(stats, makeWalk({ id: 'walk-3', territory: { coordinates: [], area: 60 } }));
+    const again = recordWalkClosed(stats, makeWalk({ id: 'walk-3' }), 1);
     expect(again.newlyUnlocked).not.toContain('ground-claimed');
   });
 
@@ -68,16 +67,16 @@ describe('recordWalkClosed', () => {
       ],
     });
 
-    const result = recordWalkClosed(stats, farWalk);
+    const result = recordWalkClosed(stats, farWalk, 30);
     expect(result.newlyUnlocked).toContain('long-way-round');
   });
 
   it('tracks lifetime distance and territory area cumulatively', () => {
     let stats = defaultPersonalStatsState();
-    stats = recordWalkClosed(stats, makeWalk({ territory: { coordinates: [], area: 100 } })).stats;
-    stats = recordWalkClosed(stats, makeWalk({ id: 'walk-2', territory: { coordinates: [], area: 200 } })).stats;
+    stats = recordWalkClosed(stats, makeWalk(), 1).stats; // 400 m²
+    stats = recordWalkClosed(stats, makeWalk({ id: 'walk-2' }), 2).stats; // 800 m²
 
-    expect(stats.lifetimeTerritoryAreaM2).toBe(300);
+    expect(stats.lifetimeTerritoryAreaM2).toBe(1200);
     expect(stats.totalWalksClosed).toBe(2);
   });
 });

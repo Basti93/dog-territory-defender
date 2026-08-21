@@ -1,3 +1,5 @@
+import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+
 export const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -16,6 +18,8 @@ export const mapHTML = `
 <body>
   <div id="map"></div>
   <script>
+${HOME_RANGE_RENDERER_SCRIPT}
+
     const map = L.map('map').setView([0, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
@@ -23,19 +27,17 @@ export const mapHTML = `
     }).addTo(map);
 
     let trailPolyline = null;
-    let territoryPolygon = null;
     let currentMarker = null;
     let hasCentered = false;
-    const allTerritoriesLayer = L.layerGroup().addTo(map);
+    // The Home Range layer group (Bloom fill + Range outline), replacing
+    // the old per-walk territory polygon layers entirely — see
+    // openspec/changes/home-range/design.md Decision 6.
+    let homeRangeLayerGroup = null;
 
     function reset() {
       if (trailPolyline) {
         map.removeLayer(trailPolyline);
         trailPolyline = null;
-      }
-      if (territoryPolygon) {
-        map.removeLayer(territoryPolygon);
-        territoryPolygon = null;
       }
       if (currentMarker) {
         map.removeLayer(currentMarker);
@@ -112,76 +114,35 @@ export const mapHTML = `
         }
       }
 
-      if (type === 'SHOW_ALL_TERRITORIES') {
-        const { territories } = payload;
+      // Replaces the old SHOW_ALL_TERRITORIES/SHOW_TERRITORY polygon
+      // messages — one bounded raster payload regardless of walk count (see
+      // design.md Decision 6). Also used for the live-walk painting
+      // preview (tasks.md task 5.3): MapView.tsx re-sends this with the
+      // in-progress walk's cells overlaid as fresh paint, well before
+      // they're persisted.
+      if (type === 'SHOW_HOME_RANGE') {
+        const { raster, fitBounds } = payload;
+        homeRangeLayerGroup = renderHomeRangeToMap(map, raster, homeRangeLayerGroup);
 
-        allTerritoriesLayer.clearLayers();
+        if (fitBounds && raster) {
+          const origin = raster.origin;
+          const south = origin[1] * HR_D_LAT_DEG;
+          const north = (origin[1] + raster.h) * HR_D_LAT_DEG;
+          const midRow = origin[1] + Math.floor(raster.h / 2);
+          const dLon = hrDLonForRow(midRow);
+          const west = origin[0] * dLon;
+          const east = (origin[0] + raster.w) * dLon;
+          setTimeout(() => {
+            map.invalidateSize();
+            map.fitBounds([[south, west], [north, east]].map((p) => L.latLng(p[0], p[1])), { maxZoom: 18, padding: [20, 20] });
+          }, 100);
+        }
 
-        const allLatLngs = [];
-        territories.forEach((t) => {
-          if (t.coordinates.length > 2) {
-            const latLngs = t.coordinates.map((coord) => [coord[0], coord[1]]);
-            L.polygon(latLngs, {
-              color: '#2ECC71',
-              weight: 2,
-              opacity: 0.8,
-              fillColor: '#2ECC71',
-              fillOpacity: 0.2
-            }).addTo(allTerritoriesLayer);
-            allLatLngs.push(...latLngs);
-          }
+        reportToRN('SHOW_HOME_RANGE_APPLIED', {
+          hasRaster: !!raster,
+          w: raster ? raster.w : 0,
+          h: raster ? raster.h : 0
         });
-
-        if (allLatLngs.length > 0) {
-          const group = new L.featureGroup([L.polyline(allLatLngs)]);
-          const bounds = group.getBounds();
-          setTimeout(() => {
-            map.invalidateSize();
-            map.fitBounds(bounds.pad(0.1), { maxZoom: 18 });
-            reportToRN('SHOW_ALL_TERRITORIES_APPLIED', {
-              territoryCount: territories.length,
-              polygonsDrawn: allTerritoriesLayer.getLayers().length,
-              totalPoints: allLatLngs.length,
-              bounds: bounds.toBBoxString(),
-              resultingZoom: map.getZoom(),
-              containerSize: [map.getSize().x, map.getSize().y],
-            });
-          }, 100);
-        } else {
-          reportToRN('SHOW_ALL_TERRITORIES_APPLIED', {
-            territoryCount: territories.length,
-            polygonsDrawn: allTerritoriesLayer.getLayers().length,
-            totalPoints: 0,
-          });
-        }
-      }
-
-      if (type === 'SHOW_TERRITORY') {
-        const { coordinates } = payload;
-
-        if (territoryPolygon) {
-          map.removeLayer(territoryPolygon);
-          territoryPolygon = null;
-        }
-
-        if (coordinates.length > 2) {
-          const latLngs = coordinates.map((coord) => [coord[0], coord[1]]);
-          territoryPolygon = L.polygon(latLngs, {
-            color: '#2ECC71',
-            weight: 2,
-            opacity: 0.8,
-            fillColor: '#2ECC71',
-            fillOpacity: 0.2
-          }).addTo(map);
-
-          // Fit map to territory bounds
-          const group = new L.featureGroup([L.polyline(latLngs)]);
-          const bounds = group.getBounds();
-          setTimeout(() => {
-            map.invalidateSize();
-            map.fitBounds(bounds.pad(0.1), { maxZoom: 18 });
-          }, 100);
-        }
       }
     }
 

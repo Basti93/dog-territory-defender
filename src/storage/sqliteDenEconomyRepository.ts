@@ -17,6 +17,7 @@ interface DenEconomyRow {
   level: number;
   dogName: string | null;
   cliffhangerShownForLevel: number | null;
+  homeRangeBackfillComplete: number;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -30,6 +31,7 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     level: row.level,
     dogName: row.dogName,
     cliffhangerShownForLevel: row.cliffhangerShownForLevel,
+    homeRangeBackfillComplete: row.homeRangeBackfillComplete === 1,
   };
 }
 
@@ -59,7 +61,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         xp REAL NOT NULL DEFAULT 0,
         level INTEGER NOT NULL DEFAULT 1,
         dogName TEXT,
-        cliffhangerShownForLevel INTEGER
+        cliffhangerShownForLevel INTEGER,
+        homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0
       );
     `);
     // Migration for rows created before xp/level existed (e.g. an already-installed app).
@@ -71,6 +74,11 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     // "cliffhanger not yet shown for any level").
     await addColumnIfMissing(db, 'den_economy', 'dogName TEXT');
     await addColumnIfMissing(db, 'den_economy', 'cliffhangerShownForLevel INTEGER');
+    // Migration for rows created before the Home Range backfill flag existed
+    // (openspec/changes/home-range) — defaults to 0 ("not backfilled yet"),
+    // which is exactly what an existing install needs: it has real walk
+    // history sitting unbackfilled until the app runs the migration once.
+    await addColumnIfMissing(db, 'den_economy', 'homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0');
     return db;
   });
 
@@ -103,8 +111,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
@@ -114,7 +122,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
            xp = excluded.xp,
            level = excluded.level,
            dogName = excluded.dogName,
-           cliffhangerShownForLevel = excluded.cliffhangerShownForLevel`,
+           cliffhangerShownForLevel = excluded.cliffhangerShownForLevel,
+           homeRangeBackfillComplete = excluded.homeRangeBackfillComplete`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
@@ -124,7 +133,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         state.xp,
         state.level,
         state.dogName,
-        state.cliffhangerShownForLevel
+        state.cliffhangerShownForLevel,
+        state.homeRangeBackfillComplete ? 1 : 0
       );
     },
   };

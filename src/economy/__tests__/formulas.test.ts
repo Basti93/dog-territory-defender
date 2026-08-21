@@ -161,21 +161,31 @@ describe('softCapBonusPercent', () => {
 });
 
 describe('xpAwardForWalk', () => {
-  it('matches the flat base plus distance and area terms for a typical walk', () => {
-    const xp = xpAwardForWalk(1500, 8000);
+  // 20 cells * CELL_M(20)^2 = 8000 m² — the same "typical walk" worked figure
+  // this test used before the polygon-area term was replaced with a painted-
+  // cell count (openspec/changes/home-range/design.md's "Consequence that
+  // must be resolved" section).
+  const CELLS_FOR_8000_M2 = 20;
+
+  it('matches the flat base plus distance and painted-ground terms for a typical walk', () => {
+    const xp = xpAwardForWalk(1500, CELLS_FOR_8000_M2);
     const expected = BALANCE.xp.perWalkBase + BALANCE.xp.perKm * 1.5 + BALANCE.xp.per1000m2 * 8;
     expect(xp).toBeCloseTo(expected, 5);
   });
 
-  it('caps the area contribution so an oversized polygon does not inflate XP further', () => {
-    const atCap = xpAwardForWalk(1000, BALANCE.xp.areaCapM2);
-    const wayOverCap = xpAwardForWalk(1000, BALANCE.xp.areaCapM2 * 10);
+  it('caps the painted-ground contribution so an oversized cell count does not inflate XP further', () => {
+    // areaCapM2 / (CELL_M^2) = 50 cells — the cap now binds at 50 painted
+    // cells (~450m walked), per formulas.ts's xpAwardForWalk doc comment.
+    const cellsAtCap = BALANCE.xp.areaCapM2 / 400;
+    const atCap = xpAwardForWalk(1000, cellsAtCap);
+    const wayOverCap = xpAwardForWalk(1000, cellsAtCap * 10);
     expect(wayOverCap).toBe(atCap);
   });
 
-  it('a huge or GPS-glitched polygon yields the same XP as the cap value', () => {
-    const capped = xpAwardForWalk(500, 5_000_000);
-    const atCap = xpAwardForWalk(500, BALANCE.xp.areaCapM2);
+  it('a huge or GPS-glitched painted-cell count yields the same XP as the cap value', () => {
+    const cellsAtCap = BALANCE.xp.areaCapM2 / 400;
+    const capped = xpAwardForWalk(500, 12_500); // 5,000,000 m² worth of cells
+    const atCap = xpAwardForWalk(500, cellsAtCap);
     expect(capped).toBe(atCap);
   });
 });

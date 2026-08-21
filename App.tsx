@@ -6,10 +6,13 @@ import * as Notifications from 'expo-notifications';
 
 import { Walk, AppState as AppStateType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, stopWatchingLocation, getInitialLocation } from './src/utils/gps';
-import { canCloseWalk, locationsToPolygon, cumulativeDistance, getDistance } from './src/utils/geometry';
+import { cumulativeDistance } from './src/utils/geometry';
+import { cellKey, MIN_CELLS_FOR_REWARD, newGroundCells, paintedCells, parseCellKey } from './src/utils/grid';
 import { isWithinManualLogWindow, MissedWalkTiming, startTimeForMissedWalk } from './src/utils/manualWalkLog';
 import { MapView } from './src/components/MapView';
 import { createSqliteWalkRepository } from './src/storage/sqliteWalkRepository';
+import { createSqliteHomeRangeRepository } from './src/storage/sqliteHomeRangeRepository';
+import { runHomeRangeMigrationIfNeeded } from './src/storage/homeRangeMigration';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { DenScreen } from './src/components/DenScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
@@ -28,6 +31,7 @@ import { DEN_OVERFLOW_NOTIFICATION_DATA } from './src/notifications/scheduler';
 import { log } from './src/utils/log';
 
 const walkRepository = createSqliteWalkRepository();
+const homeRangeRepository = createSqliteHomeRangeRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
 const personalStatsRepository = createSqlitePersonalStatsRepository();
 const notificationRepository = createSqliteNotificationRepository();
@@ -51,7 +55,7 @@ export default function App() {
   const [showDebugLog, setShowDebugLog] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLogMissedWalk, setShowLogMissedWalk] = useState(false);
-  const [territoryRefreshKey, setTerritoryRefreshKey] = useState(0);
+  const [homeRangeRefreshKey, setHomeRangeRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [dogName, setDogName] = useState<string | null>(null);
@@ -70,6 +74,16 @@ export default function App() {
         }));
       }
     })();
+  }, []);
+
+  // One-time backfill of every previously saved tracked walk into the Home
+  // Range grid — idempotent (guarded by DenEconomyState.homeRangeBackfillComplete),
+  // safe to call on every app load. See storage/homeRangeMigration.ts and
+  // openspec/changes/home-range/design.md's migration section.
+  useEffect(() => {
+    runHomeRangeMigrationIfNeeded({ walkRepository, homeRangeRepository, denEconomyRepository })
+      .then(() => setHomeRangeRefreshKey((k) => k + 1))
+      .catch((err) => log('HOME_RANGE_MIGRATION_ERROR', { error: String(err) }));
   }, []);
 
   // Recompute/reschedule the earned-trigger notification each time the app opens
@@ -187,58 +201,92 @@ export default function App() {
     });
   };
 
-  const stopWalk = async () => {
+  // Finish Walk — replaces the old Close Territory/End Walk pair (design.md's
+  // Technical Split Addendum: painting is decoupled from loop closure, so
+  // there's nothing left for a separate "closed loop" action to mean). Every
+  // finished tracked walk is saved and paints the Home Range regardless of
+  // its shape; reward eligibility gates on the 25-painted-cell floor
+  // (MIN_CELLS_FOR_REWARD) instead of the deleted canCloseWalk loop-closure
+  // check.
+  const finishWalk = async () => {
     await stopWatchingLocation();
 
-    if (appState.walk) {
-      const startEndDistance = getDistance(
-        appState.walk.locations[0].latitude,
-        appState.walk.locations[0].longitude,
-        appState.walk.locations[appState.walk.locations.length - 1].latitude,
-        appState.walk.locations[appState.walk.locations.length - 1].longitude
-      );
+    if (!appState.walk) {
+      setAppState((prev) => ({ ...prev, isTracking: false }));
+      return;
+    }
 
-      // Check if can close
-      const canClose = canCloseWalk(appState.walk.locations);
-      log('WALK_CLOSURE_CHECK', { points: appState.walk.locations.length, startEndDistance, canClose });
+    const walk = appState.walk;
+    const painted = paintedCells(walk.locations);
+    const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
 
-      if (canClose) {
-        const polygon = locationsToPolygon(appState.walk.locations);
-        const closedWalk: Walk = { ...appState.walk, closed: true, territory: polygon || undefined };
-        setAppState((prev) => ({
-          ...prev,
-          walk: prev.walk ? closedWalk : null,
-          isTracking: false,
-        }));
-        log('WALK_CLOSED', { id: closedWalk.id, areaM2: polygon?.area, points: closedWalk.locations.length });
+    // Snapshot the Range before painting this walk's cells, so New Ground
+    // detection compares against what existed *before* this walk (design.md
+    // Decision 5) — painting below would otherwise make every cell "already
+    // in the Range."
+    const rangeBefore = await homeRangeRepository.getCells();
+    const rangeBeforeSet = new Set(rangeBefore.map((c) => cellKey(c.ix, c.iy)));
+    const newGround = newGroundCells(painted, rangeBeforeSet);
 
-        walkRepository
-          .saveWalk(closedWalk)
-          .then(() => log('STORAGE_WALK_SAVED', { id: closedWalk.id, closed: true }))
-          .catch((err) => {
-            console.error('Failed to save walk:', err);
-            log('STORAGE_WALK_SAVE_ERROR', { id: closedWalk.id, error: String(err) });
-          });
-
-        const distanceMeters = cumulativeDistance(closedWalk.locations);
-        awardWalkRewards(closedWalk, distanceMeters, polygon?.area ?? 0, {
-          denEconomyRepository,
-          personalStatsRepository,
-          walkRepository,
+    const now = Date.now();
+    if (painted.size > 0) {
+      await homeRangeRepository.paintCells(
+        Array.from(painted).map((id) => {
+          const { ix, iy } = parseCellKey(id);
+          return { ix, iy, refreshedAt: now, tracked: true };
         })
-          .then((result) => {
-            setTreats(result.denEconomyState.treats);
-            setLevel(result.denEconomyState.level);
-            setCelebration(result.celebration);
-          })
-          .catch((err) => console.error('Failed to award walk treats:', err));
-      } else {
-        Alert.alert('Not closed', 'Walk does not form a closed loop (start and end within 20m)');
-        setAppState((prev) => ({
-          ...prev,
-          isTracking: false,
-        }));
-      }
+      );
+    }
+
+    const finishedWalk: Walk = { ...walk, closed: qualifies };
+
+    log('WALK_FINISHED', {
+      id: finishedWalk.id,
+      points: finishedWalk.locations.length,
+      cellsPainted: painted.size,
+      newGroundCells: newGround.size,
+      qualifies,
+    });
+
+    setAppState((prev) => ({
+      ...prev,
+      walk: finishedWalk,
+      isTracking: false,
+    }));
+
+    try {
+      await walkRepository.saveWalk(finishedWalk);
+      log('STORAGE_WALK_SAVED', { id: finishedWalk.id, closed: qualifies });
+    } catch (err) {
+      console.error('Failed to save walk:', err);
+      log('STORAGE_WALK_SAVE_ERROR', { id: finishedWalk.id, error: String(err) });
+    }
+
+    // Refresh the idle map's Home Range render now that new cells (if any)
+    // are persisted — mirrors the old territoryRefreshKey's job.
+    setHomeRangeRefreshKey((k) => k + 1);
+
+    if (!qualifies) {
+      // Mirrors today's "closes but doesn't qualify" non-outcome: the walk
+      // is saved and its cells are painted, but there's no reward and no
+      // celebration screen.
+      return;
+    }
+
+    const distanceMeters = cumulativeDistance(finishedWalk.locations);
+    try {
+      const result = await awardWalkRewards(
+        finishedWalk,
+        distanceMeters,
+        painted.size,
+        { denEconomyRepository, personalStatsRepository, walkRepository },
+        newGround.size
+      );
+      setTreats(result.denEconomyState.treats);
+      setLevel(result.denEconomyState.level);
+      setCelebration(result.celebration);
+    } catch (err) {
+      console.error('Failed to award walk treats:', err);
     }
   };
 
@@ -260,7 +308,6 @@ export default function App() {
       startTime,
       locations: [],
       closed: true,
-      territory: undefined,
       startSource: 'manual-log',
     };
 
@@ -285,26 +332,6 @@ export default function App() {
     }
   };
 
-  const endWalk = async () => {
-    await stopWatchingLocation();
-
-    if (appState.walk) {
-      log('WALK_ENDED_EARLY', { id: appState.walk.id, points: appState.walk.locations.length });
-      walkRepository
-        .saveWalk(appState.walk)
-        .then(() => log('STORAGE_WALK_SAVED', { id: appState.walk!.id, closed: false }))
-        .catch((err) => {
-          console.error('Failed to save walk:', err);
-          log('STORAGE_WALK_SAVE_ERROR', { id: appState.walk!.id, error: String(err) });
-        });
-    }
-
-    setAppState((prev) => ({
-      ...prev,
-      isTracking: false,
-    }));
-  };
-
   const resetWalk = async () => {
     await stopWatchingLocation();
     if (appState.walk) {
@@ -318,8 +345,6 @@ export default function App() {
   };
 
   const distance = appState.walk ? cumulativeDistance(appState.walk.locations) / 1000 : 0;
-
-  const canClose = appState.walk ? canCloseWalk(appState.walk.locations) : false;
 
   if (needsDogName) {
     return (
@@ -336,7 +361,7 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
           <CelebrationScreen
-            areaM2={celebration.areaM2}
+            cellsPainted={celebration.cellsPainted}
             hasTerritory={celebration.hasTerritory}
             treatsEarned={celebration.treatsEarned}
             tease={celebration.tease}
@@ -361,7 +386,7 @@ export default function App() {
             repository={walkRepository}
             onClose={() => {
               setShowHistory(false);
-              setTerritoryRefreshKey((k) => k + 1);
+              setHomeRangeRefreshKey((k) => k + 1);
             }}
           />
         </SafeAreaView>
@@ -429,10 +454,10 @@ export default function App() {
       <View style={styles.map}>
         <MapView
           locations={appState.walk?.locations || []}
-          territory={appState.walk?.territory}
           currentLocation={appState.walk?.locations[appState.walk.locations.length - 1]}
-          walkRepository={walkRepository}
-          territoryRefreshKey={territoryRefreshKey}
+          homeRangeRepository={homeRangeRepository}
+          isTracking={appState.isTracking}
+          homeRangeRefreshKey={homeRangeRefreshKey}
         />
       </View>
 
@@ -450,8 +475,6 @@ export default function App() {
 
           <Text style={[styles.statLabel, { marginLeft: 20 }]}>Level</Text>
           <Text style={styles.statValue}>{level !== null ? `${dogDisplayName(dogName)} — Level ${level}` : '…'}</Text>
-
-          {canClose && <Text style={[styles.statLabel, { marginLeft: 20, color: COLORS.green }]}>🔄 Can close!</Text>}
         </View>
 
         <View style={styles.buttons}>
@@ -481,13 +504,12 @@ export default function App() {
             </>
           ) : (
             <>
-              {canClose && (
-                <TouchableOpacity style={[styles.button, styles.stopButton]} onPress={stopWalk}>
-                  <Text style={styles.buttonText}>✓ Close Territory</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={[styles.button, styles.endButton]} onPress={endWalk}>
-                <Text style={styles.buttonText}>End Walk</Text>
+              {/* Two-way terminal action model (design.md's Technical Split
+                  Addendum): Finish Walk always saves the trail and paints
+                  it into the Home Range, regardless of shape — there's
+                  nothing left for a separate loop-closure gate to mean. */}
+              <TouchableOpacity style={[styles.button, styles.stopButton]} onPress={finishWalk}>
+                <Text style={styles.buttonText}>Finish Walk</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={resetWalk}>
                 <Text style={styles.buttonText}>Cancel</Text>
@@ -557,9 +579,6 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: COLORS.blue,
-  },
-  endButton: {
-    backgroundColor: COLORS.muted,
   },
   historyButton: {
     backgroundColor: COLORS.blue,

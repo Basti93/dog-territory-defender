@@ -7,25 +7,23 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
     startTime: overrides.startTime ?? 1000,
     locations: overrides.locations ?? [{ latitude: 52.5, longitude: 13.4, timestamp: 1000, accuracy: 5 }],
     closed: overrides.closed ?? false,
-    territory: overrides.territory,
     startSource: overrides.startSource ?? 'button',
   };
 }
 
 describe('WalkRepository contract', () => {
-  it('persists a closed walk and returns it', async () => {
+  it('persists a reward-eligible walk and returns it', async () => {
     const repo = createInMemoryWalkRepository();
-    const walk = makeWalk({ closed: true, territory: { coordinates: [[52.5, 13.4]], area: 100 } });
+    const walk = makeWalk({ closed: true });
 
     await repo.saveWalk(walk);
     const saved = await repo.getWalk(walk.id);
 
     expect(saved).not.toBeNull();
     expect(saved?.closed).toBe(true);
-    expect(saved?.territory).toEqual(walk.territory);
   });
 
-  it('persists an open (ended-early) walk marked as not closed', async () => {
+  it('persists a walk that did not cover enough ground to qualify for a reward, marked as not closed', async () => {
     const repo = createInMemoryWalkRepository();
     const walk = makeWalk({ closed: false });
 
@@ -34,7 +32,6 @@ describe('WalkRepository contract', () => {
 
     expect(saved).not.toBeNull();
     expect(saved?.closed).toBe(false);
-    expect(saved?.territory).toBeUndefined();
   });
 
   it('never saves a cancelled walk (no saveWalk call means nothing persisted)', async () => {
@@ -94,14 +91,11 @@ describe('WalkRepository contract', () => {
 
   it('round-trips startSource: manual-log for a manually-logged walk', async () => {
     const repo = createInMemoryWalkRepository();
-    await repo.saveWalk(
-      makeWalk({ id: 'manual', startSource: 'manual-log', locations: [], territory: undefined, closed: true })
-    );
+    await repo.saveWalk(makeWalk({ id: 'manual', startSource: 'manual-log', locations: [], closed: true }));
 
     const saved = await repo.getWalk('manual');
 
     expect(saved?.startSource).toBe('manual-log');
-    expect(saved?.territory).toBeUndefined();
     expect(saved?.locations).toEqual([]);
   });
 });

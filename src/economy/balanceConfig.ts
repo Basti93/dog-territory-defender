@@ -30,6 +30,17 @@ export const BALANCE = {
     perWalkBase: 20,
     perKm: 15,
     per1000m2: 5,
+    // Unchanged in magnitude by openspec/changes/home-range, but the input
+    // it caps changed: it now caps cellsPainted*400 (the walk's real Home
+    // Range footprint, see formulas.ts's xpAwardForWalk) rather than a
+    // shoelace polygon's enclosed area. 20000 / 400 = 50, so the cap now
+    // binds at 50 painted cells (~450m of walking) — tighter than the old
+    // polygon-area cap, which typically needed a much larger enclosed loop
+    // to reach 20000 m². Confirmed against real GPX replay: a genuine ~700m
+    // walk (testing/munich-route2.gpx) already paints 132 cells (52800 m²,
+    // over the cap); the two short synthetic test loops
+    // (munich-route.gpx/munich-route-3.gpx) stay well under both this cap
+    // and the 25-cell reward-eligibility floor.
     areaCapM2: 20000,
   },
   leveling: {

@@ -17,7 +17,6 @@ function makeTrackedWalk(overrides: Partial<Walk> = {}): Walk {
       { latitude: 52.5, longitude: 13.4, timestamp: 1000, accuracy: 5 },
       { latitude: 52.5005, longitude: 13.4005, timestamp: 2000, accuracy: 5 },
     ],
-    territory: { coordinates: [[52.5, 13.4], [52.5005, 13.4005], [52.501, 13.401]], area: 500 },
     ...overrides,
   };
 }
@@ -29,7 +28,6 @@ function makeManualWalk(overrides: Partial<Walk> = {}): Walk {
     closed: true,
     startSource: 'manual-log',
     locations: [],
-    territory: undefined,
     ...overrides,
   };
 }
@@ -60,7 +58,7 @@ describe('awardWalkRewards', () => {
     const deps = makeDeps();
     const walk = makeTrackedWalk();
 
-    const result = await awardWalkRewards(walk, 500, 500, deps);
+    const result = await awardWalkRewards(walk, 500, 30, deps);
 
     expect(result.celebration.treatsEarned).toBe(buddyPayout(1));
     expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + buddyPayout(1));
@@ -76,40 +74,40 @@ describe('awardWalkRewards', () => {
     expect(result.denEconomyState.treats).toBe(BALANCE.startingTreats + buddyPayout(1));
   });
 
-  it('awards the same base XP for a manual-log walk (distance/area terms are zero) as the base component of a tracked walk', async () => {
+  it('awards the same base XP for a manual-log walk (distance/cells terms are zero) as the base component of a tracked walk', async () => {
     const trackedDeps = makeDeps();
     const trackedResult = await awardWalkRewards(makeTrackedWalk(), 0, 0, trackedDeps);
 
     const manualDeps = makeDeps();
     const manualResult = await awardWalkRewards(makeManualWalk(), 0, 0, manualDeps);
 
-    // Both called with distanceMeters=0, areaM2=0 — should earn identical base XP.
+    // Both called with distanceMeters=0, cellsPainted=0 — should earn identical base XP.
     expect(manualResult.denEconomyState.xp).toBe(trackedResult.denEconomyState.xp);
     expect(manualResult.denEconomyState.xp).toBe(BALANCE.xp.perWalkBase);
   });
 
-  it('gives a manual-log walk more XP when a tracked walk has real distance/area', async () => {
+  it('gives a tracked walk more XP than the base when it has real distance/painted ground', async () => {
     const deps = makeDeps();
-    const trackedResult = await awardWalkRewards(makeTrackedWalk(), 500, 1000, deps);
+    const trackedResult = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps);
 
     expect(trackedResult.denEconomyState.xp).toBeGreaterThan(BALANCE.xp.perWalkBase);
   });
 
-  it('sets celebration.hasTerritory from the walk itself, not from the passed-in areaM2', async () => {
+  it('derives hasTerritory/cellsPainted directly from the cellsPainted argument', async () => {
     const trackedDeps = makeDeps();
-    const trackedResult = await awardWalkRewards(makeTrackedWalk(), 500, 500, trackedDeps);
+    const trackedResult = await awardWalkRewards(makeTrackedWalk(), 500, 30, trackedDeps);
     expect(trackedResult.celebration.hasTerritory).toBe(true);
-    expect(trackedResult.celebration.areaM2).toBe(500);
+    expect(trackedResult.celebration.cellsPainted).toBe(30);
 
     const manualDeps = makeDeps();
     const manualResult = await awardWalkRewards(makeManualWalk(), 0, 0, manualDeps);
     expect(manualResult.celebration.hasTerritory).toBe(false);
-    expect(manualResult.celebration.areaM2).toBe(0);
+    expect(manualResult.celebration.cellsPainted).toBe(0);
   });
 
   it('records the walk in personal stats identically for both a tracked and a manual-log walk', async () => {
     const trackedDeps = makeDeps();
-    await awardWalkRewards(makeTrackedWalk(), 500, 500, trackedDeps);
+    await awardWalkRewards(makeTrackedWalk(), 500, 30, trackedDeps);
     const trackedStats = await trackedDeps.personalStatsRepository.getState();
     expect(trackedStats.totalWalksClosed).toBe(1);
 
@@ -125,6 +123,23 @@ describe('awardWalkRewards', () => {
 
     expect(result.newlyUnlockedAchievements).toContain('first-steps');
     expect(result.celebration.unlockedAchievements).toContain('first-steps');
+  });
+
+  // openspec/changes/home-range/tasks.md task 6.1: New Ground detection must
+  // exist and be tested here, even though the celebration beat/copy for it
+  // is deferred to the sibling change home-range-rewards.
+  it('carries newGroundCellCount through to the celebration when the caller supplies it', async () => {
+    const deps = makeDeps();
+    const result = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps, 14);
+
+    expect(result.celebration.newGroundCellCount).toBe(14);
+  });
+
+  it('defaults newGroundCellCount to 0 when the caller omits it (e.g. a manual log, which can never discover)', async () => {
+    const deps = makeDeps();
+    const result = await awardWalkRewards(makeManualWalk(), 0, 0, deps);
+
+    expect(result.celebration.newGroundCellCount).toBe(0);
   });
 });
 
@@ -170,7 +185,7 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
     const deps = makeDeps(walkRepository);
 
     const walk = makeTrackedWalk({ id: 'long-4th-walk', startTime: DAY_ANCHOR + 999 * 1000 });
-    const result = await awardWalkRewards(walk, 1000, 2000, deps); // 1km, 2000m2
+    const result = await awardWalkRewards(walk, 1000, 5, deps); // 1km, 5 cells = 2000m2
 
     const expectedXp = BALANCE.xp.perWalkBase * 0.5 + BALANCE.xp.perKm * 1 + BALANCE.xp.per1000m2 * (2000 / 1000);
     expect(result.denEconomyState.xp).toBeCloseTo(expectedXp);
@@ -194,7 +209,7 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
 describe('awardWalkRewards — level-up celebration fields', () => {
   it('leaves oldTreatsPerWalk/newTreatsPerWalk/leveledUpTo null when no level-up occurs', async () => {
     const deps = makeDeps();
-    const result = await awardWalkRewards(makeTrackedWalk(), 500, 500, deps);
+    const result = await awardWalkRewards(makeTrackedWalk(), 500, 30, deps);
 
     expect(result.celebration.leveledUpTo).toBeNull();
     expect(result.celebration.oldTreatsPerWalk).toBeNull();

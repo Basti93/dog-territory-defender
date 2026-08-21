@@ -1,0 +1,197 @@
+// The Home Range grid — pure functions, no I/O. See
+// openspec/changes/home-range/design.md (Decisions 1, 2, 5) and its
+// home-range-prototype.mjs, which validated every formula below against
+// simulated GPS data before this file existed. Do not re-derive these
+// numbers from first principles; they're anchored to that script's real
+// output (design.md quotes it throughout).
+//
+// Two layers this module deliberately does NOT implement, because they
+// belong to the sibling change home-range-rewards: bloomMultiplier (the
+// Fresh Ground treats bonus) and any manual-log refresh logic. This module
+// only paints cells, ages them, and detects new ground.
+
+import { Location } from '../types';
+
+/** Grid cell edge length, metres. See design.md Decision 1. */
+export const CELL_M = 20;
+
+/** A walk paints every cell whose centre lies within this of the walked path. */
+export const PAINT_RADIUS_M = 25;
+
+/** Resample the path this finely (metres) before stamping cells, so a long
+ * GPS gap between fixes doesn't leave holes in the painted ribbon. */
+const SAMPLE_STEP_M = 5;
+
+/** Longer than this between consecutive GPS fixes = signal loss; don't paint through it. */
+export const MAX_SEGMENT_M = 60;
+
+/** Faster than this between consecutive GPS fixes = not a dog walk (bike/tram/car); don't paint it. */
+export const MAX_SEGMENT_SPEED_MS = 4.5;
+
+/** Freshness curve time constant, days. See design.md Decision 2. */
+const TAU_DAYS = 5;
+
+/** Wildness reaches its ceiling at this many days and stops changing after. */
+const D_MAX_DAYS = 18;
+
+const WILD_DENOM = 1 - Math.exp(-D_MAX_DAYS / TAU_DAYS);
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Dilated set-difference threshold for New Ground detection. See design.md Decision 5. */
+export const NEW_GROUND_MIN_CELLS = 12;
+
+/**
+ * The single qualifying-ground floor this change reuses for two purposes:
+ * suppressing a Fresh Ground bonus on a stub walk (home-range-rewards, not
+ * yet wired) and — per this change's Technical Split Addendum — gating base
+ * treats/XP eligibility on a live-tracked "Finish Walk", replacing the
+ * deleted canCloseWalk loop-closure gate. ~200m of real ground covered.
+ */
+export const MIN_CELLS_FOR_REWARD = 25;
+
+/** Divisor used to turn a raw Range cell count into the "Buddy knows N streets" headline stat. */
+const CELLS_PER_STREET = 11;
+
+const M_PER_DEG_LAT = 111320;
+const D_LAT = CELL_M / M_PER_DEG_LAT;
+
+export interface CellCoord {
+  ix: number;
+  iy: number;
+}
+
+/** Canonical cell identifier, `"${ix},${iy}"` — usable directly as a Set/Map key or storage row key. */
+export type CellId = string;
+
+export function cellKey(ix: number, iy: number): CellId {
+  return `${ix},${iy}`;
+}
+
+export function parseCellKey(id: CellId): CellCoord {
+  const [ix, iy] = id.split(',').map(Number);
+  return { ix, iy };
+}
+
+// dLon depends only on the row index, never on the point's own longitude, so
+// the cell mapping is a pure function with no drift and no ambiguity at cell
+// boundaries. See design.md Decision 1.
+function dLonForRow(iy: number): number {
+  return CELL_M / (M_PER_DEG_LAT * Math.cos((iy + 0.5) * D_LAT * (Math.PI / 180)));
+}
+
+export function cellForLocation(lat: number, lon: number): CellCoord {
+  const iy = Math.floor(lat / D_LAT);
+  const ix = Math.floor(lon / dLonForRow(iy));
+  return { ix, iy };
+}
+
+function cellCentre(ix: number, iy: number): [number, number] {
+  return [(iy + 0.5) * D_LAT, (ix + 0.5) * dLonForRow(iy)];
+}
+
+// Flat-earth metre distance — the same approximation home-range-prototype.mjs
+// validated every worked number in design.md against. Accurate enough at the
+// <100m scale this is ever called at, and much cheaper than haversine when
+// called ~25 times per resampled path point during painting.
+function metresBetween(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dy = (lat2 - lat1) * M_PER_DEG_LAT;
+  const dx = (lon2 - lon1) * M_PER_DEG_LAT * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Wildness — 0 (freshly refreshed) to 1 (fully wild) — as a function of
+ * elapsed time since a cell's `lastRefreshed` clock. Reaches its ceiling at
+ * exactly 18 days and never changes after that (design.md's "stops getting
+ * worse" rule, enforced by construction via the WILD_DENOM normalizer, not a
+ * tolerance check).
+ */
+export function wildness(lastRefreshedMs: number, nowMs: number): number {
+  const days = (nowMs - lastRefreshedMs) / MS_PER_DAY;
+  if (days <= 0) return 0;
+  if (days >= D_MAX_DAYS) return 1;
+  return (1 - Math.exp(-days / TAU_DAYS)) / WILD_DENOM;
+}
+
+/**
+ * The core paint operation: every cell whose centre lies within
+ * PAINT_RADIUS_M of `locations`' path, resampled every SAMPLE_STEP_M between
+ * consecutive fixes. Segments that fail either anti-exploit guard (too long
+ * a gap, or too fast to be a dog walk) are skipped entirely — nothing is
+ * painted through them. Called identically by a live walk's Finish Walk
+ * (section 4) and the one-time migration backfill (section 3); there is
+ * exactly one implementation.
+ */
+export function paintedCells(locations: Location[]): Set<CellId> {
+  const cells = new Set<CellId>();
+
+  const stamp = (lat: number, lon: number) => {
+    const { ix: cx, iy: cy } = cellForLocation(lat, lon);
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const ix = cx + dx;
+        const iy = cy + dy;
+        const [clat, clon] = cellCentre(ix, iy);
+        if (metresBetween(lat, lon, clat, clon) <= PAINT_RADIUS_M) {
+          cells.add(cellKey(ix, iy));
+        }
+      }
+    }
+  };
+
+  if (locations.length === 0) return cells;
+  stamp(locations[0].latitude, locations[0].longitude);
+
+  for (let i = 1; i < locations.length; i++) {
+    const a = locations[i - 1];
+    const b = locations[i];
+    const distance = metresBetween(a.latitude, a.longitude, b.latitude, b.longitude);
+    if (distance > MAX_SEGMENT_M) continue;
+
+    const dtSeconds = (b.timestamp - a.timestamp) / 1000;
+    if (dtSeconds > 0 && distance / dtSeconds > MAX_SEGMENT_SPEED_MS) continue;
+
+    const steps = Math.max(1, Math.ceil(distance / SAMPLE_STEP_M));
+    for (let s = 1; s <= steps; s++) {
+      const u = s / steps;
+      stamp(a.latitude + (b.latitude - a.latitude) * u, a.longitude + (b.longitude - a.longitude) * u);
+    }
+  }
+
+  return cells;
+}
+
+/**
+ * New Ground: cells this walk painted that are neither already in the Range
+ * nor 8-neighbour-adjacent to a Range cell. The dilation is what keeps
+ * ordinary GPS jitter on an already-known route from firing this on every
+ * pass — see design.md Decision 5's false-positive/true-positive sweep.
+ * Compare `.size` against NEW_GROUND_MIN_CELLS to decide whether New Ground
+ * actually fires.
+ */
+export function newGroundCells(painted: Set<CellId>, range: Set<CellId>): Set<CellId> {
+  const result = new Set<CellId>();
+  for (const c of painted) {
+    if (range.has(c)) continue;
+    const { ix, iy } = parseCellKey(c);
+    let touchesRange = false;
+    for (let dy = -1; dy <= 1 && !touchesRange; dy++) {
+      for (let dx = -1; dx <= 1 && !touchesRange; dx++) {
+        if (range.has(cellKey(ix + dx, iy + dy))) touchesRange = true;
+      }
+    }
+    if (!touchesRange) result.add(c);
+  }
+  return result;
+}
+
+/**
+ * "Buddy knows N streets" — a count of things, not a percentage of anything,
+ * so it has no denominator and implies no finish line. See design.md
+ * Decision 5. Computed here (this change owns the Range data); displayed by
+ * home-range-rewards.
+ */
+export function streetsKnown(rangeCellCount: number): number {
+  return rangeCellCount > 0 ? Math.max(1, Math.floor(rangeCellCount / CELLS_PER_STREET)) : 0;
+}

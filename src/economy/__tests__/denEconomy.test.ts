@@ -112,7 +112,7 @@ describe('upgradeBuilding', () => {
 describe('awardWalkXp', () => {
   it('accumulates xp across multiple walks without leveling up on a short walk', () => {
     const state = defaultDenEconomyState(NOW);
-    const { state: after, leveledUp } = awardWalkXp(state, 500, 1000);
+    const { state: after, leveledUp } = awardWalkXp(state, 500, 2); // 2 painted cells = 800 m²
 
     expect(after.xp).toBeGreaterThan(0);
     expect(after.level).toBe(1);
