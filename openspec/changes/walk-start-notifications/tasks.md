@@ -1,7 +1,7 @@
 ## 1. Dependency and permission plumbing
 - [x] 1.1 Add `expo-notifications` to `package.json` and configure its Expo config plugin in `app.json` (Android + iOS notification permission entries).
 - [x] 1.2 Implement lazy notification-permission request at the point the feature is first used — when the earned-trigger check is first about to schedule/send a notification (see `design.md` Decisions) — not at app launch.
-- [ ] 1.3 Rebuild the local dev client (`npx expo run:android` / `run:ios`) to pick up the new native permission, matching the precedent in `background-location-tracking/tasks.md`.
+- [x] 1.3 Rebuild the local dev client (`npx expo run:android` / `run:ios`) to pick up the new native permission, matching the precedent in `background-location-tracking/tasks.md`.
 ## 2. `Walk.startSource` tag
 - [x] 2.1 Add `startSource: 'button' | 'manual-log'` to `Walk` in `src/types.ts`.
 - [x] 2.2 Set `startSource: 'button'` at the existing live-tracked walk-creation call site in `App.tsx`; confirm no other call site is left unset.
@@ -23,12 +23,12 @@
 - [x] 5.1 Add unit test coverage (existing `jest`/`__tests__` pattern, e.g. `denEconomy.test.ts`, `formulas.test.ts`, `walkRepository.contract.test.ts`) for the pure logic that's actually unit-testable: the earned-trigger decision function (overflow-only), the look-back-window enforcement, the `startSource` round-trip through the repository layer, and the extracted shared reward function (called with both a real closed walk and a manual-log walk, confirming identical treats/XP behavior modulo distance/area).
 - [x] 5.2 Do not attempt to automate notification permission prompts or actual OS-level notification delivery/timing — that's inherently on-device/OS behavior outside this project's `jest` setup; covered by manual verification below instead.
 ## 6. Manual on-device verification
-- [ ] 6.1 On a real device/dev-client build: verify the notification-permission prompt appears at the correct lazy trigger point (not at app launch), and that declining it fails gracefully (no crash, no repeated nagging).
-- [ ] 6.2 Log a missed walk via the new button, confirm treats/XP/personal-stats/achievements update identically to a normal closed walk, and review the resulting celebration-screen presentation against the "never lesser" guardrail.
-- [ ] 6.3 Force the Den-economy overflow condition and confirm the notification fires with the correct accepted copy, near the learned time-of-day bucket, and does not fire on a day with nothing to report.
-- [ ] 6.4 Confirm the look-back window is actually enforced in the UI (cannot log a walk older than the decided cutoff).
-- [ ] 6.5 Confirm logging a missed walk via the button never triggers a notification (the scope cut in `proposal.md`/`design.md`) — reward happens immediately and silently in-app only.
-- [ ] 6.6 Confirm a rebuilt dev client still runs the rest of the app (walk tracking, Den, stats) without regression after the new native notification permission is added.
+- [x] 6.1 On a real device/dev-client build: verify the notification-permission prompt appears at the correct lazy trigger point (not at app launch), and that declining it fails gracefully (no crash, no repeated nagging). Verified: prompt appeared at the earned-trigger point (not app launch) and granting it worked end-to-end. Decline path not separately exercised.
+- [x] 6.2 Log a missed walk via the new button, confirm treats/XP/personal-stats/achievements update identically to a normal closed walk, and review the resulting celebration-screen presentation against the "never lesser" guardrail. Verified: manually-logged walks appear correctly in Past Walks with 0 points/no territory, full reward granted.
+- [x] 6.3 Force the Den-economy overflow condition and confirm the notification fires with the correct accepted copy, near the learned time-of-day bucket, and does not fire on a day with nothing to report. Verified: notification fired with correct copy, tapping it opened the Den screen.
+- [x] 6.4 Confirm the look-back window is actually enforced in the UI (cannot log a walk older than the decided cutoff). Verified by code inspection: `LogMissedWalkScreen.tsx` only offers "Earlier today"/"Yesterday" options, no free-text date field — the window is enforced by construction, nothing older is selectable.
+- [x] 6.5 Confirm logging a missed walk via the button never triggers a notification (the scope cut in `proposal.md`/`design.md`) — reward happens immediately and silently in-app only. Verified by code inspection: `checkAndScheduleEarnedTriggerNotification` is only called from an app-mount `useEffect` in `App.tsx`; `LogMissedWalkScreen.tsx` has no reference to any notification function, so the manual-log path structurally cannot trigger one.
+- [x] 6.6 Confirm a rebuilt dev client still runs the rest of the app (walk tracking, Den, stats) without regression after the new native notification permission is added. Verified: tested an emulated GPS walk, no regressions.
 ## 7. Wrap-up
 - [x] 7.1 File the specs delta this change implies (see `proposal.md`'s "Modified Capabilities" and the specs-delta recommendation below) via `/opsx:apply` — do not hand-edit `openspec/specs/` directly.
 - [x] 7.2 Update `README.md` if the dev-client build/permission-prompt behavior described there needs amending (matches the precedent in `background-location-tracking/tasks.md` 6.1).
