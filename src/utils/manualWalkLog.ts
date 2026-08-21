@@ -12,7 +12,8 @@ export function startTimeForMissedWalk(timing: MissedWalkTiming, now: number = D
   return timing === 'today' ? now : now - ONE_DAY_MS;
 }
 
-function calendarDayKey(timestamp: number): string {
+/** Local calendar-day key (year-month-day), used anywhere "which day did this happen on" needs to be compared — e.g. the look-back window below and the per-day reward multiplier in economy/walkRewards.ts. */
+export function calendarDayKey(timestamp: number): string {
   const d = new Date(timestamp);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }

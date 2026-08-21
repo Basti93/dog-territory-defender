@@ -18,11 +18,18 @@ export function softCapBonusPercent(level: number): number {
   return maxBonusPercent * (1 - Math.exp(-level / curveRate));
 }
 
-export function xpAwardForWalk(distanceMeters: number, areaM2: number): number {
+/**
+ * baseMultiplier scales only the flat perWalkBase term (used by the per-day
+ * diminishing-returns multiplier in economy/walkRewards.ts) — the
+ * distance/area terms are never discounted, so a genuinely long walk always
+ * earns its full distance/area XP regardless of how many walks happened
+ * earlier that day.
+ */
+export function xpAwardForWalk(distanceMeters: number, areaM2: number, baseMultiplier: number = 1): number {
   const { perWalkBase, perKm, per1000m2, areaCapM2 } = BALANCE.xp;
   const distanceKm = distanceMeters / 1000;
   const cappedAreaM2 = Math.min(areaM2, areaCapM2);
-  return perWalkBase + perKm * distanceKm + per1000m2 * (cappedAreaM2 / 1000);
+  return perWalkBase * baseMultiplier + perKm * distanceKm + per1000m2 * (cappedAreaM2 / 1000);
 }
 
 export function xpForNextLevel(level: number): number {

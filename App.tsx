@@ -196,7 +196,11 @@ export default function App() {
           });
 
         const distanceMeters = cumulativeDistance(closedWalk.locations);
-        awardWalkRewards(closedWalk, distanceMeters, polygon?.area ?? 0, { denEconomyRepository, personalStatsRepository })
+        awardWalkRewards(closedWalk, distanceMeters, polygon?.area ?? 0, {
+          denEconomyRepository,
+          personalStatsRepository,
+          walkRepository,
+        })
           .then((result) => {
             setTreats(result.denEconomyState.treats);
             setLevel(result.denEconomyState.level);
@@ -241,7 +245,11 @@ export default function App() {
       await walkRepository.saveWalk(manualWalk);
       log('STORAGE_WALK_SAVED', { id: manualWalk.id, closed: true, startSource: 'manual-log' });
 
-      const result = await awardWalkRewards(manualWalk, 0, 0, { denEconomyRepository, personalStatsRepository });
+      const result = await awardWalkRewards(manualWalk, 0, 0, {
+        denEconomyRepository,
+        personalStatsRepository,
+        walkRepository,
+      });
       setTreats(result.denEconomyState.treats);
       setLevel(result.denEconomyState.level);
       setShowLogMissedWalk(false);

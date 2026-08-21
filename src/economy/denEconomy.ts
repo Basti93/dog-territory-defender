@@ -30,8 +30,14 @@ export interface AwardWalkXpResult {
   leveledUp: boolean;
 }
 
-export function awardWalkXp(state: DenEconomyState, distanceMeters: number, areaM2: number): AwardWalkXpResult {
-  const xpGained = xpAwardForWalk(distanceMeters, areaM2);
+/** baseXpMultiplier is the per-day diminishing-returns multiplier — see economy/walkRewards.ts. It scales only the flat XP base, not the distance/area terms. */
+export function awardWalkXp(
+  state: DenEconomyState,
+  distanceMeters: number,
+  areaM2: number,
+  baseXpMultiplier: number = 1
+): AwardWalkXpResult {
+  const xpGained = xpAwardForWalk(distanceMeters, areaM2, baseXpMultiplier);
   const nextXp = state.xp + xpGained;
   const nextLevel = levelForXp(nextXp);
   const leveledUp = nextLevel > state.level;
@@ -62,11 +68,13 @@ export function applyPassiveAccrual(state: DenEconomyState, now: number): DenEco
   };
 }
 
-export function awardWalkTreats(state: DenEconomyState): DenEconomyState {
+/** multiplier is the per-day diminishing-returns multiplier — see economy/walkRewards.ts. */
+export function awardWalkTreats(state: DenEconomyState, multiplier: number = 1): DenEconomyState {
   const cap = storageCap(state.doghouseLevel);
+  const treatsAwarded = Math.round(BALANCE.treatsPerWalk * multiplier);
   return {
     ...state,
-    treats: Math.min(cap, state.treats + BALANCE.treatsPerWalk),
+    treats: Math.min(cap, state.treats + treatsAwarded),
   };
 }
 

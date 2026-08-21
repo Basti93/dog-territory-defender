@@ -1,6 +1,8 @@
 import { Walk } from '../../types';
 import { createInMemoryDenEconomyRepository } from '../../storage/inMemoryDenEconomyRepository';
 import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPersonalStatsRepository';
+import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
+import { WalkRepository } from '../../storage/WalkRepository';
 import { BALANCE } from '../balanceConfig';
 import { awardWalkRewards } from '../walkRewards';
 
@@ -31,11 +33,25 @@ function makeManualWalk(overrides: Partial<Walk> = {}): Walk {
   };
 }
 
-function makeDeps() {
+function makeDeps(walkRepository: WalkRepository = createInMemoryWalkRepository()) {
   return {
     denEconomyRepository: createInMemoryDenEconomyRepository(),
     personalStatsRepository: createInMemoryPersonalStatsRepository(),
+    walkRepository,
   };
+}
+
+// Noon on a fixed day, well away from any local-timezone midnight boundary,
+// so offsetting by a few seconds never accidentally crosses into the next
+// calendar day.
+const DAY_ANCHOR = new Date(2024, 0, 15, 12, 0, 0).getTime();
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Seeds `count` already-closed, already-rewarded walks on the given day, so the next awardWalkRewards call sees them as "prior walks today". */
+async function seedClosedWalksOnDay(walkRepository: WalkRepository, count: number, dayAnchor: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await walkRepository.saveWalk(makeManualWalk({ id: `seed-${dayAnchor}-${i}`, startTime: dayAnchor + i * 1000 }));
+  }
 }
 
 describe('awardWalkRewards', () => {
@@ -108,5 +124,66 @@ describe('awardWalkRewards', () => {
 
     expect(result.newlyUnlockedAchievements).toContain('first-steps');
     expect(result.celebration.unlockedAchievements).toContain('first-steps');
+  });
+});
+
+// Exploit mitigation: openspec/changes/virtual-dog-companion/design.md's
+// "Exploits" table + "Degenerate-exploit mitigations" decision.
+describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
+  it.each([0, 1, 2])('pays full treats and full XP base when there are %i prior walks today (i.e. this is walk 1, 2, or 3 of the day)', async (priorCount) => {
+    const walkRepository = createInMemoryWalkRepository();
+    await seedClosedWalksOnDay(walkRepository, priorCount, DAY_ANCHOR);
+    const deps = makeDeps(walkRepository);
+
+    const walk = makeManualWalk({ id: 'today-walk', startTime: DAY_ANCHOR + 999 * 1000 });
+    const result = await awardWalkRewards(walk, 0, 0, deps);
+
+    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
+    expect(result.denEconomyState.xp).toBe(BALANCE.xp.perWalkBase);
+  });
+
+  it('discounts the 4th walk of the day to 0.5x, the 5th to 0.25x, and the 6th+ to 0.1x — treats and XP flat base only', async () => {
+    const expectedMultipliers = [1, 1, 1, 0.5, 0.25, 0.1, 0.1]; // walks 1..7 of the day
+    const walkRepository = createInMemoryWalkRepository();
+
+    for (let walkNumber = 1; walkNumber <= expectedMultipliers.length; walkNumber++) {
+      // Fresh Den-economy state per walk (xp starts at 0), so the resulting
+      // xp/treats after one award *is* that single walk's payout.
+      const deps = makeDeps(walkRepository);
+      const walk = makeManualWalk({ id: `walk-${walkNumber}`, startTime: DAY_ANCHOR + walkNumber * 1000 });
+
+      const result = await awardWalkRewards(walk, 0, 0, deps);
+
+      const multiplier = expectedMultipliers[walkNumber - 1];
+      expect(result.celebration.treatsEarned).toBe(Math.round(BALANCE.treatsPerWalk * multiplier));
+      expect(result.denEconomyState.xp).toBeCloseTo(BALANCE.xp.perWalkBase * multiplier);
+
+      // Persist this walk so the next iteration sees it as a "prior walk today".
+      await walkRepository.saveWalk(walk);
+    }
+  });
+
+  it('never discounts the distance/area XP terms, only the flat base — a genuinely long 4th walk still earns its full distance/area XP', async () => {
+    const walkRepository = createInMemoryWalkRepository();
+    await seedClosedWalksOnDay(walkRepository, 3, DAY_ANCHOR); // this will be the 4th walk of the day
+    const deps = makeDeps(walkRepository);
+
+    const walk = makeTrackedWalk({ id: 'long-4th-walk', startTime: DAY_ANCHOR + 999 * 1000 });
+    const result = await awardWalkRewards(walk, 1000, 2000, deps); // 1km, 2000m2
+
+    const expectedXp = BALANCE.xp.perWalkBase * 0.5 + BALANCE.xp.perKm * 1 + BALANCE.xp.per1000m2 * (2000 / 1000);
+    expect(result.denEconomyState.xp).toBeCloseTo(expectedXp);
+  });
+
+  it('resets the walk count on a new calendar day — a walk on the next day pays full value even after 5 walks the day before', async () => {
+    const walkRepository = createInMemoryWalkRepository();
+    await seedClosedWalksOnDay(walkRepository, 5, DAY_ANCHOR);
+    const deps = makeDeps(walkRepository);
+
+    const nextDayWalk = makeManualWalk({ id: 'next-day-walk', startTime: DAY_ANCHOR + ONE_DAY_MS });
+    const result = await awardWalkRewards(nextDayWalk, 0, 0, deps);
+
+    expect(result.celebration.treatsEarned).toBe(BALANCE.treatsPerWalk);
+    expect(result.denEconomyState.xp).toBe(BALANCE.xp.perWalkBase);
   });
 });
