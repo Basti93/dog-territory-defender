@@ -6,3 +6,7 @@ The system SHALL implement the core game loop that tests the hypothesis that cla
 #### Scenario: Phase 1 acceptance
 - **WHEN** 5 dog owners walk twice a day for 5 days
 - **THEN** at least 4 of the 5 testers SHALL complete 8 or more walk sessions and self-report wanting to walk again
+
+#### Scenario: Earned-trigger notification distinguished from Phase 2 recap
+- **WHEN** an earned-trigger notification fires because an existing Den-economy overflow event has not yet been surfaced to the player
+- **THEN** it SHALL be treated as Phase 1 core-loop capture, not the Phase 2 evening-recap/streak notification, and SHALL NOT fire on a bare clock schedule with nothing behind it

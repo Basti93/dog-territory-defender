@@ -67,6 +67,14 @@ The invariant that keeps this true forever, and which must survive into implemen
 
 > **No bonus percentage may ever be a function of Buddy's Level or of a player's treat balance.** Every capped bonus is a function of building level, Pack, or badges only.
 
+### This deliberately reopens `den-level-xp`'s "zero percentage gameplay impact" Non-Goal — logged, not silently crossed
+
+`den-level-xp/design.md` (Context, above) chose, as a matter of Phase 1 philosophy and not just cap arithmetic, that "Level was deliberately given zero percentage-based gameplay impact in Phase 1: this is a progress signal, not a power source" — and its spec delta's Requirement "Phase 1 Level Payoff Is Non-Percentage and Visually Secondary" says leveling up "SHALL NOT grant any percentage bonus to treats, XP, collectibles, or any other rate, reserving percentage-based Den Level bonuses for the Phase 4 buildings gated by it." `buddyPayout(L)` is exactly the kind of Level-derived rate that Requirement was written to forbid in Phase 1, on its literal text — the "0% of the anti-snowball power cap" argument above answers a *different* question (is this a capped power source) than the one `den-level-xp` actually gated (does Level affect any rate at all, capped or not).
+
+This is a conscious override of that Non-Goal, not an oversight, following the same precedent `den-level-xp` itself set when it reopened `post-walk-celebration`'s "No dog XP/level display" deferral: named explicitly here rather than routed around. The distinction that makes it defensible rather than a quiet reversal: `den-level-xp` reserved *percentage-based* Level bonuses for Phase 4 specifically to keep Level out of the anti-snowball power budget — and `buddyPayout(L)` still keeps Level at 0% of that budget, by being income (a currency-earn-rate with no bonus percentage anywhere near it) rather than a bonus percentage applied to a capped quantity. The letter of `den-level-xp`'s Requirement needs updating (see the specs delta in this change), but the spirit it was actually protecting — Level never buying capped power early — holds.
+
+The `game-phases/spec.md` Phase 1 paragraph (`den-level-xp`'s pending delta, not yet merged) that describes Level as "standalone, non-percentage... tracking" needs the same update, folded into this change's specs delta once `den-level-xp` is archived — see `tasks.md`'s sequencing note.
+
 ### Per-walk power budget ledger — sums to exactly +30 %
 
 | Source | Budget | Phase |
