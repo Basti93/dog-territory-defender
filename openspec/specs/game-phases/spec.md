@@ -14,11 +14,15 @@ The system SHALL implement a walking skeleton that tests the hypothesis that GPS
 - **THEN** GPS drift SHALL be under 10 meters in an urban canyon, battery drain SHALL be under 5% per 30 minutes, and testers SHALL report the replay feels accurate
 
 ### Requirement: Phase 1 — Core Game Loop
-The system SHALL implement the core game loop that tests the hypothesis that claiming territory plus earning passive treats creates a "want to walk again tomorrow" feeling. Build scope: closed-perimeter detection producing a polygon territory shown on the map; treats earned per walk plus passive treat generation per hour (the cookie-clicker hook); a Den screen with 3 buildable upgrades (Doghouse, Treat Bakery, Sniff Garden), each giving a percentage bonus; a visible "next upgrade" always teased; and personal lifetime stats plus non-social, non-bonus one-off achievements (see `personal-stats`) as a solo-friendly highscore to chase, ahead of Phase 3's leaderboards and Phase 2's streaks.
+The system SHALL implement the core game loop that tests the hypothesis that claiming territory plus earning passive treats creates a "want to walk again tomorrow" feeling. Build scope: closed-perimeter detection producing a polygon territory shown on the map; treats earned per walk plus passive treat generation per hour (the cookie-clicker hook); a Den screen with 3 buildable upgrades (Doghouse, Treat Bakery, Sniff Garden), each giving a percentage bonus; a visible "next upgrade" always teased; personal lifetime stats plus non-social, non-bonus one-off achievements (see `personal-stats`) as a solo-friendly highscore to chase, ahead of Phase 3's leaderboards and Phase 2's streaks; and an earned-trigger notification that surfaces an already-true, unclaimed core-loop event (e.g. a Den-economy treat/build overflow) — never a clock-fired reminder invented on a schedule, which remains Phase 2's evening-recap notification, not Phase 1's.
 
 #### Scenario: Phase 1 acceptance
 - **WHEN** 5 dog owners walk twice a day for 5 days
 - **THEN** at least 4 of the 5 testers SHALL complete 8 or more walk sessions and self-report wanting to walk again
+
+#### Scenario: Earned-trigger notification distinguished from Phase 2 recap
+- **WHEN** an earned-trigger notification fires because an existing Den-economy overflow event has not yet been surfaced to the player
+- **THEN** it SHALL be treated as Phase 1 core-loop capture, not the Phase 2 evening-recap/streak notification, and SHALL NOT fire on a bare clock schedule with nothing behind it
 
 ### Requirement: Phase 2 — Repetition Reward Loop
 The system SHALL implement the repetition reward loop that tests the hypothesis that same-route walks become more rewarding over time, not less, through scent layering and seasonal variation. Build scope: scent strength (territory deepens visually with repeat walks); 7-day streak rewards; time-of-day and seasonal collectible variations (morning vs. evening, spring blooms); an evening recap notification ("Here's what happened in your territory today"); and background passive accumulation that continues on rest days with diminishing returns.
