@@ -22,7 +22,10 @@ var HR_CELL_M = 20;
 var HR_D_LAT_DEG = HR_CELL_M / 111320;
 var HR_BLUR_SIGMA_CELLS = 1;
 var HR_CONTOUR_THRESHOLD = 0.5;
-var HR_FILL_ALPHA = 0.28;
+// design.md Decision 2 specified 0.28 as a flat floor alpha; real on-device
+// testing (rendering-spike.html) found that too faint to read against map
+// tiles, so it's raised here — deviation logged, not silently changed.
+var HR_FILL_ALPHA = 0.6;
 var HR_OUTSIDE_SENTINEL = 255;
 var HR_FRESH_HEX = '#2ECC71';
 var HR_WILD_HEX = '#DCE8BE';

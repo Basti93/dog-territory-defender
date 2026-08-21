@@ -153,10 +153,12 @@ Front-loaded exponential, because that is where the eye is: the change from "wal
 The floor is *not* implemented as a minimum on `wildness`. Wildness runs the full 0→1 range and drives **hue and saturation only**. Presence on the map is a separate constant:
 
 ```
-fillAlpha = 0.28   for every Range cell, at every wildness
+fillAlpha = 0.6   for every Range cell, at every wildness   (raised from an original 0.28 — see below)
 ```
 
-So a cell walked once, years ago, is exactly as *present* on the map as one walked this morning — just a different colour. Nothing ever fades toward the basemap, and a wild patch reads as a different kind of place rather than as a weaker version of a green one, which is what rule (c)'s "inviting, not sadder" needs. (The `visits`-driven alpha ramp — more-walked cells rendering slightly denser — ships in this change per FLAG 1's resolution below, not deferred.)
+So a cell walked once, years ago, is exactly as *present* on the map as one walked this morning — just a different colour. Nothing ever fades toward the basemap, and a wild patch reads as a different kind of place rather than as a weaker version of a green one, which is what rule (c)'s "inviting, not sadder" needs. (The `visits`-driven ghost-trail brightening — well-worn cells nudging toward a more saturated fresh green, on top of their own wildness colour — ships in this change per FLAG 1's resolution below, not deferred; implemented as a colour-mix on top of the fill, not as a separate alpha channel.)
+
+**Numeric revision, logged per project convention:** the original 0.28 constant was found too faint to read against real map tiles during on-device rendering-spike testing — raised to 0.6. This is a rendering-legibility fix, not a reconsideration of rule (b) itself (alpha is still flat across wildness, still never fades toward the basemap); the floor concept holds, only the value changed.
 
 ### Two rendering constraints the curve imposes
 
