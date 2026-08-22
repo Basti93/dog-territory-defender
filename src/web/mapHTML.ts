@@ -13,6 +13,8 @@ export const mapHTML = `
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
     .current-position { width: 12px; height: 12px; background: #3498DB; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(52, 152, 219, 0.6); }
+    /* openspec/changes/somewhere-wild — same warm accent token as the second (wild-ground) contour. */
+    .wild-spot-marker { width: 16px; height: 16px; background: #F39C12; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(243, 156, 18, 0.6); }
   </style>
 </head>
 <body>
@@ -33,6 +35,11 @@ ${HOME_RANGE_RENDERER_SCRIPT}
     // the old per-walk territory polygon layers entirely — see
     // openspec/changes/home-range/design.md Decision 6.
     let homeRangeLayerGroup = null;
+    // The "Somewhere Wild" marker (openspec/changes/somewhere-wild) — the
+    // single most-worth-visiting wild cluster, or a recent New Ground
+    // discovery. Mirrors currentMarker's add/remove pattern; only ever one
+    // at a time, matching the card's own "one spot" rule.
+    let wildSpotMarker = null;
 
     function reset() {
       if (trailPolyline) {
@@ -143,6 +150,32 @@ ${HOME_RANGE_RENDERER_SCRIPT}
           w: raster ? raster.w : 0,
           h: raster ? raster.h : 0
         });
+      }
+
+      // openspec/changes/somewhere-wild — mirrors SHOW_HOME_RANGE's own
+      // shape: a small, typed bridge message, not a new mechanism. payload
+      // is { latitude, longitude } or null to clear (neither the wild
+      // cluster nor a recent New Ground discovery currently qualifies).
+      if (type === 'SHOW_WILD_SPOT') {
+        if (wildSpotMarker) {
+          map.removeLayer(wildSpotMarker);
+          wildSpotMarker = null;
+        }
+        if (payload) {
+          wildSpotMarker = L.marker([payload.latitude, payload.longitude], {
+            icon: L.divIcon({ className: 'wild-spot-marker', iconSize: [16, 16] })
+          }).addTo(map);
+        }
+        reportToRN('SHOW_WILD_SPOT_APPLIED', { hasSpot: !!payload });
+      }
+
+      // openspec/changes/somewhere-wild — pans/zooms to a specific spot on
+      // "Somewhere Wild" card tap (tasks.md task 5.2). Distinct from
+      // SHOW_WILD_SPOT (which only places/clears the marker) so the card can
+      // re-pan to an already-shown marker without re-sending it.
+      if (type === 'PAN_TO_SPOT') {
+        const { latitude, longitude } = payload;
+        map.setView([latitude, longitude], Math.max(map.getZoom(), 16));
       }
     }
 

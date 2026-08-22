@@ -7,8 +7,10 @@ import {
   MIN_CELLS_FOR_REWARD,
   NEW_GROUND_MIN_CELLS,
   cellForLocation,
+  cellKey,
   newGroundCells,
   paintedCells,
+  splitTrailByNewGround,
   streetsKnown,
   wildness,
 } from '../grid';
@@ -240,6 +242,84 @@ describe('newGroundCells — 8-neighbour dilation (design.md Decision 5)', () =>
     const walk = paintedCells(rectLoop({ perimeterM: 1500 }));
     const newCells = newGroundCells(walk, new Set());
     expect(newCells.size).toBe(walk.size);
+  });
+});
+
+describe('splitTrailByNewGround (openspec/changes/walk-portrait/design.md Decision 4)', () => {
+  // Points spaced 25m apart along a straight line — comfortably more than
+  // one CELL_M (20m) apart, so each point lands in its own distinct cell,
+  // with no ambiguity from the anti-exploit segment guards (this function
+  // doesn't resample/guard at all, unlike paintedCells).
+  function pointAt(indexAlongLine: number): Location {
+    return {
+      latitude: LAT0 + mToLat(indexAlongLine * 25),
+      longitude: LON0,
+      timestamp: indexAlongLine * 1000,
+      accuracy: 5,
+    };
+  }
+
+  function cellIdFor(loc: Location): string {
+    const { ix, iy } = cellForLocation(loc.latitude, loc.longitude);
+    return cellKey(ix, iy);
+  }
+
+  it('returns an empty array for an empty trail', () => {
+    expect(splitTrailByNewGround([], [])).toEqual([]);
+  });
+
+  it('a missing newGroundCellIds produces one all-base run', () => {
+    const trail = [pointAt(0), pointAt(1), pointAt(2)];
+    const runs = splitTrailByNewGround(trail);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toEqual({ color: 'base', points: trail });
+  });
+
+  it('an empty newGroundCellIds produces one all-base run', () => {
+    const trail = [pointAt(0), pointAt(1), pointAt(2)];
+    const runs = splitTrailByNewGround(trail, []);
+    expect(runs).toHaveLength(1);
+    expect(runs[0].color).toBe('base');
+  });
+
+  it('New Ground only at the start produces [new-ground, base]', () => {
+    const trail = [pointAt(0), pointAt(1), pointAt(2), pointAt(3)];
+    const newGroundCellIds = [cellIdFor(trail[0])];
+
+    const runs = splitTrailByNewGround(trail, newGroundCellIds);
+
+    expect(runs.map((r) => r.color)).toEqual(['new-ground', 'base']);
+    expect(runs[0].points).toEqual([trail[0]]);
+    expect(runs[1].points).toEqual(trail.slice(1));
+  });
+
+  it('New Ground only at the end produces [base, new-ground]', () => {
+    const trail = [pointAt(0), pointAt(1), pointAt(2), pointAt(3)];
+    const newGroundCellIds = [cellIdFor(trail[3])];
+
+    const runs = splitTrailByNewGround(trail, newGroundCellIds);
+
+    expect(runs.map((r) => r.color)).toEqual(['base', 'new-ground']);
+    expect(runs[1].points).toEqual([trail[3]]);
+  });
+
+  it('New Ground interleaved in the middle produces [base, new-ground, base]', () => {
+    const trail = [pointAt(0), pointAt(1), pointAt(2), pointAt(3), pointAt(4)];
+    const newGroundCellIds = [cellIdFor(trail[2])];
+
+    const runs = splitTrailByNewGround(trail, newGroundCellIds);
+
+    expect(runs.map((r) => r.color)).toEqual(['base', 'new-ground', 'base']);
+    expect(runs[1].points).toEqual([trail[2]]);
+  });
+
+  it('a single-point trail produces one run of that one color', () => {
+    const trail = [pointAt(0)];
+    const runsBase = splitTrailByNewGround(trail, []);
+    expect(runsBase).toEqual([{ color: 'base', points: trail }]);
+
+    const runsNewGround = splitTrailByNewGround(trail, [cellIdFor(trail[0])]);
+    expect(runsNewGround).toEqual([{ color: 'new-ground', points: trail }]);
   });
 });
 

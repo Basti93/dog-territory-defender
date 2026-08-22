@@ -43,6 +43,10 @@ interface CelebrationScreenProps {
   newGroundCellCount?: number;
   /** The Home Range's Fresh Ground payout multiplier actually applied to this walk's treats (see economy/formulas.ts's bloomMultiplier). The Fresh Ground beat below is suppressed entirely below BALANCE.freshGround.displayThresholdMultiplier — design.md Decision 3's UI rule, not a display nicety (closes the fixed-loop-walker dead zone, FLAG 1). */
   bloomMultiplier?: number;
+  /** The name of a Territory this walk just created, or `null` — openspec/changes/territories/design.md Decision 3/tasks.md task 6. Only ever set when the player already had at least one Territory before this walk (the very first-ever Territory is silent — "a second home" only reads as a discovery once there's a first to contrast it with). Never rendered alongside a rename control (renaming only ever happens from the Territory's own card, never here). */
+  newTerritoryName?: string | null;
+  /** The [survivor, absorbed] Territory names when this walk caused a merge, or `null` — openspec/changes/territories/design.md Decision 3. Framed as a positive event ("Buddy connected his two worlds!"), never a loss for the absorbed Territory. */
+  mergedTerritoryNames?: [string, string] | null;
   dogName?: string | null;
   onContinue: () => void;
 }
@@ -85,6 +89,8 @@ export function CelebrationScreen({
   cliffhangerTitle = null,
   newGroundCellCount = 0,
   bloomMultiplier = 1,
+  newTerritoryName = null,
+  mergedTerritoryNames = null,
   dogName = null,
   onContinue,
 }: CelebrationScreenProps) {
@@ -137,6 +143,31 @@ export function CelebrationScreen({
               New ground! {dogDisplayName(dogName)} learned {streetsKnown(newGroundCellCount)} new street
               {streetsKnown(newGroundCellCount) === 1 ? '' : 's'} today.
             </Text>
+          </View>
+        )}
+
+        {/* New-territory discovery beat — fires only when this walk creates
+            an ADDITIONAL territory beyond the player's first (the caller
+            gates on hadExistingTerritoryBefore; the very first-ever
+            territory is silent). Never offers a rename control here — see
+            openspec/changes/territories/design.md's "renameable anytime via
+            the territory's own card, never on this screen" rule.
+            TODO(game-master copy pass): tasks.md's given copy doesn't yet
+            interpolate the new territory's own name (newTerritoryName) —
+            kept as a prop for whenever that copy is finalized. */}
+        {newTerritoryName !== null && (
+          <View style={styles.levelBox}>
+            <Text style={styles.levelText}>A new territory! {dogDisplayName(dogName)} found a second home.</Text>
+          </View>
+        )}
+
+        {/* Territory merge beat — always framed as a positive event, never a
+            loss for the absorbed territory (design.md Decision 3).
+            TODO(game-master copy pass): same interpolation note as above —
+            mergedTerritoryNames is kept as a prop for the finalized copy. */}
+        {mergedTerritoryNames !== null && (
+          <View style={styles.levelBox}>
+            <Text style={styles.levelText}>{dogDisplayName(dogName)} connected his two worlds!</Text>
           </View>
         )}
 

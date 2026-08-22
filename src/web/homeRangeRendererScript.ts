@@ -9,12 +9,53 @@
 // dev-only go/no-go spike, tasks.md task 5.1) inject the exact same
 // renderer — one canonical copy, not two hand-kept-in-sync ones.
 //
-// UNVERIFIED ON A REAL DEVICE: everything below is written and internally
-// consistent (constants, formulas, and colour math mirror
-// home-range-prototype.mjs and design.md Decision 2/5/6 exactly), but this
-// file cannot be executed or visually inspected from this environment. Task
-// 5.1's on-device go/no-go spike is the gate that actually confirms it
-// renders correctly and performs smoothly — see this change's tasks.md.
+// VERIFIED ON A REAL DEVICE: `home-range`'s task 5.1 on-device go/no-go
+// spike confirmed this renderer produces soft edges and a plausible fill
+// with no grid blockiness (see openspec/changes/archive/2026-08-21-home-range's
+// tasks.md). The wild-ground second contour added by
+// openspec/changes/somewhere-wild is a second pass of the same already-verified
+// hrMarchingSquaresSegments function over the same already-verified
+// wildBlurred field, at a different threshold — no new rendering technique.
+
+import { BALANCE } from '../economy/balanceConfig';
+
+/**
+ * The wild-threshold bonus must be WILD_MARGIN times the bonus at the Fresh
+ * Ground display-suppression floor — not just one rounding step past it.
+ * See openspec/changes/somewhere-wild/design.md Decision 2's "Second
+ * correction": a bare break-even derivation (no margin) gave a threshold of
+ * 0.45 at today's K, a much lower and much less rare bar than intended.
+ * Must match src/utils/wildSpot.ts's WILD_MARGIN exactly (same reasoning,
+ * duplicated here only because this file can't import that one at WebView
+ * runtime).
+ */
+const WILD_MARGIN = 1.8;
+
+/**
+ * The wild-ground contour threshold — see
+ * openspec/changes/somewhere-wild/design.md Decision 2. Derived from
+ * home-range-rewards' own BALANCE constants (never hardcoded), rounded UP
+ * to the nearest 0.05 so there's a WILD_MARGIN-sized margin above the Fresh
+ * Ground display-suppression floor, not an exact boundary match, then
+ * clamped to [0.60, 0.95] so the derivation can't degrade to "always true"
+ * or "impossible" at the extremes of BALANCE.freshGround.k's documented
+ * sweep range. If BALANCE.freshGround.k is ever retuned, this recomputes
+ * automatically — grep for BALANCE.freshGround.k if you're the one
+ * retuning it.
+ *
+ * Baked into the vanilla-JS string below as a literal number (this file has
+ * no bundler/import access at WebView runtime — same reason HR_CELL_M etc.
+ * mirror utils/grid.ts's constants as literals rather than importing them).
+ */
+const WILD_CONTOUR_THRESHOLD = Math.min(
+  0.95,
+  Math.max(
+    0.6,
+    Math.ceil(
+      (WILD_MARGIN * (BALANCE.freshGround.displayThresholdMultiplier - 1)) / BALANCE.freshGround.k / 0.05
+    ) * 0.05
+  )
+);
 
 export const HOME_RANGE_RENDERER_SCRIPT = `
 // ---- constants (mirrors utils/grid.ts and design.md Decision 1/2/6) ----
@@ -22,6 +63,10 @@ var HR_CELL_M = 20;
 var HR_D_LAT_DEG = HR_CELL_M / 111320;
 var HR_BLUR_SIGMA_CELLS = 1;
 var HR_CONTOUR_THRESHOLD = 0.5;
+// See openspec/changes/somewhere-wild/design.md Decision 2 — derived from
+// BALANCE.freshGround.k/displayThresholdMultiplier at build time (this file's
+// own WILD_CONTOUR_THRESHOLD constant above), not hardcoded.
+var HR_WILD_CONTOUR_THRESHOLD = ${WILD_CONTOUR_THRESHOLD};
 // design.md Decision 2 specified 0.28 as a flat floor alpha; real on-device
 // testing (rendering-spike.html) found that too faint to read against map
 // tiles, so it's raised here — deviation logged, not silently changed.
@@ -29,6 +74,18 @@ var HR_FILL_ALPHA = 0.6;
 var HR_OUTSIDE_SENTINEL = 255;
 var HR_FRESH_HEX = '#2ECC71';
 var HR_WILD_HEX = '#DCE8BE';
+// Warm accent design token (visual-design/spec.md) — the second (wild-ground)
+// contour stroke colour, distinct from the Range outline's HR_FRESH_HEX.
+var HR_WILD_CONTOUR_HEX = '#F39C12';
+// Muted grey design token (visual-design/spec.md, formalized by
+// openspec/changes/walk-portrait/design.md Decision 3) — the Walk Portrait's
+// muted Home Range background context layer's fill and outline colour. No
+// wildness gradient, no LUT — a single flat tone.
+var HR_MUTED_HEX = '#8A9A8A';
+// Reduced relative to HR_FILL_ALPHA's 0.6 above (Decision 3) — a background
+// context layer that must not compete with the walk's own trail drawn on
+// top of it. First-pass implementer number, not a logged balance threshold.
+var HR_MUTED_FILL_ALPHA = 0.35;
 
 function hrDLonForRow(iy) {
   return HR_CELL_M / (111320 * Math.cos((iy + 0.5) * HR_D_LAT_DEG * Math.PI / 180));
@@ -319,7 +376,203 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
     L.polyline([a, b], { color: HR_FRESH_HEX, weight: 1.5, opacity: 0.5, interactive: false }).addTo(layerGroup);
   }
 
+  // ---- Wild-ground contour (openspec/changes/somewhere-wild): a second
+  // marching-squares pass over the same wildBlurred field the fill already
+  // decodes, at HR_WILD_CONTOUR_THRESHOLD — a warm, dashed line distinct
+  // from the Range outline above, circling ground that will visibly pay
+  // more (see design.md Decision 7). No new payload field needed. ----
+  var wildSegments = hrMarchingSquaresSegments(wildBlurred, w, h, HR_WILD_CONTOUR_THRESHOLD);
+  for (i = 0; i < wildSegments.length; i++) {
+    var wa = hrLocalToLatLon(wildSegments[i][0][0], wildSegments[i][0][1], minIx, minIy);
+    var wb = hrLocalToLatLon(wildSegments[i][1][0], wildSegments[i][1][1], minIx, minIy);
+    L.polyline([wa, wb], {
+      color: HR_WILD_CONTOUR_HEX,
+      weight: 1,
+      opacity: 0.7,
+      dashArray: '4, 4',
+      interactive: false
+    }).addTo(layerGroup);
+  }
+
   layerGroup.addTo(map);
   return layerGroup;
+}
+
+/**
+ * The Walk Portrait's muted Home Range background context layer
+ * (openspec/changes/walk-portrait/design.md Decisions 2/3) — a third
+ * sibling to renderHomeRangeToMap above, same signature and layer-group-
+ * return convention, reusing the identical blur -> marching-squares
+ * pipeline. Deliberately flat: a single muted tone fill (no wildness-driven
+ * color LUT, no ghost-trail visits brightening) and a matching muted outline
+ * at reduced opacity, with no wild-ground contour pass and no marker — this
+ * is "everywhere the dog has ever been, out of focus," not a second
+ * wildness-coded map competing with the walk's own trail drawn on top.
+ */
+function renderHomeRangeMuted(map, payload, previousLayerGroup) {
+  if (previousLayerGroup) {
+    map.removeLayer(previousLayerGroup);
+  }
+  if (!payload) return null;
+
+  var origin = payload.origin;
+  var minIx = origin[0];
+  var minIy = origin[1];
+  var w = payload.w;
+  var h = payload.h;
+  var wild = hrBase64ToBytes(payload.wild);
+
+  var occ = new Float32Array(w * h);
+  var i;
+  for (i = 0; i < w * h; i++) {
+    occ[i] = wild[i] !== HR_OUTSIDE_SENTINEL ? 1 : 0;
+  }
+  var occBlurred = hrBlurField(occ, w, h, HR_BLUR_SIGMA_CELLS);
+
+  var mutedRgbFloat = hrHexToRgb(HR_MUTED_HEX);
+  var mutedR = Math.round(mutedRgbFloat[0] * 255);
+  var mutedG = Math.round(mutedRgbFloat[1] * 255);
+  var mutedB = Math.round(mutedRgbFloat[2] * 255);
+
+  var canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  var imageData = ctx.createImageData(w, h);
+
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var idx = y * w + x;
+      var occV = occBlurred[idx];
+      var alpha = Math.round(HR_MUTED_FILL_ALPHA * occV * 255);
+
+      // Same vertical flip as renderHomeRangeToMap's fill loop.
+      var flippedRow = h - 1 - y;
+      var pIdx = (flippedRow * w + x) * 4;
+      imageData.data[pIdx] = mutedR;
+      imageData.data[pIdx + 1] = mutedG;
+      imageData.data[pIdx + 2] = mutedB;
+      imageData.data[pIdx + 3] = alpha;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  var midRow = minIy + Math.floor(h / 2);
+  var dLon = hrDLonForRow(midRow);
+  var south = minIy * HR_D_LAT_DEG;
+  var north = (minIy + h) * HR_D_LAT_DEG;
+  var west = minIx * dLon;
+  var east = (minIx + w) * dLon;
+
+  var layerGroup = L.layerGroup();
+  var imageOverlay = L.imageOverlay(canvas.toDataURL(), [[south, west], [north, east]], {
+    opacity: 1,
+    interactive: false
+  });
+  imageOverlay.addTo(layerGroup);
+
+  // Range outline only, in the same muted tone as the fill — deliberately no
+  // second wild-ground contour pass (that's a wildness-coded signal this
+  // background layer must not show) and no marker.
+  var segments = hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD);
+  for (i = 0; i < segments.length; i++) {
+    var a = hrLocalToLatLon(segments[i][0][0], segments[i][0][1], minIx, minIy);
+    var b = hrLocalToLatLon(segments[i][1][0], segments[i][1][1], minIx, minIy);
+    L.polyline([a, b], { color: HR_MUTED_HEX, weight: 1.5, opacity: 0.6, interactive: false }).addTo(layerGroup);
+  }
+
+  layerGroup.addTo(map);
+  return layerGroup;
+}
+
+/**
+ * The Doorstep's territory portrait (openspec/changes/home-dashboard,
+ * design.md Decision 2) — the same blur -> color-LUT -> fill-pixel loop and
+ * the same HR_CONTOUR_THRESHOLD marching-squares pass as
+ * renderHomeRangeToMap above, but drawn straight onto the given canvas's 2D
+ * context (ctx.moveTo/lineTo/stroke) instead of as Leaflet L.polylines, and
+ * sized to the raster's own w x h pixel grid rather than a Leaflet map's
+ * screen. Deliberately omits the wild-ground contour pass and any
+ * marker/pin — the portrait is "Range outline + Bloom fill," nothing else
+ * (proposal.md's own enumeration). portraitHTML.ts composites this
+ * function's output as an image overlay on top of its own OSM tile canvas;
+ * this function has no Leaflet dependency and knows nothing about tiles.
+ */
+function renderHomeRangePortrait(canvas, payload) {
+  if (!payload) return;
+
+  var origin = payload.origin;
+  var minIx = origin[0];
+  var minIy = origin[1];
+  var w = payload.w;
+  var h = payload.h;
+  var wild = hrBase64ToBytes(payload.wild);
+  var visits = hrBase64ToBytes(payload.visits);
+
+  var occ = new Float32Array(w * h);
+  var valueTimesWeight = new Float32Array(w * h);
+  var visitsFloat = new Float32Array(w * h);
+  var i;
+  for (i = 0; i < w * h; i++) {
+    var inRange = wild[i] !== HR_OUTSIDE_SENTINEL;
+    occ[i] = inRange ? 1 : 0;
+    valueTimesWeight[i] = inRange ? (wild[i] / 254) : 0;
+    visitsFloat[i] = visits[i] / 255;
+  }
+
+  var occBlurred = hrBlurField(occ, w, h, HR_BLUR_SIGMA_CELLS);
+  var wildBlurred = hrBlurWeighted(valueTimesWeight, occ, w, h, HR_BLUR_SIGMA_CELLS);
+  var visitsBlurred = hrBlurField(visitsFloat, w, h, HR_BLUR_SIGMA_CELLS);
+
+  canvas.width = w;
+  canvas.height = h;
+  var ctx = canvas.getContext('2d');
+  var imageData = ctx.createImageData(w, h);
+
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      var idx = y * w + x;
+      var occV = occBlurred[idx];
+      var wildV = wildBlurred[idx];
+      var lutIndex = Math.max(0, Math.min(254, Math.round(wildV * 254)));
+      var rgb = HR_WILDNESS_COLOR_LUT[lutIndex];
+
+      var veinMix = Math.min(1, visitsBlurred[idx] * 0.6);
+      var outR = Math.round(rgb[0] + (46 - rgb[0]) * veinMix);
+      var outG = Math.round(rgb[1] + (204 - rgb[1]) * veinMix);
+      var outB = Math.round(rgb[2] + (113 - rgb[2]) * veinMix);
+      var alpha = Math.round(HR_FILL_ALPHA * occV * 255);
+
+      // Same vertical flip as renderHomeRangeToMap's fill loop: array row 0
+      // is the southernmost row, but image/canvas row 0 must be the north
+      // edge.
+      var flippedRow = h - 1 - y;
+      var pIdx = (flippedRow * w + x) * 4;
+      imageData.data[pIdx] = outR;
+      imageData.data[pIdx + 1] = outG;
+      imageData.data[pIdx + 2] = outB;
+      imageData.data[pIdx + 3] = alpha;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  // Range outline only (HR_CONTOUR_THRESHOLD, same as the interactive map) —
+  // deliberately no second wild-ground contour pass and no marker.
+  var segments = hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD);
+  ctx.strokeStyle = HR_FRESH_HEX;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  for (i = 0; i < segments.length; i++) {
+    var a = segments[i][0];
+    var b = segments[i][1];
+    // Segments are in the same unflipped (u,v) space as the fill loop's
+    // (x,y) before its own flippedRow conversion above — apply the same
+    // flip here so the stroke lines up with the fill underneath it.
+    ctx.beginPath();
+    ctx.moveTo(a[0], (h - 1) - a[1]);
+    ctx.lineTo(b[0], (h - 1) - b[1]);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 }
 `;

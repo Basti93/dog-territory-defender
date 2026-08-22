@@ -1,5 +1,6 @@
 import { BALANCE, BuildingKey } from './balanceConfig';
 import { buddyTreatsPerWalk, passiveTreatsPerHour, storageCap, upgradeCost, xpAwardForWalk, levelForXp } from './formulas';
+import { territoryMass, territoryRate as computeTerritoryRate, TERRITORY_INCOME_DISPLAY_FLOOR } from './territoryEconomy';
 import { calendarDayKey } from '../utils/manualWalkLog';
 
 export interface DenEconomyState {
@@ -22,6 +23,18 @@ export interface DenEconomyState {
   manualLogCountToday: number;
   /** Local calendar-day key of the most recent manual-log route refresh — enforces "at most 1 route refresh per calendar day" (design.md Decision 4). Null until the first refresh ever performed. */
   routeRefreshDayKey: string | null;
+  /** One-time guard for the Territory migration backfill (openspec/changes/territories/design.md Decision 9) — every already-painted Home Range cell is partitioned into Territories exactly once, on first load after this feature ships. False until that replay has run. See storage/territoryMigration.ts. Must only ever be set true after homeRangeBackfillComplete is also true (there must be a populated Range to cluster). */
+  territoriesBackfillComplete: boolean;
+  /**
+   * Guarded one-time reveal flag for the Territory passive-income line
+   * (openspec/changes/territories/design.md Decision 6's display-gating
+   * rule) — flips to true the first time `territoryRate` crosses 1
+   * treat/hour, checked at read time, never re-evaluated backward (safe
+   * because worldMass is monotonically non-decreasing forever — see
+   * design.md's monotonicity argument). Once true, the income line renders
+   * permanently on the Doorstep and Den screens.
+   */
+  territoryIncomeRevealed: boolean;
 }
 
 export type UpgradeError = 'insufficient-treats' | 'max-level';
@@ -41,6 +54,8 @@ export function defaultDenEconomyState(now: number): DenEconomyState {
     manualLogDayKey: null,
     manualLogCountToday: 0,
     routeRefreshDayKey: null,
+    territoriesBackfillComplete: false,
+    territoryIncomeRevealed: false,
   };
 }
 
@@ -94,15 +109,32 @@ export function awardWalkXp(
   };
 }
 
-export function applyPassiveAccrual(state: DenEconomyState, now: number): DenEconomyState {
+/**
+ * `worldMass` — the single global, ungrouped `HomeRangeRepository.getWorldMass()`
+ * aggregate (openspec/changes/territories/design.md Decision 6's
+ * split-invariance guardrail). Defaults to 0 (no territory-income
+ * contribution) so every existing caller that hasn't been updated to fetch
+ * it yet keeps working unchanged — 0 mass correctly yields a 0 territoryRate.
+ * `territoryIncomeRevealed` flips permanently true the moment the combined
+ * territoryRate first crosses TERRITORY_INCOME_DISPLAY_FLOOR — never
+ * re-evaluated backward (see DenEconomyState.territoryIncomeRevealed's own
+ * doc comment for why that's safe).
+ */
+export function applyPassiveAccrual(
+  state: DenEconomyState,
+  now: number,
+  worldMass: { cellCount: number; visitsSum: number } = { cellCount: 0, visitsSum: 0 }
+): DenEconomyState {
   const elapsedHours = Math.max(0, (now - state.lastTickAt) / (1000 * 60 * 60));
   const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
-  const earned = elapsedHours * passiveTreatsPerHour(state.bakeryLevel, state.level);
+  const territoryRateValue = computeTerritoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), state.level);
+  const earned = elapsedHours * (passiveTreatsPerHour(state.bakeryLevel, state.level) + territoryRateValue);
 
   return {
     ...state,
     treats: Math.min(cap, state.treats + earned),
     lastTickAt: now,
+    territoryIncomeRevealed: state.territoryIncomeRevealed || territoryRateValue >= TERRITORY_INCOME_DISPLAY_FLOOR,
   };
 }
 

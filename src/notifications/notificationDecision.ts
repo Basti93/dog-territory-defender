@@ -77,6 +77,35 @@ export function learnTimeOfDayBucket(pastWalkStartTimes: number[]): TimeOfDayBuc
   return buckets.reduce((best, bucket) => (counts[bucket] > counts[best] ? bucket : best), buckets[0]);
 }
 
+export interface DoorstepOverflowLineResolution {
+  /** Whether the Doorstep's "The Doghouse is full" away-strip line should show right now. */
+  showLine: boolean;
+  /** Persist this immediately (before running checkAndScheduleEarnedTriggerNotification) whenever `showLine` is true — see the doc comment below. */
+  nextBookkeeping: NotificationBookkeepingState;
+}
+
+/**
+ * The Doorstep's own overflow-line resolution
+ * (openspec/changes/home-dashboard/design.md Decision 6) — reuses the exact
+ * same `overflowSurfaced` bookkeeping the earned-trigger push notification
+ * uses (`shouldFireOverflowNotification`/`resetSurfacedFlagIfOverflowCleared`
+ * above), rather than a second, parallel "have we shown this" flag. Callers
+ * MUST persist `nextBookkeeping` (claiming the flag) before running
+ * `checkAndScheduleEarnedTriggerNotification` — otherwise both channels can
+ * race and the player gets a push notification for an overflow they're
+ * already looking at on the Doorstep in the same app-open. See
+ * App.tsx's merged mount effect and notifications/earnedTrigger.ts.
+ */
+export function resolveDoorstepOverflowLine(
+  denState: DenEconomyState,
+  bookkeeping: NotificationBookkeepingState
+): DoorstepOverflowLineResolution {
+  const cleared = resetSurfacedFlagIfOverflowCleared(denState, bookkeeping);
+  const showLine = shouldFireOverflowNotification(denState, cleared);
+  const nextBookkeeping = showLine ? { ...cleared, overflowSurfaced: true } : cleared;
+  return { showLine, nextBookkeeping };
+}
+
 // Accepted copy, reused verbatim from
 // openspec/changes/walk-start-experience/proposal.md's "Notification Timing
 // (resolved)" section: "Your Treat Bakery overflowed! 124 treats waiting."

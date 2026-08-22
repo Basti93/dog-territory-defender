@@ -1,3 +1,5 @@
+import { Cell } from '../../storage/HomeRangeRepository';
+import { buildHomeRangeRasterPayload } from '../homeRangeRaster';
 import { HOME_RANGE_RENDERER_SCRIPT } from '../homeRangeRendererScript';
 
 // This vanilla-JS renderer runs inside a WebView with no bundler and no
@@ -27,11 +29,129 @@ function loadRendererInternals() {
       hrBase64ToBytes,
       hrLocalToLatLon,
       hrDLonForRow,
+      renderHomeRangePortrait,
+      renderHomeRangeMuted,
       HR_WILDNESS_COLOR_LUT,
       HR_D_LAT_DEG,
+      HR_WILD_CONTOUR_THRESHOLD,
+      HR_WILD_CONTOUR_HEX,
+      HR_FRESH_HEX,
+      HR_MUTED_HEX,
+      HR_MUTED_FILL_ALPHA,
+      HR_FILL_ALPHA,
     };`
   );
   return factory();
+}
+
+/**
+ * A minimal fake `<canvas>` (no jsdom/DOM available in this project's plain
+ * "node" jest environment — see this file's own header comment) that
+ * records every 2D-context call `renderHomeRangePortrait` makes, so its
+ * behavior can be asserted without a real browser canvas.
+ */
+function createFakeCanvas() {
+  const calls: { strokeStyleHistory: string[]; putImageDataCount: number; strokeCount: number; arcCount: number } = {
+    strokeStyleHistory: [],
+    putImageDataCount: 0,
+    strokeCount: 0,
+    arcCount: 0,
+  };
+  let strokeStyle = '';
+  const ctx = {
+    createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    putImageData: () => {
+      calls.putImageDataCount++;
+    },
+    set strokeStyle(value: string) {
+      strokeStyle = value;
+      calls.strokeStyleHistory.push(value);
+    },
+    get strokeStyle() {
+      return strokeStyle;
+    },
+    lineWidth: 0,
+    globalAlpha: 1,
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    stroke: () => {
+      calls.strokeCount++;
+    },
+    arc: () => {
+      calls.arcCount++;
+    },
+  };
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ctx,
+  };
+  return { canvas, calls };
+}
+
+/**
+ * A minimal fake `<canvas>` for the raster-fill functions (renderHomeRangeToMap
+ * / renderHomeRangeMuted), which call `document.createElement('canvas')` and
+ * `canvas.toDataURL()` internally — unlike renderHomeRangePortrait, which
+ * takes its canvas as a parameter. Records the ImageData passed to
+ * putImageData so a test can inspect the alpha channel actually written.
+ */
+function createFakeRasterCanvas() {
+  const calls: { putImageDataCount: number; lastImageData: { data: Uint8ClampedArray; width: number; height: number } | null; toDataURLCount: number } = {
+    putImageDataCount: 0,
+    lastImageData: null,
+    toDataURLCount: 0,
+  };
+  const ctx = {
+    createImageData: (w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    putImageData: (imageData: { data: Uint8ClampedArray; width: number; height: number }) => {
+      calls.putImageDataCount++;
+      calls.lastImageData = imageData;
+    },
+  };
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ctx,
+    toDataURL: () => {
+      calls.toDataURLCount++;
+      return 'data:fake';
+    },
+  };
+  return { canvas, calls };
+}
+
+/** A minimal fake Leaflet global — records every layer created/added, so a test can assert renderHomeRangeMuted's shape (exactly one fill overlay, N outline polylines, no marker) without a real Leaflet map. */
+function createFakeLeaflet() {
+  const polylines: Array<{ latlngs: unknown; opts: Record<string, unknown> }> = [];
+  const imageOverlays: Array<{ url: string; bounds: unknown; opts: Record<string, unknown> }> = [];
+  const marker = jest.fn();
+  const L = {
+    layerGroup: () => {
+      const layers: unknown[] = [];
+      const group = {
+        layers,
+        addTo(target: unknown) {
+          (group as unknown as { addedTo: unknown }).addedTo = target;
+          return group;
+        },
+      };
+      return group;
+    },
+    imageOverlay: (url: string, bounds: unknown, opts: Record<string, unknown>) => {
+      const overlay = { url, bounds, opts, addTo: (target: { layers?: unknown[] }) => { target.layers?.push(overlay); return overlay; } };
+      imageOverlays.push(overlay);
+      return overlay;
+    },
+    polyline: (latlngs: unknown, opts: Record<string, unknown>) => {
+      const poly = { latlngs, opts, addTo: (target: { layers?: unknown[] }) => { target.layers?.push(poly); return poly; } };
+      polylines.push(poly);
+      return poly;
+    },
+    marker,
+  };
+  return { L, polylines, imageOverlays, marker };
 }
 
 describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
@@ -160,6 +280,95 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
     expect(segments.length).toBeGreaterThan(0);
   });
 
+  it('HR_WILD_CONTOUR_THRESHOLD is derived from BALANCE, not hardcoded, and sits strictly above 0 and below 1', () => {
+    // openspec/changes/somewhere-wild/design.md Decision 2: this must always
+    // be a real wildness value (0..1, see utils/grid.ts's wildness()), and
+    // must be computable purely from BALANCE.freshGround's own constants —
+    // this test would catch a future change accidentally hardcoding a literal.
+    const { HR_WILD_CONTOUR_THRESHOLD } = loadRendererInternals();
+    expect(HR_WILD_CONTOUR_THRESHOLD).toBeGreaterThan(0);
+    expect(HR_WILD_CONTOUR_THRESHOLD).toBeLessThan(1);
+    // Rounded up to the nearest 0.05 (design.md Decision 2's "small margin,
+    // not an exact boundary match" rule) — never a value with more precision.
+    expect(Math.round((HR_WILD_CONTOUR_THRESHOLD as number) / 0.05)).toBeCloseTo(
+      (HR_WILD_CONTOUR_THRESHOLD as number) / 0.05,
+      6
+    );
+  });
+
+  it('hrMarchingSquaresSegments (second pass, wild-ground contour): a synthetic wild-cell blob above the threshold produces segments, below it produces none', () => {
+    const { hrMarchingSquaresSegments, HR_WILD_CONTOUR_THRESHOLD } = loadRendererInternals();
+    const threshold = HR_WILD_CONTOUR_THRESHOLD as number;
+    const w = 6;
+    const h = 6;
+
+    // A solid block of wildness comfortably above the derived threshold —
+    // same shape as the existing "solid occupied block" Range-outline test,
+    // applied to the wildBlurred field's own threshold instead of 0.5.
+    const above = new Float32Array(w * h);
+    for (let y = 1; y <= 3; y++) {
+      for (let x = 1; x <= 3; x++) {
+        above[y * w + x] = Math.min(1, threshold + 0.2);
+      }
+    }
+    const aboveSegments = hrMarchingSquaresSegments(above, w, h, threshold) as unknown[];
+    expect(aboveSegments.length).toBeGreaterThan(0);
+
+    // The same shape, but every cell held well below the threshold — no
+    // contour should be extracted at all.
+    const below = new Float32Array(w * h);
+    for (let y = 1; y <= 3; y++) {
+      for (let x = 1; x <= 3; x++) {
+        below[y * w + x] = Math.max(0, threshold - 0.2);
+      }
+    }
+    const belowSegments = hrMarchingSquaresSegments(below, w, h, threshold) as unknown[];
+    expect(belowSegments.length).toBe(0);
+  });
+
+  it('renderHomeRangePortrait fills the canvas and strokes the Range outline, but never the wild-ground contour or a marker (openspec/changes/home-dashboard)', () => {
+    const { renderHomeRangePortrait, HR_FRESH_HEX, HR_WILD_CONTOUR_HEX } = loadRendererInternals() as {
+      renderHomeRangePortrait: (canvas: unknown, payload: unknown) => void;
+      HR_FRESH_HEX: string;
+      HR_WILD_CONTOUR_HEX: string;
+    };
+
+    const now = 1_000_000;
+    // A solid 5x5 block, well above the 0.5 Range-outline contour threshold —
+    // mirrors this file's existing "solid occupied block" fixture.
+    const cells: Cell[] = [];
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        cells.push({ ix: x, iy: y, lastRefreshed: now, lastTracked: now, visits: 1, territoryId: null });
+      }
+    }
+    const payload = buildHomeRangeRasterPayload(cells, now);
+    expect(payload).not.toBeNull();
+
+    const { canvas, calls } = createFakeCanvas();
+    renderHomeRangePortrait(canvas, payload);
+
+    expect(calls.putImageDataCount).toBe(1); // the fill, drawn exactly once
+    expect(calls.strokeCount).toBeGreaterThan(0); // the Range outline contour
+    expect(calls.arcCount).toBe(0); // no marker/pin ever drawn
+
+    // Every stroke colour used is the Range outline's fresh-green token —
+    // the wild-ground contour's warm accent colour never appears, since
+    // this function deliberately omits that second pass entirely.
+    expect(calls.strokeStyleHistory.length).toBeGreaterThan(0);
+    expect(calls.strokeStyleHistory.every((c) => c === HR_FRESH_HEX)).toBe(true);
+    expect(calls.strokeStyleHistory).not.toContain(HR_WILD_CONTOUR_HEX);
+  });
+
+  it('renderHomeRangePortrait is a no-op for a null payload (empty-Range case)', () => {
+    const { renderHomeRangePortrait } = loadRendererInternals() as {
+      renderHomeRangePortrait: (canvas: unknown, payload: unknown) => void;
+    };
+    const { canvas, calls } = createFakeCanvas();
+    expect(() => renderHomeRangePortrait(canvas, null)).not.toThrow();
+    expect(calls.putImageDataCount).toBe(0);
+  });
+
   it('hrLocalToLatLon maps the raster origin near lat/lon 0 scaled by cell size', () => {
     const { hrLocalToLatLon, HR_D_LAT_DEG } = loadRendererInternals();
     const [lat, lon] = hrLocalToLatLon(0, 0, 0, 0) as [number, number];
@@ -167,5 +376,88 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
     expect(lon).toBeCloseTo(0, 6);
     const [lat2] = hrLocalToLatLon(0, 1, 0, 0) as [number, number];
     expect(lat2).toBeCloseTo(HR_D_LAT_DEG as number, 6);
+  });
+});
+
+// openspec/changes/walk-portrait/design.md Decisions 2/3: renderHomeRangeMuted
+// is the one function in this script that calls document.createElement and
+// references the Leaflet global directly (renderHomeRangeToMap does too, but
+// has never had test coverage for that exact reason — see this file's own
+// header comment on what can/can't be verified without a real WebView). Both
+// fakes are installed as ambient globals only for the duration of this
+// describe block, mirroring how the real WebView provides `L`/`document` as
+// ambient globals to this same script.
+describe('renderHomeRangeMuted (openspec/changes/walk-portrait)', () => {
+  afterEach(() => {
+    delete (global as unknown as { document?: unknown }).document;
+    delete (global as unknown as { L?: unknown }).L;
+  });
+
+  it('draws exactly one flat-fill overlay and a muted outline, never the wild-ground contour, never a marker, and no wildness-gradient LUT lookup', () => {
+    const { canvas, calls } = createFakeRasterCanvas();
+    (global as unknown as { document: unknown }).document = { createElement: (tag: string) => (tag === 'canvas' ? canvas : null) };
+    const { L, polylines, imageOverlays, marker } = createFakeLeaflet();
+    (global as unknown as { L: unknown }).L = L;
+
+    const { renderHomeRangeMuted, HR_MUTED_HEX, HR_WILD_CONTOUR_HEX, HR_MUTED_FILL_ALPHA, HR_FILL_ALPHA } =
+      loadRendererInternals() as {
+        renderHomeRangeMuted: (map: unknown, payload: unknown, previousLayerGroup: unknown) => unknown;
+        HR_MUTED_HEX: string;
+        HR_WILD_CONTOUR_HEX: string;
+        HR_MUTED_FILL_ALPHA: number;
+        HR_FILL_ALPHA: number;
+      };
+
+    const now = 1_000_000;
+    const cells: Cell[] = [];
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        cells.push({ ix: x, iy: y, lastRefreshed: now, lastTracked: now, visits: 1, territoryId: null });
+      }
+    }
+    const payload = buildHomeRangeRasterPayload(cells, now);
+    expect(payload).not.toBeNull();
+
+    const fakeMap = { removeLayer: jest.fn() };
+    const layerGroup = renderHomeRangeMuted(fakeMap, payload, null);
+
+    expect(layerGroup).not.toBeNull();
+    expect(calls.putImageDataCount).toBe(1); // the flat fill, drawn exactly once
+    expect(imageOverlays).toHaveLength(1);
+    expect(polylines.length).toBeGreaterThan(0); // the Range outline contour
+
+    // Every polyline drawn uses the muted token — no wild-ground contour
+    // (that would use HR_WILD_CONTOUR_HEX) and no wildness colour anywhere.
+    expect(polylines.every((p) => p.opts.color === HR_MUTED_HEX)).toBe(true);
+    expect(polylines.some((p) => p.opts.color === HR_WILD_CONTOUR_HEX)).toBe(false);
+
+    // No marker/pin ever drawn on this background layer.
+    expect(marker).not.toHaveBeenCalled();
+
+    // The fill's alpha channel is reduced relative to the normal wildness-LUT
+    // fill (HR_FILL_ALPHA) — a background context layer, not a competing one.
+    expect(HR_MUTED_FILL_ALPHA).toBeLessThan(HR_FILL_ALPHA);
+    const alphaBytes = Array.from(calls.lastImageData!.data.filter((_, i) => i % 4 === 3)).filter((a) => a > 0);
+    expect(alphaBytes.length).toBeGreaterThan(0);
+    for (const a of alphaBytes) {
+      expect(a).toBeLessThanOrEqual(Math.round(HR_MUTED_FILL_ALPHA * 255) + 1);
+    }
+  });
+
+  it('removes the previous layer group and returns null for a null payload', () => {
+    (global as unknown as { document: unknown }).document = { createElement: () => null };
+    const { L } = createFakeLeaflet();
+    (global as unknown as { L: unknown }).L = L;
+
+    const { renderHomeRangeMuted } = loadRendererInternals() as {
+      renderHomeRangeMuted: (map: unknown, payload: unknown, previousLayerGroup: unknown) => unknown;
+    };
+
+    const fakeMap = { removeLayer: jest.fn() };
+    const previousLayerGroup = { id: 'prev' };
+    const result = renderHomeRangeMuted(fakeMap, null, previousLayerGroup);
+
+    expect(fakeMap.removeLayer).toHaveBeenCalledWith(previousLayerGroup);
+    expect(result).toBeNull();
   });
 });

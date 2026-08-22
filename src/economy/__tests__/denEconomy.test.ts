@@ -1,5 +1,6 @@
 import { BALANCE } from '../balanceConfig';
 import { buddyPayout, buddyTreatsPerWalk, upgradeCost, storageCap, cumulativeXpForLevel } from '../formulas';
+import { territoryMass, territoryRate } from '../territoryEconomy';
 import {
   applyPassiveAccrual,
   awardWalkTreats,
@@ -57,6 +58,49 @@ describe('applyPassiveAccrual', () => {
     const state = { ...defaultDenEconomyState(NOW), treats: cap - 0.5, bakeryLevel: 1 };
     const after = applyPassiveAccrual(state, NOW + 10 * HOUR);
     expect(after.treats).toBe(cap);
+  });
+
+  // openspec/changes/territories/design.md Decision 6 — territoryRate is an
+  // additive term on top of the existing Treat Bakery passive rate.
+  it('adds territoryRate on top of the existing passive rate when worldMass is supplied', () => {
+    const state = { ...defaultDenEconomyState(NOW), bakeryLevel: 1, doghouseLevel: 100 }; // huge storage cap so this test isn't cap-bound
+    const worldMass = { cellCount: 50_000, visitsSum: 10_000 };
+    const expectedTerritoryRate = territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), state.level);
+
+    const after = applyPassiveAccrual(state, NOW + 1 * HOUR, worldMass);
+
+    expect(after.treats).toBeCloseTo(state.treats + 1 + expectedTerritoryRate, 6);
+  });
+
+  it('defaults to zero worldMass (no territory-income contribution) when the caller omits it — existing callers keep working unchanged', () => {
+    const state = defaultDenEconomyState(NOW);
+    const after = applyPassiveAccrual(state, NOW + 3 * HOUR);
+    expect(after.treats).toBe(state.treats + 3);
+  });
+
+  // openspec/changes/territories/design.md Decision 6 — the one-off reveal
+  // flag flips permanently once territoryRate first crosses the display
+  // floor, and never re-checks backward.
+  it('flips territoryIncomeRevealed once territoryRate crosses the display floor, and never resets', () => {
+    const state = { ...defaultDenEconomyState(NOW), doghouseLevel: 100 };
+    expect(state.territoryIncomeRevealed).toBe(false);
+
+    // A worldMass large enough that territoryRate clears 1 treat/hour at level 1.
+    const bigWorldMass = { cellCount: 10_000_000, visitsSum: 10_000_000 };
+    const after = applyPassiveAccrual(state, NOW + 1 * HOUR, bigWorldMass);
+    expect(after.territoryIncomeRevealed).toBe(true);
+
+    // A later tick with worldMass reset to zero (shouldn't happen in
+    // practice — worldMass is monotonic — but confirms the flag never
+    // un-reveals even if it did).
+    const later = applyPassiveAccrual(after, NOW + 2 * HOUR, { cellCount: 0, visitsSum: 0 });
+    expect(later.territoryIncomeRevealed).toBe(true);
+  });
+
+  it('does not reveal below the display floor', () => {
+    const state = defaultDenEconomyState(NOW);
+    const after = applyPassiveAccrual(state, NOW + 1 * HOUR, { cellCount: 10, visitsSum: 0 });
+    expect(after.territoryIncomeRevealed).toBe(false);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   learnTimeOfDayBucket,
   overflowNotificationBody,
   resetSurfacedFlagIfOverflowCleared,
+  resolveDoorstepOverflowLine,
   shouldFireOverflowNotification,
 } from '../notificationDecision';
 
@@ -59,6 +60,38 @@ describe('resetSurfacedFlagIfOverflowCleared', () => {
     const result = resetSurfacedFlagIfOverflowCleared(denState, bookkeeping);
 
     expect(result).toBe(bookkeeping);
+  });
+});
+
+describe('resolveDoorstepOverflowLine', () => {
+  it('shows the line and claims overflowSurfaced when an overflow has not been surfaced yet', () => {
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) };
+    const bookkeeping = defaultNotificationBookkeepingState();
+
+    const result = resolveDoorstepOverflowLine(denState, bookkeeping);
+
+    expect(result.showLine).toBe(true);
+    expect(result.nextBookkeeping.overflowSurfaced).toBe(true);
+  });
+
+  it('does not show the line again once the overflow has already been surfaced', () => {
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) };
+    const bookkeeping = { ...defaultNotificationBookkeepingState(), overflowSurfaced: true };
+
+    const result = resolveDoorstepOverflowLine(denState, bookkeeping);
+
+    expect(result.showLine).toBe(false);
+    expect(result.nextBookkeeping.overflowSurfaced).toBe(true);
+  });
+
+  it('does not show the line while below the storage cap, and clears a stale surfaced flag', () => {
+    const denState = { ...defaultDenEconomyState(NOW), treats: storageCap(1, 1, 1, 1) - 5 };
+    const bookkeeping = { ...defaultNotificationBookkeepingState(), overflowSurfaced: true };
+
+    const result = resolveDoorstepOverflowLine(denState, bookkeeping);
+
+    expect(result.showLine).toBe(false);
+    expect(result.nextBookkeeping.overflowSurfaced).toBe(false);
   });
 });
 

@@ -50,8 +50,15 @@ export const NEW_GROUND_MIN_CELLS = 12;
  */
 export const MIN_CELLS_FOR_REWARD = 25;
 
-/** Divisor used to turn a raw Range cell count into the "Buddy knows N streets" headline stat. */
-const CELLS_PER_STREET = 11;
+/**
+ * Divisor used to turn a raw Range cell count into the "Buddy knows N
+ * streets" headline stat. Also reused by openspec/changes/somewhere-wild's
+ * `src/utils/wildSpot.ts` as its minimum wild-cluster size (a cluster
+ * smaller than one street's worth of cells isn't worth surfacing) — hence
+ * the export, so that module imports this number rather than re-declaring
+ * it.
+ */
+export const CELLS_PER_STREET = 11;
 
 const M_PER_DEG_LAT = 111320;
 const D_LAT = CELL_M / M_PER_DEG_LAT;
@@ -86,7 +93,14 @@ export function cellForLocation(lat: number, lon: number): CellCoord {
   return { ix, iy };
 }
 
-function cellCentre(ix: number, iy: number): [number, number] {
+/**
+ * A cell's centre point, `[lat, lon]`. Exported for
+ * openspec/changes/somewhere-wild's `src/utils/streetLookup.ts`, which
+ * reverse-geocodes a wild cluster's anchor cell centre — the same
+ * per-row-longitude convention `cellForLocation` uses, so this is the exact
+ * inverse of that function, not a separate approximation.
+ */
+export function cellCentre(ix: number, iy: number): [number, number] {
   return [(iy + 0.5) * D_LAT, (ix + 0.5) * dLonForRow(iy)];
 }
 
@@ -184,6 +198,41 @@ export function newGroundCells(painted: Set<CellId>, range: Set<CellId>): Set<Ce
     if (!touchesRange) result.add(c);
   }
   return result;
+}
+
+/** One contiguous run of a walk's trail, all the same color. See splitTrailByNewGround. */
+export interface TrailRun {
+  color: 'base' | 'new-ground';
+  points: Location[];
+}
+
+/**
+ * Splits an ordered trail into contiguous same-color runs for the Walk
+ * Portrait's two-color trail (openspec/changes/walk-portrait/design.md
+ * Decision 4) — each point is mapped to its cell via cellForLocation and
+ * colored 'new-ground' if that cell is in newGroundCellIds, 'base'
+ * otherwise. A missing or empty newGroundCellIds produces exactly one
+ * all-'base' run, covering both "this walk genuinely had no New Ground" and
+ * "this walk was saved before newGroundCellIds existed" identically, by
+ * construction — no special-casing needed for either. Returns an empty array
+ * for an empty trail.
+ */
+export function splitTrailByNewGround(locations: Location[], newGroundCellIds?: string[]): TrailRun[] {
+  const newGroundSet = new Set(newGroundCellIds ?? []);
+  const runs: TrailRun[] = [];
+
+  for (const loc of locations) {
+    const { ix, iy } = cellForLocation(loc.latitude, loc.longitude);
+    const color: TrailRun['color'] = newGroundSet.has(cellKey(ix, iy)) ? 'new-ground' : 'base';
+    const currentRun = runs[runs.length - 1];
+    if (currentRun && currentRun.color === color) {
+      currentRun.points.push(loc);
+    } else {
+      runs.push({ color, points: [loc] });
+    }
+  }
+
+  return runs;
 }
 
 /**

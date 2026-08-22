@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { Location } from '../types';
@@ -17,6 +17,18 @@ interface MapViewProps {
   isTracking?: boolean;
   /** Bump to force a re-fetch of the persisted Home Range (e.g. after Finish Walk paints new cells, or after returning from Walk History). */
   homeRangeRefreshKey?: number;
+  /** The "Somewhere Wild" marker location (openspec/changes/somewhere-wild), or `null`/`undefined` to show none — see SomewhereWildCard.tsx's `onSpotChange`. The marker and the card must always agree on the same spot, so this is the single source both are driven from. */
+  wildSpot?: { latitude: number; longitude: number } | null;
+  /** Set to a new object (even with the same coordinates) whenever the caller wants to pan/zoom to a spot right now — e.g. a "Somewhere Wild" card tap (tasks.md task 5.2). Consumed once per change; doesn't affect the marker itself (see `wildSpot` for that). */
+  panToSpot?: { latitude: number; longitude: number } | null;
+  /**
+   * The Territories list screen's entry point (openspec/changes/territories,
+   * design.md Decision 8 — resolved by the user 2026-08-22 to live on the map
+   * screen's own chrome, not the Doorstep, not folded into Stats). Omitted
+   * means the button doesn't render (e.g. a caller that doesn't yet wire
+   * Territories) — mirrors this component's other optional-prop-gated bits.
+   */
+  onOpenTerritories?: () => void;
 }
 
 export function MapView({
@@ -25,6 +37,9 @@ export function MapView({
   homeRangeRepository,
   isTracking = false,
   homeRangeRefreshKey,
+  wildSpot,
+  panToSpot,
+  onOpenTerritories,
 }: MapViewProps) {
   const webViewRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
@@ -106,6 +121,23 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, isTracking, locations]);
 
+  // openspec/changes/somewhere-wild task 6.2: sends SHOW_WILD_SPOT whenever
+  // the winning cluster/New-Ground location changes, and clears it (posts
+  // `null`) when neither state applies — mirrors SHOW_HOME_RANGE's own
+  // "one bridge message, current truth" pattern.
+  useEffect(() => {
+    if (!isReady) return;
+    post('SHOW_WILD_SPOT', wildSpot ?? null);
+  }, [isReady, wildSpot]);
+
+  // "Somewhere Wild" card tap (tasks.md task 5.2) — pans/zooms to the
+  // relevant spot without touching the marker itself (already shown/hidden
+  // by the effect above).
+  useEffect(() => {
+    if (!isReady || !panToSpot) return;
+    post('PAN_TO_SPOT', panToSpot);
+  }, [isReady, panToSpot]);
+
   return (
     <View style={{ flex: 1 }}>
       <WebView
@@ -119,6 +151,36 @@ export function MapView({
           setIsReady(true);
         }}
       />
+      {/* Territories list screen entry point (openspec/changes/territories,
+          design.md Decision 8) — the map screen's own chrome, floating over
+          the WebView so it never competes with the map's bottom controls. */}
+      {onOpenTerritories && (
+        <TouchableOpacity style={styles.territoriesButton} onPress={onOpenTerritories} activeOpacity={0.85}>
+          <Text style={styles.territoriesButtonText}>🗺️ Territories</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  territoriesButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FAFAF8',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  territoriesButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A2A1A',
+  },
+});

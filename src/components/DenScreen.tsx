@@ -13,6 +13,7 @@ import {
 } from '../economy/formulas';
 import { DenEconomyState, dogDisplayName, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
+import { territoryMass, territoryRate } from '../economy/territoryEconomy';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
@@ -85,6 +86,10 @@ export function DenScreen({
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
   const [achievementNotices, setAchievementNotices] = useState<AchievementId[]>([]);
   const [rangeCellCount, setRangeCellCount] = useState<number | null>(null);
+  // openspec/changes/territories/design.md Decision 6's permanent footer
+  // line — this screen's own fetch, independent of whatever App.tsx last
+  // computed at the mount effect (the Den can be opened long after that).
+  const [territoryIncomeRate, setTerritoryIncomeRate] = useState<number | null>(null);
 
   useEffect(() => {
     repository.getState().then((s) => {
@@ -92,8 +97,13 @@ export function DenScreen({
       if (s.treats >= storageCap(s.doghouseLevel, s.level, s.bakeryLevel, s.sniffGardenLevel)) {
         setShowOverflowNotice(true);
       }
+      if (s.territoryIncomeRevealed && homeRangeRepository) {
+        homeRangeRepository.getWorldMass().then((mass) => {
+          setTerritoryIncomeRate(territoryRate(territoryMass(mass.cellCount, mass.visitsSum), s.level));
+        });
+      }
     });
-  }, [repository]);
+  }, [repository, homeRangeRepository]);
 
   useEffect(() => {
     if (!homeRangeRepository) return;
@@ -215,6 +225,14 @@ export function DenScreen({
             <Text style={styles.levelBarRate}>
               {dogDisplayName(state.dogName)} knows {streetsKnown(rangeCellCount)} street
               {streetsKnown(rangeCellCount) === 1 ? '' : 's'} by heart.
+            </Text>
+          )}
+          {/* Permanent territory-income line (openspec/changes/territories/
+              design.md Decision 6) — "once true, always shown," same
+              convention as the streets-known line above. */}
+          {state.territoryIncomeRevealed && territoryIncomeRate !== null && (
+            <Text style={styles.levelBarRate}>
+              🌍 {dogDisplayName(state.dogName)}'s territories bring home ≈{Math.round(territoryIncomeRate)} treats an hour.
             </Text>
           )}
         </View>

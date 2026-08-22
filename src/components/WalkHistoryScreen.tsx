@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 
 const COLORS = {
@@ -12,10 +13,22 @@ const COLORS = {
 
 interface WalkHistoryScreenProps {
   repository: WalkRepository;
+  /**
+   * Forwarded one level, unused by this screen's own rendering — the Walk
+   * Portrait (openspec/changes/walk-portrait) that `onSelectWalk` opens is
+   * rendered by App.tsx as its own top-level screen (design.md Decision 8),
+   * not nested here. Threaded through this props interface anyway per
+   * design.md Decision 8's explicit "no prop drilled further than one
+   * level" wiring, so a future nested-portrait-preview doesn't need a new
+   * prop plumbed in from App.tsx.
+   */
+  homeRangeRepository: HomeRangeRepository;
   onClose: () => void;
+  /** Opens that walk's Walk Portrait (openspec/changes/walk-portrait) — every row, regardless of startSource or reward-qualifying status, is tappable to this. */
+  onSelectWalk: (walk: StoredWalk) => void;
 }
 
-export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProps) {
+export function WalkHistoryScreen({ repository, onClose, onSelectWalk }: WalkHistoryScreenProps) {
   const [walks, setWalks] = useState<StoredWalk[] | null>(null);
 
   useEffect(() => {
@@ -60,22 +73,27 @@ export function WalkHistoryScreen({ repository, onClose }: WalkHistoryScreenProp
           data={walks}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <View style={styles.row}>
+            // The row itself is the Walk Portrait tap target (openspec/changes/
+            // walk-portrait) — Delete stays its own separate TouchableOpacity
+            // nested inside, unchanged as a distinct tap target.
+            <TouchableOpacity style={styles.row} onPress={() => onSelectWalk(item)} activeOpacity={0.7}>
               <Text style={styles.rowDate}>{new Date(item.startTime).toLocaleString()}</Text>
               <View style={styles.rowMeta}>
                 {/* item.closed now means "covered enough ground to qualify for a reward" (the
                     25-painted-cell floor), not "formed a closed loop" — see
                     openspec/changes/home-range/specs/walk-lifecycle/spec.md. Wording lifted
-                    directly from that spec delta's own language, not invented here. */}
+                    directly from that spec delta's own language, not invented here.
+                    "Short stroll" (not "Too short") per openspec/changes/walk-portrait's
+                    resolved Open Question 3 — warm, not deficit-framed. */}
                 <Text style={[styles.rowStatus, { color: item.closed ? COLORS.green : COLORS.muted }]}>
-                  {item.closed ? '✓ Rewarded' : 'Too short'}
+                  {item.closed ? '✓ Rewarded' : 'Short stroll'}
                 </Text>
                 <Text style={styles.rowPoints}>{item.locations.length} pts</Text>
               </View>
               <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={8}>
                 <Text style={styles.deleteText}>Delete</Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}

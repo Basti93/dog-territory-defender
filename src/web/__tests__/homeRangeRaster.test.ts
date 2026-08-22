@@ -8,7 +8,7 @@ function decodeBase64(b64: string): Uint8Array {
 }
 
 function makeCell(overrides: Partial<Cell>): Cell {
-  return { ix: 0, iy: 0, lastRefreshed: 0, lastTracked: 0, visits: 1, ...overrides };
+  return { ix: 0, iy: 0, lastRefreshed: 0, lastTracked: 0, visits: 1, territoryId: null, ...overrides };
 }
 
 describe('encodeBase64', () => {

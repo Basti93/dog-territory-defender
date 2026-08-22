@@ -1,0 +1,206 @@
+import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+
+// The Doorstep's territory portrait host (openspec/changes/home-dashboard,
+// design.md Decision 2, resolved to include OSM tiles behind the shape per
+// the user's 2026-08-22 call — see proposal.md's Open Questions). Unlike
+// mapHTML.ts, this WebView never becomes visible or interactive: no
+// pan/zoom/markers/gestures, no live GPS, no attribution UI beyond what
+// OSM's tile usage policy requires (baked into the composited image itself
+// is out of scope here — TerritoryPortrait.tsx's caller is responsible for
+// any on-screen attribution requirement, same as MapView.tsx already is).
+//
+// Capture approach (tasks.md task 2.3 — flagged there as new territory for
+// this codebase, and left genuinely unverified until task 8.7's on-device
+// pass): rather than trying to screenshot Leaflet's own DOM tile layer (a
+// hard problem in general — Leaflet renders tiles as positioned <img>
+// elements), this fetches each OSM tile image this raster's bounding box
+// needs directly and draws it onto one offscreen canvas at the pixel
+// position Leaflet's own Web Mercator projection math (`map.project`) says
+// it belongs at, then draws `renderHomeRangePortrait`'s fill+outline output
+// on top at the same projection, and only then calls `canvas.toDataURL()`.
+// The one Leaflet map instance this file creates is never attached to a
+// visible pane — it exists solely so `map.project`/`map.getBoundsZoom`
+// match exactly what mapHTML.ts's real, visible map would compute for the
+// same bounds.
+//
+// If any tile fails to load or the whole fetch times out, this posts
+// `PORTRAIT_FAILED` rather than a partial or broken image. `toDataURL()`
+// is also wrapped in a try/catch that falls back the same way, as
+// defense-in-depth: `tile.openstreetmap.org` was verified (2026-08-22) to
+// send proper `Access-Control-Allow-Origin` headers with
+// `img.crossOrigin = 'anonymous'` set below, so canvas-tainting is not a
+// currently-known failure mode here — the catch exists for untested real
+// device network flakiness or tile-server behavior changes, not a
+// confirmed CORS bug.
+
+export const portraitHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Territory Portrait</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; }
+    /* Never shown on screen (visibility: hidden, not display: none, so the
+       container still gets real layout/size) — this map instance exists
+       only for its Web Mercator projection math
+       (map.project/getBoundsZoom). getBoundsZoom reads the container's
+       actual clientWidth/clientHeight, so this needs a real pixel size —
+       a 1x1 container silently resolves to a wrong (too-low) zoom and a
+       near-empty capture, not a visible error. */
+    #map { position: absolute; width: 400px; height: 400px; visibility: hidden; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+${HOME_RANGE_RENDERER_SCRIPT}
+
+    var TILE_TIMEOUT_MS = 8000;
+    var TILE_SIZE = 256;
+    // Small fixed margin (tasks.md task 2.5) so the shape doesn't crop
+    // flush to the portrait's edge — an implementer-level polish number,
+    // not a logged balance threshold.
+    var CELL_PADDING = 2;
+    var TILE_SUBDOMAINS = ['a', 'b', 'c'];
+
+    function reportToRN(type, extra) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(Object.assign({ type: type }, extra || {})));
+      }
+    }
+
+    var map = L.map('map', { attributionControl: false, zoomControl: false });
+
+    function boundsForRaster(raster) {
+      var origin = raster.origin;
+      var minIx = origin[0] - CELL_PADDING;
+      var minIy = origin[1] - CELL_PADDING;
+      var w = raster.w + CELL_PADDING * 2;
+      var h = raster.h + CELL_PADDING * 2;
+      var south = minIy * HR_D_LAT_DEG;
+      var north = (minIy + h) * HR_D_LAT_DEG;
+      var midRow = minIy + Math.floor(h / 2);
+      var dLon = hrDLonForRow(midRow);
+      var west = minIx * dLon;
+      var east = (minIx + w) * dLon;
+      return L.latLngBounds([south, west], [north, east]);
+    }
+
+    function loadTileImage(url) {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () { resolve(img); };
+        img.onerror = function () { reject(new Error('tile failed to load')); };
+        img.src = url;
+      });
+    }
+
+    function handleRenderPortrait(raster) {
+      // #map is never attached to a visible pane, so Leaflet may not have
+      // picked up its real CSS size yet — invalidateSize() forces Leaflet
+      // to re-read clientWidth/clientHeight before getBoundsZoom relies on
+      // them (mirrors mapHTML.ts's own invalidateSize() call sites).
+      map.invalidateSize();
+      var bounds = boundsForRaster(raster);
+      var zoom = Math.min(19, Math.max(0, map.getBoundsZoom(bounds, false, [0, 0])));
+
+      var topLeftPixel = map.project(bounds.getNorthWest(), zoom);
+      var bottomRightPixel = map.project(bounds.getSouthEast(), zoom);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bottomRightPixel.x - topLeftPixel.x));
+      canvas.height = Math.max(1, Math.round(bottomRightPixel.y - topLeftPixel.y));
+      var ctx = canvas.getContext('2d');
+
+      var minTileX = Math.floor(topLeftPixel.x / TILE_SIZE);
+      var maxTileX = Math.floor(bottomRightPixel.x / TILE_SIZE);
+      var minTileY = Math.floor(topLeftPixel.y / TILE_SIZE);
+      var maxTileY = Math.floor(bottomRightPixel.y / TILE_SIZE);
+
+      var tilePromises = [];
+      for (var tx = minTileX; tx <= maxTileX; tx++) {
+        for (var ty = minTileY; ty <= maxTileY; ty++) {
+          (function (tx, ty) {
+            var sub = TILE_SUBDOMAINS[Math.abs(tx + ty) % TILE_SUBDOMAINS.length];
+            var url = 'https://' + sub + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+            tilePromises.push(
+              loadTileImage(url).then(function (img) {
+                ctx.drawImage(img, tx * TILE_SIZE - topLeftPixel.x, ty * TILE_SIZE - topLeftPixel.y, TILE_SIZE, TILE_SIZE);
+              })
+            );
+          })(tx, ty);
+        }
+      }
+
+      var settled = false;
+      var timeoutId = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reportToRN('PORTRAIT_FAILED', {});
+      }, TILE_TIMEOUT_MS);
+
+      Promise.all(tilePromises)
+        .then(function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+
+          // Composite the Range outline + Bloom fill (renderHomeRangePortrait,
+          // this script's own math-only function, shared verbatim with the
+          // interactive map) on top of the tiles just drawn above.
+          var overlayCanvas = document.createElement('canvas');
+          renderHomeRangePortrait(overlayCanvas, raster);
+          var overlayBounds = boundsForRaster(raster);
+          var overlayTopLeftPx = map.project(overlayBounds.getNorthWest(), zoom);
+          var overlayBottomRightPx = map.project(overlayBounds.getSouthEast(), zoom);
+          ctx.drawImage(
+            overlayCanvas,
+            overlayTopLeftPx.x - topLeftPixel.x,
+            overlayTopLeftPx.y - topLeftPixel.y,
+            overlayBottomRightPx.x - overlayTopLeftPx.x,
+            overlayBottomRightPx.y - overlayTopLeftPx.y
+          );
+
+          try {
+            var dataUrl = canvas.toDataURL('image/png');
+            reportToRN('PORTRAIT_READY', { dataUrl: dataUrl });
+          } catch (err) {
+            // Defense-in-depth, not a confirmed failure mode (see the
+            // file-header comment) — same fallback as a tile timeout.
+            reportToRN('PORTRAIT_FAILED', {});
+          }
+        })
+        .catch(function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          reportToRN('PORTRAIT_FAILED', {});
+        });
+    }
+
+    function handleMessage(e) {
+      try {
+        var msg = JSON.parse(e.data);
+        if (msg.type === 'RENDER_PORTRAIT') {
+          handleRenderPortrait(msg.payload.raster);
+        }
+      } catch (error) {
+        reportToRN('PORTRAIT_FAILED', {});
+      }
+    }
+
+    // Android WebView delivers postMessage on document; iOS delivers on window
+    // (mirrors mapHTML.ts's own dual-listener convention).
+    window.addEventListener('message', handleMessage);
+    document.addEventListener('message', handleMessage);
+
+    reportToRN('WEBVIEW_LOADED', {});
+  <\/script>
+</body>
+</html>
+`;

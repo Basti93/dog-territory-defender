@@ -1,5 +1,10 @@
 import { StoredWalk } from '../../storage/WalkRepository';
-import { eligibleRefreshRoutes, isWithinManualLogWindow, startTimeForMissedWalk } from '../manualWalkLog';
+import {
+  dayAndTimeOfDayPhrase,
+  eligibleRefreshRoutes,
+  isWithinManualLogWindow,
+  startTimeForMissedWalk,
+} from '../manualWalkLog';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -58,6 +63,44 @@ describe('isWithinManualLogWindow', () => {
 
   it('accepts a startTime that is exactly now', () => {
     expect(isWithinManualLogWindow(NOW, NOW)).toBe(true);
+  });
+});
+
+describe('dayAndTimeOfDayPhrase (openspec/changes/walk-portrait/design.md Decision 7)', () => {
+  it('formats the weekday and day-of-week correctly', () => {
+    const tuesdayMorning = new Date(2026, 0, 13, 9, 0, 0).getTime(); // Jan 13 2026 is a Tuesday
+    expect(dayAndTimeOfDayPhrase(tuesdayMorning)).toBe('Tuesday morning');
+  });
+
+  it('buckets late night (before 5am) as "night"', () => {
+    const lateNight = new Date(2026, 0, 15, 3, 0, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(lateNight)).toBe('Thursday night');
+  });
+
+  it('buckets 5am-11:59am as "morning"', () => {
+    const morning = new Date(2026, 0, 15, 5, 0, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(morning)).toBe('Thursday morning');
+    const lateMorning = new Date(2026, 0, 15, 11, 59, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(lateMorning)).toBe('Thursday morning');
+  });
+
+  it('buckets noon-4:59pm as "afternoon"', () => {
+    const noon = new Date(2026, 0, 15, 12, 0, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(noon)).toBe('Thursday afternoon');
+    const lateAfternoon = new Date(2026, 0, 15, 16, 59, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(lateAfternoon)).toBe('Thursday afternoon');
+  });
+
+  it('buckets 5pm-8:59pm as "evening"', () => {
+    const evening = new Date(2026, 0, 15, 17, 0, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(evening)).toBe('Thursday evening');
+    const lateEvening = new Date(2026, 0, 15, 20, 59, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(lateEvening)).toBe('Thursday evening');
+  });
+
+  it('buckets 9pm and later back to "night"', () => {
+    const night = new Date(2026, 0, 15, 21, 0, 0).getTime();
+    expect(dayAndTimeOfDayPhrase(night)).toBe('Thursday night');
   });
 });
 

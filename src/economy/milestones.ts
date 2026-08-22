@@ -40,6 +40,33 @@ export function isMilestoneLevel(level: number): boolean {
 }
 
 /**
+ * 1-based index of the most recently reached milestone at or below `level`
+ * (not necessarily an exact match) — the walk-the-sequence half of
+ * `currentTitleForLevel` below, kept separate from `milestoneIndexForLevel`
+ * (which only ever answers "is `level` itself exactly a milestone") since
+ * the two questions are genuinely different, not a duplicate. Null below
+ * the first milestone level (2).
+ */
+function mostRecentMilestoneIndexAtOrBelow(level: number): number | null {
+  if (level <= 1) {
+    return null;
+  }
+  let current = 1;
+  let index = 0;
+  let k = 1;
+  let lastIndexAtOrBelow: number | null = null;
+  while (current < level && current < BALANCE.leveling.maxLevel) {
+    current += Math.min(k, 8);
+    k++;
+    index++;
+    if (current <= level) {
+      lastIndexAtOrBelow = index;
+    }
+  }
+  return lastIndexAtOrBelow;
+}
+
+/**
  * Game-master-authored milestone titles, in level order (index 0 = the
  * first milestone level, level 2 — levels 2, 4, 7, 11, 16, 22, 29, 37).
  * Every title deliberately starts with a consonant sound so the hard-coded
@@ -65,6 +92,28 @@ export function titleForLevel(level: number): string | null {
     return null;
   }
   return MILESTONE_TITLES[index - 1];
+}
+
+/**
+ * The Doorstep's "what title does Buddy currently hold" readout
+ * (openspec/changes/home-dashboard/design.md Decision 1) — distinct from
+ * `titleForLevel`, which only ever answers non-null on an exact milestone
+ * level (it exists solely to drive the one-away cliffhanger). This answers
+ * the persistent question for *any* level, including levels between
+ * milestones. Null below the first milestone level (2) — the dog row simply
+ * omits the title segment for a level-1 dog. Past the 8th authored title
+ * (level 45+), returns the 8th title ("Horizon Chaser") indefinitely — the
+ * same "last real thing said" behavior `titleForLevel` already has for the
+ * cliffhanger, since that title remains genuinely true even though nothing
+ * fresher is authored yet.
+ */
+export function currentTitleForLevel(level: number): string | null {
+  const index = mostRecentMilestoneIndexAtOrBelow(level);
+  if (index === null) {
+    return null;
+  }
+  const clampedIndex = Math.min(index, MILESTONE_TITLES.length);
+  return MILESTONE_TITLES[clampedIndex - 1];
 }
 
 /**

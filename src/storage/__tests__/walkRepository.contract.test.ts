@@ -98,4 +98,35 @@ describe('WalkRepository contract', () => {
     expect(saved?.startSource).toBe('manual-log');
     expect(saved?.locations).toEqual([]);
   });
+
+  // openspec/changes/walk-portrait — three new optional fields, additive and
+  // backward-compatible (design.md Decisions 4/5/6).
+  it('round-trips newGroundCellIds, treatsEarned, and refreshedRouteWalkId when a walk is re-saved with them added', async () => {
+    const repo = createInMemoryWalkRepository();
+    await repo.saveWalk(makeWalk({ id: 'walk-1' }));
+
+    const original = await repo.getWalk('walk-1');
+    await repo.saveWalk({
+      ...original!,
+      newGroundCellIds: ['1,2', '1,3'],
+      treatsEarned: 42,
+      refreshedRouteWalkId: 'route-9',
+    });
+
+    const saved = await repo.getWalk('walk-1');
+    expect(saved?.newGroundCellIds).toEqual(['1,2', '1,3']);
+    expect(saved?.treatsEarned).toBe(42);
+    expect(saved?.refreshedRouteWalkId).toBe('route-9');
+  });
+
+  it('a walk saved without the three new fields round-trips with all three undefined, not throwing', async () => {
+    const repo = createInMemoryWalkRepository();
+    await repo.saveWalk(makeWalk({ id: 'walk-2' }));
+
+    const saved = await repo.getWalk('walk-2');
+
+    expect(saved?.newGroundCellIds).toBeUndefined();
+    expect(saved?.treatsEarned).toBeUndefined();
+    expect(saved?.refreshedRouteWalkId).toBeUndefined();
+  });
 });

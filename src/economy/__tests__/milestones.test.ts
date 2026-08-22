@@ -1,5 +1,11 @@
 import { cumulativeXpForLevel } from '../formulas';
-import { isMilestoneLevel, milestoneIndexForLevel, shouldFireCliffhanger, titleForLevel } from '../milestones';
+import {
+  currentTitleForLevel,
+  isMilestoneLevel,
+  milestoneIndexForLevel,
+  shouldFireCliffhanger,
+  titleForLevel,
+} from '../milestones';
 
 describe('milestoneIndexForLevel / isMilestoneLevel', () => {
   it('matches design.md\'s worked milestone sequence (gap(k) = min(k, 8) starting at level 2)', () => {
@@ -48,6 +54,27 @@ describe('titleForLevel', () => {
 
   it('returns null for a non-milestone level regardless of copy state', () => {
     expect(titleForLevel(5)).toBeNull();
+  });
+});
+
+describe('currentTitleForLevel', () => {
+  it('returns null below the first milestone level (no title yet)', () => {
+    expect(currentTitleForLevel(1)).toBeNull();
+  });
+
+  it('returns the lower milestone\'s title for a level between two milestones', () => {
+    // Level 12 sits between milestones at 11 ("Trail Regular") and 16.
+    expect(currentTitleForLevel(12)).toBe('Trail Regular');
+  });
+
+  it('returns its own title for an exact milestone level', () => {
+    expect(currentTitleForLevel(11)).toBe('Trail Regular');
+    expect(currentTitleForLevel(16)).toBe('Seasoned Rambler');
+  });
+
+  it('returns the 8th authored title indefinitely past level 37, not null', () => {
+    expect(currentTitleForLevel(45)).toBe('Horizon Chaser');
+    expect(currentTitleForLevel(100)).toBe('Horizon Chaser');
   });
 });
 

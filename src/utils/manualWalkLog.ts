@@ -20,6 +20,27 @@ export function calendarDayKey(timestamp: number): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+/** Local calendar midnight (ms epoch) for the day containing `ms`. */
+export function startOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * Whole local-calendar-day gap between two timestamps (0 = same calendar
+ * day, 1 = yesterday vs. today, etc.) — extracted from
+ * SomewhereWildCard.tsx's own private day-diff helper
+ * (openspec/changes/home-dashboard/design.md Decision 3) since this file is
+ * already the de facto calendar-utilities module in this codebase (see
+ * calendarDayKey's own doc comment). Used by SomewhereWildCard's dayPhrase
+ * and DoorstepScreen.tsx's session-state resolution — the two places this
+ * codebase currently need to answer "how many calendar days back was this."
+ */
+export function calendarDayGap(earlier: number, later: number): number {
+  return Math.round((startOfLocalDay(later) - startOfLocalDay(earlier)) / (24 * 60 * 60 * 1000));
+}
+
 /**
  * Enforces the look-back-window decision: a manually-logged walk's startTime
  * must fall on today's or yesterday's local calendar date, regardless of
@@ -32,6 +53,36 @@ export function isWithinManualLogWindow(startTime: number, now: number = Date.no
   const todayKey = calendarDayKey(now);
   const yesterdayKey = calendarDayKey(now - ONE_DAY_MS);
   return startKey === todayKey || startKey === yesterdayKey;
+}
+
+/**
+ * "Tuesday morning" / "yesterday evening" style phrase for the Walk
+ * Portrait's metadata row (openspec/changes/walk-portrait/design.md Decision
+ * 7) — this file is already the de facto calendar-utilities module (see
+ * calendarDayKey's own doc comment), so this joins calendarDayKey/
+ * startOfLocalDay/calendarDayGap here rather than starting a fifth home for
+ * time-related helpers. Hour-bucket boundaries are an implementer-level
+ * polish call, not a logged balance threshold.
+ */
+export function dayAndTimeOfDayPhrase(timestamp: number): string {
+  const date = new Date(timestamp);
+  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+  const hour = date.getHours();
+
+  let timeOfDay: string;
+  if (hour < 5) {
+    timeOfDay = 'night';
+  } else if (hour < 12) {
+    timeOfDay = 'morning';
+  } else if (hour < 17) {
+    timeOfDay = 'afternoon';
+  } else if (hour < 21) {
+    timeOfDay = 'evening';
+  } else {
+    timeOfDay = 'night';
+  }
+
+  return `${weekday} ${timeOfDay}`;
 }
 
 /**

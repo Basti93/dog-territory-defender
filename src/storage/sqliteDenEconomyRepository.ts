@@ -21,6 +21,8 @@ interface DenEconomyRow {
   manualLogDayKey: string | null;
   manualLogCountToday: number;
   routeRefreshDayKey: string | null;
+  territoriesBackfillComplete: number;
+  territoryIncomeRevealed: number;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -38,6 +40,8 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     manualLogDayKey: row.manualLogDayKey,
     manualLogCountToday: row.manualLogCountToday,
     routeRefreshDayKey: row.routeRefreshDayKey,
+    territoriesBackfillComplete: row.territoriesBackfillComplete === 1,
+    territoryIncomeRevealed: row.territoryIncomeRevealed === 1,
   };
 }
 
@@ -71,7 +75,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0,
         manualLogDayKey TEXT,
         manualLogCountToday INTEGER NOT NULL DEFAULT 0,
-        routeRefreshDayKey TEXT
+        routeRefreshDayKey TEXT,
+        territoriesBackfillComplete INTEGER NOT NULL DEFAULT 0,
+        territoryIncomeRevealed INTEGER NOT NULL DEFAULT 0
       );
     `);
     // Migration for rows created before xp/level existed (e.g. an already-installed app).
@@ -95,6 +101,13 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     await addColumnIfMissing(db, 'den_economy', 'manualLogDayKey TEXT');
     await addColumnIfMissing(db, 'den_economy', 'manualLogCountToday INTEGER NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'den_economy', 'routeRefreshDayKey TEXT');
+    // Migration for rows created before territories existed
+    // (openspec/changes/territories) — both default to "not yet" (0), which
+    // is exactly the correct starting state for an existing install: it has
+    // real Home Range cells sitting unpartitioned until the backfill runs
+    // once, and no territory-income line has ever been revealed.
+    await addColumnIfMissing(db, 'den_economy', 'territoriesBackfillComplete INTEGER NOT NULL DEFAULT 0');
+    await addColumnIfMissing(db, 'den_economy', 'territoryIncomeRevealed INTEGER NOT NULL DEFAULT 0');
     return db;
   });
 
@@ -127,8 +140,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete, manualLogDayKey, manualLogCountToday, routeRefreshDayKey)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete, manualLogDayKey, manualLogCountToday, routeRefreshDayKey, territoriesBackfillComplete, territoryIncomeRevealed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
@@ -142,7 +155,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
            homeRangeBackfillComplete = excluded.homeRangeBackfillComplete,
            manualLogDayKey = excluded.manualLogDayKey,
            manualLogCountToday = excluded.manualLogCountToday,
-           routeRefreshDayKey = excluded.routeRefreshDayKey`,
+           routeRefreshDayKey = excluded.routeRefreshDayKey,
+           territoriesBackfillComplete = excluded.territoriesBackfillComplete,
+           territoryIncomeRevealed = excluded.territoryIncomeRevealed`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
@@ -156,7 +171,9 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         state.homeRangeBackfillComplete ? 1 : 0,
         state.manualLogDayKey,
         state.manualLogCountToday,
-        state.routeRefreshDayKey
+        state.routeRefreshDayKey,
+        state.territoriesBackfillComplete ? 1 : 0,
+        state.territoryIncomeRevealed ? 1 : 0
       );
     },
   };
