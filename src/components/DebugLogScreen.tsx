@@ -4,6 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { getDebugLogText, getDebugLogCount, clearDebugLog } from '../utils/debugLog';
+import { NotificationRepository } from '../storage/NotificationRepository';
 
 const COLORS = {
   green: '#2ECC71',
@@ -15,11 +16,20 @@ const COLORS = {
 
 interface DebugLogScreenProps {
   onClose: () => void;
+  /** For the walk-reminder 4-week measurement summary below (openspec/changes/walk-reminder/design.md Decision 10) — read directly, not derived from the general-purpose log text below, so a "Clear Log" tap can never destroy this experiment's own record. */
+  notificationRepository: NotificationRepository;
 }
 
-export function DebugLogScreen({ onClose }: DebugLogScreenProps) {
+interface WalkReminderSummary {
+  startedAt: number;
+  firedCount: number;
+  followedCount: number;
+}
+
+export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScreenProps) {
   const [count, setCount] = useState<number | null>(null);
   const [preview, setPreview] = useState('');
+  const [walkReminderSummary, setWalkReminderSummary] = useState<WalkReminderSummary | null>(null);
 
   const refresh = useCallback(() => {
     getDebugLogCount().then(setCount);
@@ -27,7 +37,20 @@ export function DebugLogScreen({ onClose }: DebugLogScreenProps) {
       const lines = text.split('\n');
       setPreview(lines.slice(-50).join('\n'));
     });
-  }, []);
+    // Shown only once the reminder has ever been turned on (Decision 10) —
+    // never shown, not shown as zeroes, before that first opt-in.
+    notificationRepository.getState().then((state) => {
+      setWalkReminderSummary(
+        state.walkReminderExperimentStartedAt === null
+          ? null
+          : {
+              startedAt: state.walkReminderExperimentStartedAt,
+              firedCount: state.walkReminderFiredCount,
+              followedCount: state.walkReminderFollowedCount,
+            }
+      );
+    });
+  }, [notificationRepository]);
 
   useEffect(() => {
     refresh();
@@ -80,6 +103,15 @@ export function DebugLogScreen({ onClose }: DebugLogScreenProps) {
           <Text style={styles.buttonText}>Clear</Text>
         </TouchableOpacity>
       </View>
+
+      {walkReminderSummary && (
+        <View style={styles.walkReminderSummary}>
+          <Text style={styles.walkReminderSummaryText}>
+            Walk Reminder — started {new Date(walkReminderSummary.startedAt).toLocaleDateString()} · fired{' '}
+            {walkReminderSummary.firedCount} · followed {walkReminderSummary.followedCount}
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.count}>{count === null ? 'Loading…' : `${count} entries`}</Text>
 
@@ -141,6 +173,23 @@ const styles = StyleSheet.create({
     color: COLORS.muted,
     textAlign: 'center',
     marginTop: 8,
+  },
+  // The 4-week measurement summary (openspec/changes/walk-reminder/design.md
+  // Decision 10) — a small fixed block above the scrollable log preview,
+  // reading durable counters directly off NotificationRepository rather than
+  // this screen's own clearable log text.
+  walkReminderSummary: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#EAF7EE',
+  },
+  walkReminderSummaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.text,
   },
   scroll: {
     flex: 1,

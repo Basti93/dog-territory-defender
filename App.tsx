@@ -23,7 +23,14 @@ import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
 import { StoredWalk } from './src/storage/WalkRepository';
 import { DenScreen } from './src/components/DenScreen';
-import { DoorstepScreen } from './src/components/DoorstepScreen';
+import {
+  AwayStripLine,
+  DoorstepScreen,
+  DoorstepSession,
+  pickGreeting,
+  resolveAwayStripLines,
+  resolveDoorstepSession,
+} from './src/components/DoorstepScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
@@ -45,8 +52,10 @@ import { territoryMass, territoryRate } from './src/economy/territoryEconomy';
 import { AchievementId, recordTreatsEarned } from './src/economy/personalStats';
 import { awardWalkRewards, WalkRewardsCelebration } from './src/economy/walkRewards';
 import { checkAndScheduleEarnedTriggerNotification } from './src/notifications/earnedTrigger';
+import { checkAndScheduleWalkReminder } from './src/notifications/walkReminder';
 import { resolveDoorstepOverflowLine } from './src/notifications/notificationDecision';
-import { DEN_OVERFLOW_NOTIFICATION_DATA } from './src/notifications/scheduler';
+import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from './src/notifications/scheduler';
+import { SettingsScreen } from './src/components/SettingsScreen';
 import { log } from './src/utils/log';
 
 const walkRepository = createSqliteWalkRepository();
@@ -81,9 +90,16 @@ export default function App() {
   const [showDebugLog, setShowDebugLog] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showLogMissedWalk, setShowLogMissedWalk] = useState(false);
-  // The Doorstep (openspec/changes/home-dashboard) — shown once per app cold
-  // start, right after the dog-naming gate, then dismissed for the rest of
-  // this process's life (never reset back to true).
+  // Settings (openspec/changes/walk-reminder/design.md Decision 1) — this
+  // app's first Settings screen, reached via DoorstepMenu's third row.
+  // Mirrors the existing showDebugLog/showLogMissedWalk boolean-toggle
+  // convention exactly.
+  const [showSettings, setShowSettings] = useState(false);
+  // The Doorstep (openspec/changes/home-dashboard) — the app's persistent
+  // home/overview screen (design.md Decisions 8-13). Shown at cold start,
+  // right after the dog-naming gate, and set back to true by every other
+  // screen's dismiss handler below, so it's reachable again after any trip
+  // into the Den/History/Stats/map — not a one-time splash.
   const [showDoorstep, setShowDoorstep] = useState(true);
   const [homeRangeRefreshKey, setHomeRangeRefreshKey] = useState(0);
   const [treats, setTreats] = useState<number | null>(null);
@@ -96,11 +112,19 @@ export default function App() {
   // the achievement queue would silently produce ~0 or an empty queue (see
   // openspec/changes/home-dashboard/design.md Decision 7).
   const [accruedDelta, setAccruedDelta] = useState(0);
-  const [previousLastTickAt, setPreviousLastTickAt] = useState<number | null>(null);
-  // Resolved+claimed by the merged mount effect below, before
-  // checkAndScheduleEarnedTriggerNotification runs (design.md Decision 6) —
-  // never re-derived inside DoorstepScreen itself.
-  const [showOverflowLine, setShowOverflowLine] = useState(false);
+  // The Doorstep's session state, greeting copy, and away-strip lines —
+  // resolved exactly once per app launch, by the merged mount effect below,
+  // and passed straight down to DoorstepScreen as props (design.md Decision
+  // 10). Making the Doorstep remountable (Decisions 8-9) means DoorstepScreen
+  // itself can no longer safely resolve these on its own mount effect — a
+  // later remount (return trip to the Doorstep) would re-derive them from
+  // App.tsx's still-nonzero accruedDelta/showOverflowLine state and
+  // repeat-fire the same "+N in the bowl" line every time. Resolving here,
+  // once, and never touching these again after the initial mount effect
+  // finishes, is what prevents that.
+  const [doorstepSession, setDoorstepSession] = useState<DoorstepSession | null>(null);
+  const [doorstepGreeting, setDoorstepGreeting] = useState<string | null>(null);
+  const [awayStripLines, setAwayStripLines] = useState<AwayStripLine[]>([]);
   const [celebration, setCelebration] = useState<WalkRewardsCelebration | null>(null);
   const [routeRefreshAvailable, setRouteRefreshAvailable] = useState(false);
   // "Somewhere Wild" (openspec/changes/somewhere-wild): the marker and the
@@ -121,9 +145,11 @@ export default function App() {
   } | null>(null);
   // True only on the one app-open where territoryIncomeRevealed flipped this
   // session (design.md Decision 6's one-off discovery beat) — computed once
-  // in the merged mount effect below, passed straight to DoorstepScreen,
-  // never re-derived there. territoryIncomeRate is the current global rate,
-  // needed by both the one-off reveal line and the permanent footer line.
+  // in the merged mount effect below and folded into that same effect's
+  // resolveAwayStripLines call (openspec/changes/home-dashboard/design.md
+  // Decision 10), not passed down to DoorstepScreen directly.
+  // territoryIncomeRate is the current global rate, passed straight through
+  // to DoorstepScreen for its permanent footer line.
   const [justRevealedTerritoryIncome, setJustRevealedTerritoryIncome] = useState(false);
   const [territoryIncomeRate, setTerritoryIncomeRate] = useState(0);
 
@@ -177,14 +203,35 @@ export default function App() {
   // start launched by tapping the notification.
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (response.notification.request.content.data?.type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+      const type = response.notification.request.content.data?.type;
+      if (type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+        // design.md Decision 11: showDoorstep defaults to true, and its `if`
+        // branch is checked first in the screen chain below — without also
+        // clearing it here, a cold start triggered by tapping this
+        // notification would silently land on the Doorstep instead of Den,
+        // with no indication the tap did anything. Same one-line pattern
+        // every other onOpenX handler in this file already applies.
+        setShowDoorstep(false);
         setShowDen(true);
+      } else if (type === WALK_REMINDER_NOTIFICATION_DATA.type) {
+        // openspec/changes/walk-reminder/design.md Decision 9: the Doorstep,
+        // not the Den, is this reminder's destination — its Start Walk
+        // button is the actual behavior the reminder exists to prompt.
+        // showDoorstep already defaults to true, but this closes any other
+        // screen state a tap might otherwise land underneath.
+        setShowDen(false);
+        setShowDoorstep(true);
       }
     });
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response?.notification.request.content.data?.type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+      const type = response?.notification.request.content.data?.type;
+      if (type === DEN_OVERFLOW_NOTIFICATION_DATA.type) {
+        setShowDoorstep(false);
         setShowDen(true);
+      } else if (type === WALK_REMINDER_NOTIFICATION_DATA.type) {
+        setShowDen(false);
+        setShowDoorstep(true);
       }
     });
 
@@ -242,8 +289,11 @@ export default function App() {
       // openspec/changes/territories/design.md Decision 6: the reveal flag
       // flips at most once, ever — this is true only on the specific open
       // where that flip just happened.
-      setJustRevealedTerritoryIncome(!state.territoryIncomeRevealed && reconciled.territoryIncomeRevealed);
-      setTerritoryIncomeRate(territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), reconciled.level));
+      const justRevealedTerritoryIncomeNow = !state.territoryIncomeRevealed && reconciled.territoryIncomeRevealed;
+      setJustRevealedTerritoryIncome(justRevealedTerritoryIncomeNow);
+      const territoryIncomeRateNow = territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), reconciled.level);
+      setTerritoryIncomeRate(territoryIncomeRateNow);
+      let pendingAchievementsForDoorstep: AchievementId[] = [];
       if (delta > 0) {
         const personalStats = await personalStatsRepository.getState();
         const { stats: nextPersonalStats, newlyUnlocked } = recordTreatsEarned(personalStats, delta);
@@ -251,6 +301,7 @@ export default function App() {
         if (newlyUnlocked.length > 0) {
           await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
           setPendingDenAchievements(newlyUnlocked);
+          pendingAchievementsForDoorstep = newlyUnlocked;
         }
       }
 
@@ -259,7 +310,6 @@ export default function App() {
       if (nextBookkeeping !== bookkeeping) {
         await notificationRepository.saveState(nextBookkeeping);
       }
-      setShowOverflowLine(showLine);
 
       // Recompute/reschedule the earned-trigger notification each time the
       // app opens (see openspec/changes/walk-start-notifications/design.md's
@@ -269,12 +319,49 @@ export default function App() {
         (err) => log('NOTIFICATION_CHECK_ERROR', { error: String(err) })
       );
 
-      // Set last, once every other Doorstep-facing value above (accruedDelta,
-      // pendingDenAchievements, showOverflowLine) is already final — this is
-      // the single prop DoorstepScreen's own mount effect waits on before
-      // resolving its session, so it never locks in a session/away-strip
-      // computed from still-default placeholder values (design.md Decision 3).
-      setPreviousLastTickAt(previousTick);
+      // The opt-in daily walk reminder (openspec/changes/walk-reminder/
+      // design.md Decision 4) — recomputed/rescheduled here on every app
+      // open, and again right after a tracked walk finishes or a walk is
+      // manually logged (see finishWalk/logMissedWalk below).
+      await checkAndScheduleWalkReminder({ walkRepository, notificationRepository }).catch((err) =>
+        log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+      );
+
+      // Resolve the Doorstep's session state, greeting, and away-strip lines
+      // exactly once here — the last step, once every input they depend on
+      // (accruedDelta, pendingDenAchievements, the overflow-line claim
+      // above) is already final. Per design.md Decision 10, this used to run
+      // inside DoorstepScreen's own mount effect, but making the Doorstep
+      // remountable (Decisions 8-9) means that effect would re-run — and
+      // repeat-fire the same "+N in the bowl"/achievement/overflow line — on
+      // every later return trip to the Doorstep this session. Resolving here
+      // instead, in this once-per-launch effect, and passing the results
+      // down as plain props, is what prevents that.
+      const doorstepNow = Date.now();
+      const resolvedSession = resolveDoorstepSession(previousTick, doorstepNow);
+      setDoorstepSession(resolvedSession);
+      if (resolvedSession.greetingFlavor) {
+        setDoorstepGreeting(pickGreeting(resolvedSession.greetingFlavor, reconciled.dogName));
+      }
+      const resolvedAwayStripLines = await resolveAwayStripLines(
+        {
+          somewhereWildDeps: {
+            homeRangeRepository,
+            walkRepository,
+            dogName: reconciled.dogName,
+            now: doorstepNow,
+            territoryRepository,
+          },
+          pendingDenAchievements: pendingAchievementsForDoorstep,
+          accruedDelta: delta,
+          showOverflowLine: showLine,
+          treats: reconciled.treats,
+          justRevealedTerritoryIncome: justRevealedTerritoryIncomeNow,
+          territoryIncomeRate: territoryIncomeRateNow,
+        },
+        resolvedSession.kind
+      );
+      setAwayStripLines(resolvedAwayStripLines);
     })();
   }, []);
 
@@ -454,6 +541,13 @@ export default function App() {
     try {
       await walkRepository.saveWalk(finishedWalk);
       log('STORAGE_WALK_SAVED', { id: finishedWalk.id, closed: qualifies });
+      // openspec/changes/walk-reminder/design.md Decision 4: recheck right
+      // after a tracked walk finishes, not just at the next app open — a
+      // walk that finishes mid-afternoon should cancel a reminder already
+      // scheduled for later that same evening.
+      await checkAndScheduleWalkReminder({ walkRepository, notificationRepository }).catch((err) =>
+        log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+      );
     } catch (err) {
       console.error('Failed to save walk:', err);
       log('STORAGE_WALK_SAVE_ERROR', { id: finishedWalk.id, error: String(err) });
@@ -554,6 +648,12 @@ export default function App() {
     try {
       await walkRepository.saveWalk(manualWalk);
       log('STORAGE_WALK_SAVED', { id: manualWalk.id, closed: true, startSource: 'manual-log' });
+      // openspec/changes/walk-reminder/design.md Decision 4: recheck right
+      // after a walk is manually logged, same gap-closing rationale as
+      // finishWalk's own recheck above.
+      await checkAndScheduleWalkReminder({ walkRepository, notificationRepository }).catch((err) =>
+        log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+      );
 
       let bloom = 1;
       let refreshApplied = false;
@@ -596,6 +696,12 @@ export default function App() {
       setTreats(result.denEconomyState.treats);
       setLevel(result.denEconomyState.level);
       setShowLogMissedWalk(false);
+      // design.md Decision 8's table: every dismiss of Log a Missed Walk
+      // returns to the Doorstep. Safe to set here even though celebration is
+      // about to render on top of it (see the celebration-vs-showDoorstep
+      // reordering note at the celebration screen check below) — the player
+      // lands on the Doorstep once they dismiss the celebration.
+      setShowDoorstep(true);
       setCelebration(result.celebration);
 
       // Combined second patch write (openspec/changes/walk-portrait/design.md
@@ -643,40 +749,19 @@ export default function App() {
     );
   }
 
-  if (showDoorstep) {
-    return (
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
-          <DoorstepScreen
-            dogName={dogName}
-            treats={treats ?? 0}
-            level={level ?? 1}
-            accruedDelta={accruedDelta}
-            pendingDenAchievements={pendingDenAchievements}
-            showOverflowLine={showOverflowLine}
-            previousLastTickAt={previousLastTickAt}
-            denEconomyRepository={denEconomyRepository}
-            homeRangeRepository={homeRangeRepository}
-            walkRepository={walkRepository}
-            territoryRepository={territoryRepository}
-            justRevealedTerritoryIncome={justRevealedTerritoryIncome}
-            territoryIncomeRate={territoryIncomeRate}
-            onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
-            onStartWalk={() => {
-              setShowDoorstep(false);
-              startWalk();
-            }}
-            onOpenMap={() => setShowDoorstep(false)}
-            onOpenDen={() => {
-              setShowDoorstep(false);
-              setShowDen(true);
-            }}
-          />
-        </SafeAreaView>
-      </SafeAreaProvider>
-    );
-  }
-
+  // Checked BEFORE showDoorstep (design.md Decisions 8/9's own reordering
+  // consequence, not covered explicitly by tasks.md but required to
+  // implement them without a regression): logMissedWalk's success path
+  // (below) sets both showLogMissedWalk=false and showDoorstep=true in the
+  // same synchronous call as setCelebration(...), so celebration and
+  // showDoorstep can now legitimately both be true at once — something that
+  // was structurally impossible before the Doorstep became remountable
+  // (showDoorstep only ever went true->false, never back). Celebration is a
+  // one-off reward moment, not part of the persistent-home-screen navigation
+  // model, so it should always win that race and render on top; the player
+  // lands on the (already-set) Doorstep once they dismiss it via "Nice
+  // walk!" — closing the same "no way back" gap for the manual-log flow
+  // that Decision 8 closes for every other screen.
   if (celebration) {
     return (
       <SafeAreaProvider>
@@ -699,6 +784,60 @@ export default function App() {
             onContinue={() => {
               setCelebration(null);
               setTerritoryBeat(null);
+            }}
+          />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (showDoorstep) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <DoorstepScreen
+            dogName={dogName}
+            treats={treats ?? 0}
+            level={level ?? 1}
+            accruedDelta={accruedDelta}
+            pendingDenAchievements={pendingDenAchievements}
+            session={doorstepSession}
+            greeting={doorstepGreeting}
+            awayStripLines={awayStripLines}
+            denEconomyRepository={denEconomyRepository}
+            homeRangeRepository={homeRangeRepository}
+            walkRepository={walkRepository}
+            territoryRepository={territoryRepository}
+            territoryIncomeRate={territoryIncomeRate}
+            onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
+            onStartWalk={() => {
+              setShowDoorstep(false);
+              startWalk();
+            }}
+            onOpenMap={() => setShowDoorstep(false)}
+            onOpenDen={() => {
+              setShowDoorstep(false);
+              setShowDen(true);
+            }}
+            onOpenHistory={() => {
+              setShowDoorstep(false);
+              setShowHistory(true);
+            }}
+            onOpenStats={() => {
+              setShowDoorstep(false);
+              setShowStats(true);
+            }}
+            onOpenDebugLog={() => {
+              setShowDoorstep(false);
+              setShowDebugLog(true);
+            }}
+            onOpenLogMissedWalk={() => {
+              setShowDoorstep(false);
+              setShowLogMissedWalk(true);
+            }}
+            onOpenSettings={() => {
+              setShowDoorstep(false);
+              setShowSettings(true);
             }}
           />
         </SafeAreaView>
@@ -753,6 +892,7 @@ export default function App() {
             onClose={() => {
               setShowHistory(false);
               setHomeRangeRefreshKey((k) => k + 1);
+              setShowDoorstep(true);
             }}
           />
         </SafeAreaView>
@@ -770,7 +910,10 @@ export default function App() {
             homeRangeRepository={homeRangeRepository}
             pendingAchievements={pendingDenAchievements}
             onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
-            onClose={() => setShowDen(false)}
+            onClose={() => {
+              setShowDen(false);
+              setShowDoorstep(true);
+            }}
             onTreatsChanged={setTreats}
           />
         </SafeAreaView>
@@ -782,7 +925,30 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DebugLogScreen onClose={() => setShowDebugLog(false)} />
+          <DebugLogScreen
+            notificationRepository={notificationRepository}
+            onClose={() => {
+              setShowDebugLog(false);
+              setShowDoorstep(true);
+            }}
+          />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (showSettings) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <SettingsScreen
+            notificationRepository={notificationRepository}
+            walkRepository={walkRepository}
+            onClose={() => {
+              setShowSettings(false);
+              setShowDoorstep(true);
+            }}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -795,7 +961,10 @@ export default function App() {
           <StatsScreen
             repository={personalStatsRepository}
             denEconomyRepository={denEconomyRepository}
-            onClose={() => setShowStats(false)}
+            onClose={() => {
+              setShowStats(false);
+              setShowDoorstep(true);
+            }}
           />
         </SafeAreaView>
       </SafeAreaProvider>
@@ -808,7 +977,10 @@ export default function App() {
         <SafeAreaView style={styles.container}>
           <LogMissedWalkScreen
             onLog={logMissedWalk}
-            onClose={() => setShowLogMissedWalk(false)}
+            onClose={() => {
+              setShowLogMissedWalk(false);
+              setShowDoorstep(true);
+            }}
             walkRepository={walkRepository}
             routeRefreshAvailable={routeRefreshAvailable}
           />
@@ -868,35 +1040,25 @@ export default function App() {
 
         <View style={styles.buttons}>
           {!appState.isTracking ? (
-            <>
-              <TouchableOpacity style={[styles.button, styles.startButton]} onPress={startWalk}>
-                <Text style={styles.buttonText}>Start Walk</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.logMissedWalkButton]}
-                onPress={() => setShowLogMissedWalk(true)}
-              >
-                <Text style={styles.buttonText}>Log a walk we missed</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.historyButton]} onPress={() => setShowHistory(true)}>
-                <Text style={styles.buttonText}>View Past Walks</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.denButton]} onPress={() => setShowDen(true)}>
-                <Text style={styles.buttonText}>The Den</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.statsButton]} onPress={() => setShowStats(true)}>
-                <Text style={styles.buttonText}>Stats & Badges</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.debugLogButton]} onPress={() => setShowDebugLog(true)}>
-                <Text style={styles.buttonText}>Debug Log</Text>
-              </TouchableOpacity>
-            </>
+            // The idle map screen's own button stack (Start Walk / Log a
+            // walk we missed / View Past Walks / The Den / Stats & Badges /
+            // Debug Log) is removed (design.md Decision 9) — Start Walk now
+            // lives one tap away on the Doorstep, and the rest moved to the
+            // Doorstep's direct-access row or burger menu. All that's left
+            // here is a way back to the Doorstep itself.
+            <TouchableOpacity style={styles.backToDoorstepButton} onPress={() => setShowDoorstep(true)}>
+              <Text style={styles.backToDoorstepButtonText}>← Back to Doorstep</Text>
+            </TouchableOpacity>
           ) : (
             <>
               {/* Two-way terminal action model (design.md's Technical Split
                   Addendum): Finish Walk always saves the trail and paints
                   it into the Home Range, regardless of shape — there's
-                  nothing left for a separate loop-closure gate to mean. */}
+                  nothing left for a separate loop-closure gate to mean.
+                  Never dismissible to the Doorstep while tracking — an
+                  explicit non-goal (design.md Decisions 8-13's own framing:
+                  "the live map + Finish Walk/Cancel screen... is never
+                  interrupted by or dismissible to the Doorstep"). */}
               <TouchableOpacity style={[styles.button, styles.stopButton]} onPress={finishWalk}>
                 <Text style={styles.buttonText}>Finish Walk</Text>
               </TouchableOpacity>
@@ -907,7 +1069,18 @@ export default function App() {
           )}
 
           {appState.walk && !appState.isTracking && appState.walk.closed && (
-            <TouchableOpacity style={[styles.button, styles.newButton]} onPress={resetWalk}>
+            <TouchableOpacity
+              style={[styles.button, styles.newButton]}
+              onPress={() => {
+                resetWalk();
+                // Once the idle screen's own Start Walk button is gone
+                // (Decision 9), a player tapping "New Walk" would otherwise
+                // land on a now action-less idle map — returning to the
+                // Doorstep directly closes that gap (design.md Decision 8's
+                // "why New Walk also returns to the Doorstep").
+                setShowDoorstep(true);
+              }}
+            >
               <Text style={styles.buttonText}>New Walk</Text>
             </TouchableOpacity>
           )}
@@ -960,26 +1133,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  startButton: {
-    backgroundColor: COLORS.green,
-  },
-  logMissedWalkButton: {
-    backgroundColor: '#F39C12',
-  },
   stopButton: {
     backgroundColor: COLORS.blue,
-  },
-  historyButton: {
-    backgroundColor: COLORS.blue,
-  },
-  denButton: {
-    backgroundColor: '#8B6F47',
-  },
-  statsButton: {
-    backgroundColor: '#3A9E5F',
-  },
-  debugLogButton: {
-    backgroundColor: COLORS.muted,
   },
   cancelButton: {
     backgroundColor: '#E74C3C',
@@ -989,6 +1144,22 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  // The idle map screen's single "back to Doorstep" control (design.md
+  // Decision 9), replacing the removed six-button stack.
+  backToDoorstepButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#E0E0DA',
+    alignItems: 'center',
+  },
+  backToDoorstepButtonText: {
+    color: COLORS.text,
+    fontWeight: '600',
+    fontSize: 14,
   },
   buttonText: {
     color: COLORS.white,

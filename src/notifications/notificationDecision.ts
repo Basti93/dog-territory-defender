@@ -1,10 +1,16 @@
 import { DenEconomyState } from '../economy/denEconomy';
 import { storageCap } from '../economy/formulas';
+import { defaultWalkReminderFields } from './walkReminderDecision';
 
 // Pure decision logic for the earned-trigger notification (Den-economy
 // overflow only — see openspec/changes/walk-start-notifications/proposal.md's
 // scope cut). Deliberately has no dependency on `expo-notifications` so it
 // stays unit-testable without a native/dev-client build.
+//
+// NotificationBookkeepingState below is also home to the opt-in daily walk
+// reminder's own fields (openspec/changes/walk-reminder) — see
+// walkReminderDecision.ts for that feature's own pure decision logic, kept in
+// a separate file even though the two share this one repository row.
 
 export type TimeOfDayBucket = 'morning' | 'midday' | 'evening';
 
@@ -13,10 +19,40 @@ export interface NotificationBookkeepingState {
   overflowSurfaced: boolean;
   /** Most recently learned coarse delivery-time bucket, cached so scheduling doesn't need to rescan WalkRepository every check. */
   learnedTimeOfDayBucket: TimeOfDayBucket | null;
+
+  // The opt-in daily walk reminder (openspec/changes/walk-reminder/design.md
+  // Decision 3) — flat, `walkReminder`-prefixed fields on this same
+  // repository row rather than a second repository, since these are
+  // conceptually the same kind of thing this repository already exists for
+  // (notification bookkeeping).
+  /** Off by default — the player must explicitly opt in from Settings. */
+  walkReminderEnabled: boolean;
+  /** Player-set local hour (0-23). Null until the player has set a time. */
+  walkReminderHour: number | null;
+  /** Player-set local minute (0-59). Null until the player has set a time. */
+  walkReminderMinute: number | null;
+  /** Consecutive calendar days a scheduled reminder went unfollowed by a walk — reset to 0 by any walked day, auto-sleeps the reminder at 3 (see walkReminderDecision.ts). */
+  walkReminderConsecutiveIgnores: number;
+  /** calendarDayKey of the last day a reminder was actually scheduled and not yet reconciled against that day's walk history. Null once resolved. */
+  walkReminderPendingDate: string | null;
+  /** Durable measurement counter (openspec/changes/walk-reminder/design.md Decision 10) — total reminders actually scheduled, for the 4-week kill-condition review. */
+  walkReminderFiredCount: number;
+  /** Durable measurement counter — of those fired, how many were followed by a walk that same day. */
+  walkReminderFollowedCount: number;
+  /** Set once, the first time the player ever turns the reminder on. Null until then — also gates whether the measurement summary is shown at all (Decision 10: never shown, not shown as zeroes, before the player has ever turned the reminder on). */
+  walkReminderExperimentStartedAt: number | null;
 }
 
 export function defaultNotificationBookkeepingState(): NotificationBookkeepingState {
-  return { overflowSurfaced: false, learnedTimeOfDayBucket: null };
+  return {
+    overflowSurfaced: false,
+    learnedTimeOfDayBucket: null,
+    // Single source of truth for the walk-reminder fields' defaults lives in
+    // walkReminderDecision.ts (defaultWalkReminderFields) — spread in here so
+    // this remains the one place a fresh NotificationBookkeepingState is
+    // assembled, without duplicating the literal default values in two files.
+    ...defaultWalkReminderFields(),
+  };
 }
 
 function isOverflowing(denState: DenEconomyState): boolean {

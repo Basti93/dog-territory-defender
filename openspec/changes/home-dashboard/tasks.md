@@ -59,3 +59,64 @@
 - [ ] 8.5 Force an idle-accrual achievement unlock (advance the clock enough for passive accrual to cross a treats threshold) and confirm it surfaces once on the Doorstep and is not shown again when the Den screen is subsequently opened.
 - [ ] 8.6 Confirm the "Somewhere Wild" line, when it appears on the Doorstep, matches the exact same fact/copy the map screen's own card would show for the same underlying state.
 - [ ] 8.7 Confirm the portrait's data-URL render time/size is acceptable on a Home Range with a large, long-lived synthetic cell count (design.md's flagged, unmeasured risk) — now with tile-load latency in the mix per the OSM-basemap decision, on both a fast connection and a throttled/offline one (confirm the `PORTRAIT_FAILED` fallback triggers correctly when offline).
+
+---
+
+## 9. Persistent home screen — return-to-Doorstep wiring in `App.tsx` (folded in 2026-08-22, `design.md` Decisions 8-13)
+
+Sections 0-8 above are unchanged and already implemented/checked off against their original numbering. Everything below is new work folded in from the founder's on-device navigation finding — read `design.md` Decisions 8-13 in full before starting.
+
+- [x] 9.1 Add `setShowDoorstep(true)` to the `onClose` handlers for `showDen`, `showStats`, `showHistory`, `showDebugLog`, and `showLogMissedWalk` (both its `onClose` prop and the success path inside `logMissedWalk` that already calls `setShowLogMissedWalk(false)`), per `design.md` Decision 8's table.
+- [x] 9.2 Leave `viewingWalk`'s `onClose` and `showTerritories`'s `onClose`/`onOpenMap` unchanged — both nest under a different screen (Walk History and the map respectively), not the Doorstep, per `design.md` Decision 8's table.
+- [x] 9.3 Fix the notification-tap listener (`Notifications.addNotificationResponseReceivedListener` and the matching `getLastNotificationResponseAsync` check): add `setShowDoorstep(false)` alongside the existing `setShowDen(true)` in both places, per `design.md` Decision 11.
+
+## 10. Idle map screen restructuring (`design.md` Decision 9)
+
+- [x] 10.1 In `App.tsx`'s final fallback `return`, delete the idle-branch (`!appState.isTracking`) button stack: Start Walk, Log a walk we missed, View Past Walks, The Den, Stats & Badges, Debug Log, and their associated styles that become unused. The tracking branch (`appState.isTracking === true`, Finish Walk/Cancel) is unchanged.
+- [x] 10.2 Add a single "back to Doorstep" control in the idle branch, calling `setShowDoorstep(true)`. Placement/styling is an implementer call — see `design.md` Decision 9 for the suggestion of mirroring `MapView.tsx`'s existing floating Territories-button chrome, though it doesn't have to live inside `MapView.tsx` itself (keep it in `App.tsx`'s `styles.controls` panel).
+- [x] 10.3 Change the existing "New Walk" button (rendered when `appState.walk && !isTracking && appState.walk.closed`) to also call `setShowDoorstep(true)` alongside its existing `resetWalk()`, per `design.md` Decision 8's rationale.
+- [x] 10.4 Confirm `MapView.tsx` itself needs no changes — its `onOpenTerritories` prop and floating Territories button are untouched.
+
+## 11. Fix the away-strip repeat-fire bug (`design.md` Decision 10)
+
+- [x] 11.1 In `App.tsx`'s existing merged mount effect (task 4.1's sequential routine), add calls to `resolveDoorstepSession(previousTick, now)` and `resolveAwayStripLines(...)` (importing them from `DoorstepScreen.tsx`, where they're already exported), and store their results in new `App.tsx` state (e.g. `doorstepSession: DoorstepSession | null`, `doorstepGreeting: string | null`, `awayStripLines: AwayStripLine[]`). Compute the greeting (`pickGreeting`) here too, for the same reason — its dice-roll has the identical repeat-fire risk as the away-strip's own anchor-line roll.
+- [x] 11.2 Remove the `resolveDoorstepSession`/`resolveAwayStripLines`/`pickGreeting` calls and the `session`/`greeting`/`awayStripLines` `useState`s from inside `DoorstepScreen.tsx`'s own mount effect; accept them as new props instead (`session`, `greeting`, `awayStripLines`), rendered exactly as before. The pure functions themselves are unchanged, still exported from `DoorstepScreen.tsx` (or moved to a shared module if that reads more naturally once `App.tsx` is the caller — implementer's call, no behavior difference either way).
+- [x] 11.3 Leave `denEconomyRepository.getState()` (building-level fetch) and `TerritoryPortrait`'s own Home Range fetch as live per-mount fetches inside `DoorstepScreen.tsx` — these should legitimately reflect any change since the last visit, per `design.md` Decision 10's "what stays live" note.
+- [x] 11.4 Confirm `pendingDenAchievements`' existing self-clearing behavior (`onAcknowledgePendingAchievements` → `setPendingDenAchievements([])`) needs no change — verify by inspection that a remounted `DoorstepScreen` sees an empty array on a second visit and correctly shows no achievement line.
+- [x] 11.5 Update `src/components/__tests__/DoorstepScreen.test.ts` only if the call-site move changes these functions' exported shape (it shouldn't). If unchanged, confirm the existing suite still passes without modification.
+
+## 12. Doorstep direct-access row (`design.md` Decision 12)
+
+- [x] 12.1 In `DoorstepScreen.tsx`, add two new callback props (`onOpenHistory`, `onOpenStats`) and a small icon row rendering them, placed between the Start Walk button and the Den tease footer. No new Den icon — the existing footer tease remains the Den's only entry point on this screen.
+- [x] 12.2 In `App.tsx`, wire `onOpenHistory: () => { setShowDoorstep(false); setShowHistory(true); }` and `onOpenStats: () => { setShowDoorstep(false); setShowStats(true); }`, mirroring the existing `onOpenDen` pattern exactly.
+
+## 13. Burger menu (`design.md` Decision 13)
+
+- [x] 13.1 New component (implementer's choice of filename, e.g. `src/components/DoorstepMenu.tsx`): a React Native `Modal`-based overlay with two rows, Debug Log and Log a Walk We Missed, and its own local open/closed `useState` — not lifted to `App.tsx`. No new dependency.
+- [x] 13.2 In `DoorstepScreen.tsx`, add a small burger-menu trigger control and mount the new overlay component, wired to two new callback props (`onOpenDebugLog`, `onOpenLogMissedWalk`).
+- [x] 13.3 In `App.tsx`, wire `onOpenDebugLog: () => { setShowDoorstep(false); setShowDebugLog(true); }` and `onOpenLogMissedWalk: () => { setShowDoorstep(false); setShowLogMissedWalk(true); }`, mirroring the existing `onOpenDen` pattern.
+- [x] 13.4 Confirm the overlay's own local open/closed state resets to closed when either action is taken (so a later Doorstep remount doesn't show the menu already open).
+
+## 14. Spec and README follow-up
+
+- [ ] 14.1 Confirm `specs/home-dashboard/spec.md`'s revised "The Doorstep Is the Persistent Home Screen" requirement and its four new requirements (idle map screen, direct-access row, burger menu, away-strip-once-per-launch) are applied via `/opsx:apply` alongside the rest of this capability — same flow as task 6.1, now covering the corrected behavior instead of the original one-time-gate framing. **Not run this pass** — merging spec deltas into `openspec/specs/` is this project's `/opsx:archive` step (per `CLAUDE.md`'s explicit "don't edit `openspec/specs/` directly, go through the OpenSpec workflow" rule), which this capability's own `proposal.md` says happens only after section 16's on-device manual verification (task 8.1 already prompted one reversal before archiving — archiving again before 16 is verified would repeat that risk). Left for the user to run once 16 is done.
+- [x] 14.2 Update `README.md`'s Doorstep description (currently "a landing screen shown once per app cold start") to describe it as the persistent home screen, reachable again after any other screen — supersedes task 6.2's original wording.
+
+## 15. Automated coverage follow-up
+
+- [x] 15.1 `npx tsc --noEmit` clean, including the new burger-menu component and the moved `resolveDoorstepSession`/`resolveAwayStripLines` call site.
+- [x] 15.2 Confirm `src/components/__tests__/DoorstepScreen.test.ts` still passes (task 11.5) — no new pure-logic test needed, since `resolveDoorstepSession`/`resolveAwayStripLines`/`pickGreeting` themselves aren't changing.
+
+## 16. Manual on-device verification — persistent home screen
+
+**Needs a real device/emulator — left for the user to run. In addition to section 8's original checks above.**
+
+- [ ] 16.1 Confirm the Doorstep is shown again after dismissing each of: the Den, Stats & Badges, Walk History, Debug Log (via the burger menu), Log a Missed Walk (via the burger menu), and the idle map screen's new "back to Doorstep" control — superseding task 8.1's original "never reappears" check.
+- [ ] 16.2 Confirm a walk in progress is never interrupted by or navigable to the Doorstep — start a walk, confirm only Finish Walk/Cancel are available until one of them is tapped.
+- [ ] 16.3 Confirm the idle map screen shows no button list — only the map, trail/stats readout, Territories button, Somewhere Wild card, and the back-to-Doorstep control.
+- [ ] 16.4 Confirm the Territories button on the map still opens the Territories list, and dismissing it returns to the map (not the Doorstep).
+- [ ] 16.5 Confirm "New Walk" (after a finished, closed walk) returns to the Doorstep, not a now-empty idle map.
+- [ ] 16.6 Force an accrued-treats away-strip line (or a storage-at-cap line, or the territory-income reveal) to appear on the Doorstep, then navigate into the Den and back out to the Doorstep — confirm that same line does NOT reappear on the second visit (the repeat-fire fix, `design.md` Decision 10). Confirm the greeting copy also doesn't visibly re-roll to a different line from the same pool.
+- [ ] 16.7 Force an idle-accrued achievement unlock, confirm it still surfaces once on the Doorstep and not again on a later visit this session (re-verifying task 8.5 still holds under the new navigation model).
+- [ ] 16.8 Tap the earned-trigger overflow notification from a cold start (or backgrounded state) and confirm the Den actually opens now, instead of silently landing on the Doorstep (`design.md` Decision 11's fix).
+- [ ] 16.9 Confirm View Past Walks and Stats & Badges are each reachable in one tap from the Doorstep, and that Start Walk remains the single most visually prominent control on the screen.

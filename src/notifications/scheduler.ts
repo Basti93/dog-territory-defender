@@ -28,10 +28,15 @@ const BUCKET_HOUR: Record<TimeOfDayBucket, number> = {
 };
 
 export const DEN_OVERFLOW_NOTIFICATION_DATA = { type: 'den-overflow' } as const;
+export const WALK_REMINDER_NOTIFICATION_DATA = { type: 'walk-reminder' } as const;
 
-function nextOccurrenceOfHour(hour: number, now: Date = new Date()): Date {
+// Generalized from the original hour-only version (openspec/changes/
+// walk-reminder/tasks.md task 3.1) to also support the player's own
+// minute-precision reminder time — scheduleOverflowNotification below still
+// passes 0 minutes, so its own behavior is unchanged.
+function nextOccurrenceOfTime(hour: number, minute: number, now: Date = new Date()): Date {
   const target = new Date(now);
-  target.setHours(hour, 0, 0, 0);
+  target.setHours(hour, minute, 0, 0);
   if (target.getTime() <= now.getTime()) {
     target.setDate(target.getDate() + 1);
   }
@@ -56,10 +61,38 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 /** Schedules a single one-shot local notification at the next occurrence of the given bucket's clock time. */
 export async function scheduleOverflowNotification(bucket: TimeOfDayBucket, body: string): Promise<void> {
-  const date = nextOccurrenceOfHour(BUCKET_HOUR[bucket]);
+  const date = nextOccurrenceOfTime(BUCKET_HOUR[bucket], 0);
   await Notifications.scheduleNotificationAsync({
     content: { body, data: DEN_OVERFLOW_NOTIFICATION_DATA },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
   });
   log('NOTIFICATION_SCHEDULED', { bucket, at: date.toISOString() });
+}
+
+/**
+ * Schedules a single one-shot local walk-reminder notification at the next
+ * occurrence of the player's own set hour/minute (openspec/changes/
+ * walk-reminder/design.md Decision 4) — same one-shot `DATE`-trigger shape as
+ * `scheduleOverflowNotification` above, reusing the existing
+ * `expo-notifications` wiring rather than a second scheduling mechanism.
+ */
+export async function scheduleWalkReminderNotification(hour: number, minute: number, body: string, now: Date = new Date()): Promise<void> {
+  const date = nextOccurrenceOfTime(hour, minute, now);
+  await Notifications.scheduleNotificationAsync({
+    content: { body, data: WALK_REMINDER_NOTIFICATION_DATA },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+  });
+  log('WALK_REMINDER_SCHEDULED', { hour, minute, at: date.toISOString() });
+}
+
+/**
+ * Cancels this feature's own pending scheduled notification only
+ * (openspec/changes/walk-reminder/design.md Decision 5) — deliberately never
+ * `cancelAllScheduledNotificationsAsync()`, which would also cancel a still-
+ * pending Den-overflow notification sharing the same OS scheduling queue.
+ */
+export async function cancelScheduledWalkReminder(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const ours = scheduled.filter((n) => n.content.data?.type === WALK_REMINDER_NOTIFICATION_DATA.type);
+  await Promise.all(ours.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }

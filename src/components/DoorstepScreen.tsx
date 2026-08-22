@@ -12,18 +12,29 @@ import { WalkRepository } from '../storage/WalkRepository';
 import { calendarDayGap } from '../utils/manualWalkLog';
 import { evaluateSomewhereWild, EvaluateSomewhereWildDeps } from './SomewhereWildCard';
 import { TerritoryPortrait } from './TerritoryPortrait';
+import { DoorstepMenu } from './DoorstepMenu';
 
-// "The Doorstep" (openspec/changes/home-dashboard) — the landing screen shown
-// once per app cold start, between the first-launch dog-naming gate and the
-// map. A pure presentation layer: every number here already comes from an
-// already-shipped, already-tested capability (den-economy, home-range,
-// personal-stats, the earned-trigger notification) — this screen adds no new
-// economy/mechanic logic of its own.
+// "The Doorstep" (openspec/changes/home-dashboard) — the app's persistent
+// home/overview screen (design.md Decisions 8-13, folded in 2026-08-22 after
+// an on-device finding that the original "shown once, never reappears"
+// behavior read as a navigation bug): shown at cold start, right after the
+// first-launch dog-naming gate, and returned to from every other screen's
+// dismiss handler. A pure presentation layer: every number here already
+// comes from an already-shipped, already-tested capability (den-economy,
+// home-range, personal-stats, the earned-trigger notification) — this
+// screen adds no new economy/mechanic logic of its own.
 //
-// The two pure functions below (resolveDoorstepSession, resolveAwayStripLines)
-// are deliberately kept separate from the React component, same pattern as
-// SomewhereWildCard.tsx's evaluateSomewhereWild — exercised directly in
-// tests with no React renderer needed (see __tests__/DoorstepScreen.test.ts).
+// The pure functions below (resolveDoorstepSession, resolveAwayStripLines,
+// pickGreeting) are deliberately kept separate from the React component,
+// same pattern as SomewhereWildCard.tsx's evaluateSomewhereWild — exercised
+// directly in tests with no React renderer needed (see
+// __tests__/DoorstepScreen.test.ts). Per design.md Decision 10, they're now
+// CALLED from App.tsx's own once-per-launch mount effect, not from this
+// component's mount effect — because this component can now be unmounted
+// and remounted many times in one app session (every return trip to the
+// Doorstep), calling them here again would repeat-fire the same away-strip
+// line/greeting on every visit. This module still exports them (App.tsx
+// imports from here), it just no longer calls them itself.
 
 export type SessionKind = 'same-day-reopen' | 'fresh-open';
 export type GreetingFlavor = 'first-open' | 'long-absence';
@@ -162,7 +173,7 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
 const FIRST_OPEN_GREETINGS = ['Morning, {dog}.', '{dog} heard the door.'];
 const LONG_ABSENCE_GREETINGS = ["{dog}'s been holding the fort."];
 
-function pickGreeting(flavor: GreetingFlavor, dogName: string | null): string {
+export function pickGreeting(flavor: GreetingFlavor, dogName: string | null): string {
   const pool = flavor === 'first-open' ? FIRST_OPEN_GREETINGS : LONG_ABSENCE_GREETINGS;
   const template = pool[Math.floor(Math.random() * pool.length)];
   return template.replace('{dog}', dogDisplayName(dogName));
@@ -176,31 +187,37 @@ interface DoorstepScreenProps {
   accruedDelta: number;
   /** From App.tsx's mount effect — see onAcknowledgePendingAchievements below for the queue-consumption rule (design.md Decision 5). */
   pendingDenAchievements: AchievementId[];
-  /** Already resolved+claimed by App.tsx's merged mount effect (design.md Decision 6) — never re-derived here. */
-  showOverflowLine: boolean;
   /**
-   * DenEconomyState.lastTickAt's value from *before* this app open's
-   * passive-accrual tick overwrote it — see resolveDoorstepSession's doc
-   * comment. Null until App.tsx's own mount effect finishes computing every
-   * other Doorstep-facing value (accruedDelta, pendingDenAchievements,
-   * showOverflowLine) — this screen deliberately waits for a real value
-   * before resolving its session, rather than locking one in from
-   * still-default placeholder props.
+   * The Doorstep's session state, greeting copy, and away-strip lines —
+   * resolved exactly once per app launch by App.tsx's merged mount effect
+   * (design.md Decision 10), never recomputed here. `session`/`greeting` are
+   * null until that effect finishes (only on the very first mount of a cold
+   * start); on every later remount (a return trip to the Doorstep) they're
+   * already resolved, so the same away-strip line/greeting is shown again
+   * rather than re-rolled or re-fired.
    */
-  previousLastTickAt: number | null;
+  session: DoorstepSession | null;
+  greeting: string | null;
+  awayStripLines: AwayStripLine[];
   denEconomyRepository: DenEconomyRepository;
   homeRangeRepository: HomeRangeRepository;
   walkRepository: WalkRepository;
   /** Optional so existing callers/tests keep working unchanged — when supplied, the wild-cluster away-strip line can name its Territory (openspec/changes/territories) and the territory-income reveal/permanent line below can render. */
   territoryRepository?: TerritoryRepository;
-  /** See AwayStripDeps' own doc comment — true only on the one app-open where the reveal just happened this session. */
-  justRevealedTerritoryIncome?: boolean;
-  /** The current global territoryRate, treats/hour — from App.tsx's own applyPassiveAccrual call, not re-derived here. Read whenever `territoryIncomeRevealed` is true (from this screen's own denState fetch), for both the one-off reveal line and the permanent footer line. */
+  /** The current global territoryRate, treats/hour — from App.tsx's own applyPassiveAccrual call, not re-derived here. Read whenever `territoryIncomeRevealed` is true (from this screen's own denState fetch), for the permanent footer line. */
   territoryIncomeRate?: number;
   onAcknowledgePendingAchievements?: () => void;
   onStartWalk: () => void;
   onOpenMap: () => void;
   onOpenDen: () => void;
+  /** Doorstep direct-access row (design.md Decision 12) — View Past Walks and Stats & Badges only; the Den already has its own entry point (the tease footer below). */
+  onOpenHistory: () => void;
+  onOpenStats: () => void;
+  /** Burger-menu-only actions (design.md Decision 13) — infrequent/secondary, not daily-loop actions. */
+  onOpenDebugLog: () => void;
+  onOpenLogMissedWalk: () => void;
+  /** Settings (openspec/changes/walk-reminder/design.md Decision 1) — third burger-menu row, same infrequent-action tier as the two above. */
+  onOpenSettings: () => void;
 }
 
 export function DoorstepScreen({
@@ -209,24 +226,31 @@ export function DoorstepScreen({
   level,
   accruedDelta,
   pendingDenAchievements,
-  showOverflowLine,
-  previousLastTickAt,
+  session,
+  greeting,
+  awayStripLines,
   denEconomyRepository,
   homeRangeRepository,
   walkRepository,
   territoryRepository,
-  justRevealedTerritoryIncome,
   territoryIncomeRate,
   onAcknowledgePendingAchievements,
   onStartWalk,
   onOpenMap,
   onOpenDen,
+  onOpenHistory,
+  onOpenStats,
+  onOpenDebugLog,
+  onOpenLogMissedWalk,
+  onOpenSettings,
 }: DoorstepScreenProps) {
   const [denState, setDenState] = useState<DenEconomyState | null>(null);
-  const [session, setSession] = useState<DoorstepSession | null>(null);
-  const [greeting, setGreeting] = useState<string | null>(null);
-  const [awayStripLines, setAwayStripLines] = useState<AwayStripLine[]>([]);
   const [rangeEmpty, setRangeEmpty] = useState(false);
+  // The burger menu's own open/closed state (design.md Decision 13) — kept
+  // local to this component, not lifted to App.tsx: it's a small transient
+  // overlay on top of the Doorstep, not a full-screen destination of its own
+  // like every other showX boolean in App.tsx's screen chain.
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   // Measured on screen so the treats away-strip line's collect-tap animation
   // (AwayStripLineView) has a real target to fly toward — design.md's
   // "Collect-tap scoping": "translate + fade... toward the footer counter's
@@ -234,48 +258,26 @@ export function DoorstepScreen({
   // proposal.md's own "Den tease footer" item 5).
   const footerTreatsRef = useRef<View>(null);
 
-  // Waits for a real previousLastTickAt before resolving anything — App.tsx
-  // sets that prop last, once every other Doorstep-facing value
-  // (accruedDelta, pendingDenAchievements, showOverflowLine) is already
-  // final, so this never locks in a session/away-strip computed from
-  // still-default placeholder props. `session !== null` guards against
-  // re-running a second time (the Doorstep resolves its state exactly once
-  // per cold start — design.md's "why the Doorstep doesn't need a
-  // foreground listener").
+  // Per-mount live fetch, deliberately (design.md Decision 10's "what stays
+  // live" note): building levels (feeding getUpgradeTease/storageCap/
+  // buddyTreatsPerWalk) should reflect any Den upgrade made since the last
+  // time this screen was shown, even though `session`/`greeting`/
+  // `awayStripLines` above are resolved once and passed down unchanged.
   useEffect(() => {
-    if (previousLastTickAt === null || session !== null) return;
-
-    const now = Date.now();
-    const resolvedSession = resolveDoorstepSession(previousLastTickAt, now);
-    setSession(resolvedSession);
-    if (resolvedSession.greetingFlavor) {
-      setGreeting(pickGreeting(resolvedSession.greetingFlavor, dogName));
-    }
-
-    resolveAwayStripLines(
-      {
-        somewhereWildDeps: { homeRangeRepository, walkRepository, dogName, now, territoryRepository },
-        pendingDenAchievements,
-        accruedDelta,
-        showOverflowLine,
-        treats,
-        justRevealedTerritoryIncome,
-        territoryIncomeRate,
-      },
-      resolvedSession.kind
-    ).then(setAwayStripLines);
-
     denEconomyRepository.getState().then(setDenState);
 
-    // Queue-consumption rule (design.md Decision 5): the Doorstep is, by
-    // construction, the first screen rendered after the mount effect that
-    // populates this queue, so it claims it here rather than waiting for a
-    // separate trip into Den to also show it.
+    // Queue-consumption rule (design.md Decision 5): claim the pending-
+    // achievement queue on whichever mount sees it non-empty first — in
+    // practice, the very first Doorstep mount this launch, since
+    // pendingDenAchievements is already cleared to [] by
+    // onAcknowledgePendingAchievements before any later remount (design.md
+    // Decision 10 — this is the one already-safe-to-recompute value, no
+    // change needed there).
     if (pendingDenAchievements.length > 0) {
       onAcknowledgePendingAchievements?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previousLastTickAt]);
+  }, []);
 
   if (!denState || !session) {
     return (
@@ -299,6 +301,20 @@ export function DoorstepScreen({
 
   return (
     <View style={styles.container}>
+      {/* Burger menu trigger (design.md Decision 13) — the "settings/
+          options and debug... not so important stuff" the founder asked to
+          be tucked away, small and top-corner so it never competes with
+          Start Walk for attention. */}
+      <View style={styles.topRow}>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setIsMenuOpen(true)}
+          accessibilityLabel="More options"
+        >
+          <Text style={styles.menuButtonText}>☰</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.dogArt}>
         <Text style={styles.dogArtEmoji}>{isDozing ? '🐾' : '🐕'}</Text>
         {isDozing ? (
@@ -338,6 +354,18 @@ export function DoorstepScreen({
         <Text style={styles.startButtonText}>Start Walk</Text>
       </TouchableOpacity>
 
+      {/* Direct-access row (design.md Decision 12) — View Past Walks and
+          Stats & Badges only, visually subordinate to Start Walk. No Den
+          icon here — the tease footer below is already its entry point. */}
+      <View style={styles.iconRow}>
+        <TouchableOpacity style={styles.iconRowItem} onPress={onOpenHistory}>
+          <Text style={styles.iconRowText}>📖 Past Walks</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.iconRowItem} onPress={onOpenStats}>
+          <Text style={styles.iconRowText}>🏅 Stats & Badges</Text>
+        </TouchableOpacity>
+      </View>
+
       {tease && (
         <TouchableOpacity style={styles.denTease} onPress={onOpenDen}>
           <View ref={footerTreatsRef} collapsable={false}>
@@ -358,6 +386,23 @@ export function DoorstepScreen({
           🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate ?? 0)} treats an hour
         </Text>
       )}
+
+      <DoorstepMenu
+        visible={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        onOpenDebugLog={() => {
+          setIsMenuOpen(false);
+          onOpenDebugLog();
+        }}
+        onOpenLogMissedWalk={() => {
+          setIsMenuOpen(false);
+          onOpenLogMissedWalk();
+        }}
+        onOpenSettings={() => {
+          setIsMenuOpen(false);
+          onOpenSettings();
+        }}
+      />
     </View>
   );
 }
@@ -523,6 +568,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.warm,
     fontWeight: '600',
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  menuButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#F0F4EE',
+  },
+  menuButtonText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  iconRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  iconRowItem: {
+    paddingVertical: 4,
+  },
+  iconRowText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.muted,
   },
   territoryIncomeLine: {
     marginTop: 4,

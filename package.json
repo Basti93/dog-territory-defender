@@ -11,6 +11,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "8.4.4",
     "expo": "^54.0.36",
     "expo-file-system": "~19.0.23",
     "expo-location": "~19.0.8",
