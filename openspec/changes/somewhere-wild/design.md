@@ -30,15 +30,31 @@ The game-master brief specified `WILD_THRESHOLD = 0.75`, justified as "safely ab
 **Fix:** compute the threshold from `home-range-rewards`' own `BALANCE` constants rather than duplicating a literal:
 
 ```
-WILD_THRESHOLD = ceil20((FRESH_GROUND_UI_THRESHOLD - 1) / BALANCE.homeRange.bloomK, step=0.05)
-             // FRESH_GROUND_UI_THRESHOLD = 1.25, per home-range-rewards/design.md Decision 3's UI rule
-             // at K=0.6 today this evaluates to 0.70, rounded up to 0.75 — matches the original number,
-             // by construction rather than by coincidence
+WILD_THRESHOLD = clamp(
+  ceil20( WILD_MARGIN * (BALANCE.freshGround.displayThresholdMultiplier - 1) / BALANCE.freshGround.k, step=0.05 ),
+  0.60, 0.95
+)
+             // WILD_MARGIN = 1.8 — the wild-threshold bonus must be 1.8x the bonus at the display floor.
+             // Not invented: it's the original hand-picked 0.75 reverse-engineered — at K=0.6 the floor
+             // bonus is 0.25 and 0.75's bonus is 0.45, exactly 1.8x. Preserving this ratio (not just
+             // clearing the floor by one rounding step) is what "safely above" actually meant.
+             // At K=0.6 today: 1.8*0.25/0.6 = 0.75 exactly (no rounding, no clamping) — reproduces the
+             // original number by construction, not coincidence. Multiplier = 1.45, ~6.5 days stale.
+             // Clamp exists because the pure derivation degrades badly at the sweep table's edges:
+             // at K=0.3 unclamped math wants 1.50 (impossible, wildness caps at 1.0) — 0.95 clamp keeps
+             // the feature alive but weaker (~13 days stale, multiplier 1.285). At K=1.0 unclamped math
+             // wants 0.45 (~2.9 days stale — nearly always true, defeating the card's "mostly renders
+             // nothing" intent) — 0.60 clamp holds a "most of a week untouched" feel (multiplier 1.60).
+             // Validated by game-economist pass, see openspec/changes/somewhere-wild/ decision log.
 ```
 
-Round up (never down) to the nearest 0.05 so there's always a small margin, not an exact boundary match — a cell sitting exactly at the computed threshold should clear the display-suppression check with room for floating-point noise, not land on it. Store this as a named constant next to the wild-cluster code with a comment pointing at `home-range-rewards/design.md` Decision 3, so a future change to `K` is the one place this needs revisiting — and grep for `bloomK` finds it.
+**Correction (verified against `src/economy/balanceConfig.ts` post-archive):** the constants landed as `BALANCE.freshGround.k` and `BALANCE.freshGround.displayThresholdMultiplier`, not the `BALANCE.homeRange.bloomK`/`FRESH_GROUND_UI_THRESHOLD` names this Decision originally guessed at while `home-range-rewards` was still in flight. Both live in `src/economy/balanceConfig.ts`'s `freshGround` block, not a `homeRange` block. Every reference below and in `tasks.md`/`proposal.md` has been updated to the real names.
 
-This is also the concrete reason this change cannot ship before `home-range-rewards`: the constant it needs (`BALANCE.homeRange.bloomK`, `FRESH_GROUND_UI_THRESHOLD`) doesn't exist in code until that change lands.
+**Second correction (caught in implementation review):** the original derivation above — `ceil20((displayThresholdMultiplier - 1) / k)` with no margin factor — solves for the *break-even* wildness (where the multiplier first crosses the display floor) and then adds one 0.05 rounding step. Break-even is by definition zero margin, so no small rounding step ever produces "safely above." This doc's own worked example even claimed `0.25/0.6 = 0.70` (it's actually `0.4167`), and that arithmetic error is what let the derivation ship with the wrong intent uncaught: literal implementation gave `WILD_THRESHOLD = 0.45` (multiplier 1.27, ~2.9 days stale), not `0.75` — a much lower, much less rare bar than intended, which would have made the "Somewhere Wild" card fire far more often than its own "majority of the time, nothing renders" spec allows. Fixed above with the `WILD_MARGIN` factor and clamp; game-economist validated the corrected formula reproduces `0.75`/`1.45` exactly at today's `K=0.6` and degrades sanely across the documented `K` sweep range (0.3-1.0).
+
+Round up (never down) to the nearest 0.05 so there's always a small margin, not an exact boundary match — a cell sitting exactly at the computed threshold should clear the display-suppression check with room for floating-point noise, not land on it. Store this as a named constant next to the wild-cluster code with a comment pointing at `home-range-rewards/design.md` Decision 3, so a future change to `K` is the one place this needs revisiting — and grep for `BALANCE.freshGround.k` finds it.
+
+This is also the concrete reason this change cannot ship before `home-range-rewards`: the constants it needs (`BALANCE.freshGround.k`, `BALANCE.freshGround.displayThresholdMultiplier`) didn't exist in code until that change landed. (It has now landed — see `proposal.md`'s Status section.)
 
 ## Decision 3 — Wild cluster selection: the game-master algorithm, with two fixes
 
@@ -134,7 +150,7 @@ Reuse `hrMarchingSquaresSegments` (already generic over field/threshold) a secon
 ## Risks / Trade-offs
 
 - **[Reverse geocoding may simply not work on some real devices]** — see Decision 5. Mitigated by degrading to "card doesn't render," never to a broken state, but this means the feature's actual reach across the install base is unknown until tested on more than one device.
-- **[`WILD_THRESHOLD`'s correctness is now tied to a constant in a sibling change]** — mitigated by deriving it in code (Decision 2) rather than hardcoding, but whoever retunes `bloomK` later needs to know this file exists and re-derives from it automatically; the comment cross-reference in Decision 2 is the whole mitigation, so don't drop it in a later refactor.
+- **[`WILD_THRESHOLD`'s correctness is now tied to a constant in a sibling change]** — mitigated by deriving it in code (Decision 2) rather than hardcoding, but whoever retunes `BALANCE.freshGround.k` later needs to know this file exists and re-derives from it automatically; the comment cross-reference in Decision 2 is the whole mitigation, so don't drop it in a later refactor.
 - **[A player who's been away 3+ weeks may have most of their Range simultaneously above `WILD_THRESHOLD`]** — not a bug: the connected-components pass still picks one winning cluster (by `visits`), which in this case surfaces their historically most-walked spot as "the" wild spot, which is the intuitively correct answer for someone who's been gone a long time. Worth a manual on-device check (tasks.md) since it wasn't validated against simulated data the way `home-range`'s numbers were (no `game-economist` pass ran against this feature — it's a UI/legibility change, not an economy change).
 - **[Bounded walk-history scan (Decision 3, Fix 1) could still be slow on a very long-lived install]** — capped at 20 candidate walks and pre-filtered by bounding box before the more expensive `paintedCells()` call, but not measured against a large synthetic walk-history dataset the way `home-range`'s own numbers were. Flag for retuning if it's ever observed to lag on-device.
 

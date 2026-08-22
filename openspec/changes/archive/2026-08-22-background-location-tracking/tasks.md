@@ -23,7 +23,7 @@
 
 ## 5. Re-verify
 
-- [ ] 5.1 Real outdoor walk: background the app for an extended period (5+ min, not just 30s) while moving, confirm via the Debug Log export that `GPS_UPDATE` accuracy stays good throughout and the trail visually matches the real path (no straight-line jumps).
+- [x] 5.1 Real outdoor walk: background the app for an extended period (5+ min, not just 30s) while moving, confirm via the Debug Log export that `GPS_UPDATE` accuracy stays good throughout and the trail visually matches the real path (no straight-line jumps). Confirmed by user.
 
 ## 6. Wrap-up
 

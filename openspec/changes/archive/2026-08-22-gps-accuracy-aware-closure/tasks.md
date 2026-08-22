@@ -15,5 +15,5 @@
 
 ## 4. Wrap-up
 
-- [ ] 4.1 Manual on-device check: close a walk normally (real or emulator GPX playback, see `testing/munich-route2.gpx`), confirm closure works within the new 100m-floor radius. **Needs user — real device/emulator test.**
+- [x] 4.1 Manual on-device check: close a walk normally (real or emulator GPX playback, see `testing/munich-route2.gpx`), confirm closure works within the new 100m-floor radius. Confirmed by user.
 - [x] 4.2 Update `README.md`'s closure-condition description (`canCloseWalk() checks: ≥10 points AND distance(start, end) < 20m`) to reflect the accuracy-aware formula with its 100m floor.
