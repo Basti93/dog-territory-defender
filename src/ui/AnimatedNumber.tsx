@@ -70,7 +70,7 @@ export function AnimatedNumber({
   };
 
   return (
-    <Text style={style} onPress={skip} accessibilityLabel={accessibilityLabel}>
+    <Text style={style} onPress={skip} accessible={false} accessibilityLabel={accessibilityLabel}>
       {format ? format(shown) : formatCount(shown, decimals)}
     </Text>
   );

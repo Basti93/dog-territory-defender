@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
+import { palette, textStyle, tokens } from '../ui/theme';
 import { dogDisplayName } from '../economy/denEconomy';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { TerritoryRepository } from '../storage/TerritoryRepository';
@@ -159,9 +160,8 @@ export async function evaluateSomewhereWild(
 const MIN_FOREGROUND_RE_EVALUATE_INTERVAL_MS = 20 * 60 * 1000;
 
 const COLORS = {
-  warm: '#F39C12',
-  text: '#1A2A1A',
-  card: '#FFF8E7',
+  warm: tokens.warm,
+  text: tokens.text,
 };
 
 interface SomewhereWildCardProps {
@@ -228,8 +228,8 @@ export function SomewhereWildCard({
 
   return (
     <TouchableOpacity style={styles.card} onPress={() => onTapSpot(card.spot)} activeOpacity={0.8}>
-      <Text style={styles.icon}>🌿</Text>
-      <Text style={styles.text} numberOfLines={1}>
+      <Text style={[textStyle('body'), styles.icon]}>🌿</Text>
+      <Text style={[textStyle('small'), styles.text]} numberOfLines={1}>
         {card.text}
       </Text>
     </TouchableOpacity>
@@ -245,22 +245,25 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    borderLeftWidth: 3,
+    backgroundColor: palette.card,
+    borderRadius: 24,
+    borderLeftWidth: 6,
     borderLeftColor: COLORS.warm,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     marginBottom: 12,
     gap: 8,
+    shadowColor: palette.shadow,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
   },
   icon: {
-    fontSize: 14,
+    fontSize: 16,
   },
   text: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
     color: COLORS.text,
   },
 });

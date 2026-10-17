@@ -1,20 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
-
-// Keeps the header Close tap target at least ~44px tall.
-const CLOSE_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
+import { BuddyAvatar } from './buddy';
+import { EmptyState, Header, ListRow, palette, PressableScale, radii, Screen, shadows, spacing, textStyle, tokens } from '../ui';
 
 interface WalkHistoryScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -62,108 +54,59 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Past Walks</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={CLOSE_HIT_SLOP}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+    <Screen backdrop="sky">
+      <Header title="Past Walks" icon="icon-walks" onBack={onClose} />
 
       {walks === null ? (
         <BuddyLoading appearance={buddyAppearance} text="Loading…" />
       ) : walks.length === 0 ? (
-        <BuddyLoading appearance={buddyAppearance} text="No walks yet — take your dog out and claim your first territory! 🌱" />
+        <EmptyState title="No walks yet" message="Take your dog out and claim your first territory! 🌱">
+          <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
+        </EmptyState>
       ) : (
         <FlatList
           data={walks}
           keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             // The row itself is the Walk Portrait tap target (openspec/changes/
-            // walk-portrait) — Delete stays its own separate TouchableOpacity
-            // nested inside, unchanged as a distinct tap target.
-            <TouchableOpacity style={styles.row} onPress={() => onSelectWalk(item)} activeOpacity={0.7}>
-              <Text style={styles.rowDate}>{new Date(item.startTime).toLocaleString()}</Text>
-              <View style={styles.rowMeta}>
-                {/* item.closed now means "covered enough ground to qualify for a reward" (the
-                    25-painted-cell floor), not "formed a closed loop" — see
-                    openspec/changes/home-range/specs/walk-lifecycle/spec.md. Wording lifted
-                    directly from that spec delta's own language, not invented here.
-                    "Short stroll" (not "Too short") per openspec/changes/walk-portrait's
-                    resolved Open Question 3 — warm, not deficit-framed. */}
-                <Text style={[styles.rowStatus, { color: item.closed ? COLORS.green : COLORS.muted }]}>
-                  {item.closed ? '✓ Rewarded' : 'Short stroll'}
-                </Text>
-                <Text style={styles.rowPoints}>{item.locations.length} pts</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={8}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+            // walk-portrait) — Delete stays its own separate tap target beside it.
+            <View style={styles.rowWrap}>
+              {/* item.closed means "covered enough ground to qualify for a reward" (the
+                  25-painted-cell floor), not "formed a closed loop" — see
+                  openspec/changes/home-range/specs/walk-lifecycle/spec.md. "Short stroll"
+                  per walk-portrait's resolved Open Question 3 — warm, not deficit-framed. */}
+              <ListRow
+                style={styles.row}
+                icon="icon-walks"
+                title={new Date(item.startTime).toLocaleString()}
+                subtitle={`${item.closed ? '✓ Rewarded' : 'Short stroll'} · ${item.locations.length} pts`}
+                subtitleColor={item.closed ? palette.greenText : undefined}
+                onPress={() => onSelectWalk(item)}
+              />
+              <PressableScale style={styles.deleteButton} onPress={() => handleDelete(item)} accessibilityLabel="Delete walk">
+                <Text style={[textStyle('small'), { color: tokens.warm }]}>Delete</Text>
+              </PressableScale>
+            </View>
           )}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  rowWrap: { flexDirection: 'row', alignItems: 'stretch', marginBottom: spacing.sm, gap: spacing.sm },
+  row: { flex: 1, marginBottom: 0 },
+  deleteButton: {
+    minWidth: 64,
+    borderWidth: 2,
+    borderColor: tokens.warm,
+    borderRadius: radii.card,
+    backgroundColor: palette.card,
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  empty: {
-    padding: 24,
-    textAlign: 'center',
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  rowDate: {
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  rowMeta: {
-    alignItems: 'flex-end',
-  },
-  rowStatus: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  rowPoints: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  deleteText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#E74C3C',
-    marginLeft: 12,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    ...shadows.soft,
   },
 });

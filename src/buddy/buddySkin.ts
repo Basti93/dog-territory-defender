@@ -57,6 +57,8 @@ export interface BuddySkin {
   /** Ground line as a fraction of canvas height (used for squash pivot + shadow). */
   groundY: number;
   parts: Record<Exclude<BuddyPart, 'zzz'>, PartRenderer> & { zzz?: PartRenderer };
+  /** True when `parts.zzz` draws on the full shared canvas (an image) rather than a small glyph. */
+  zzzFullCanvas?: boolean;
 }
 
 const FILL = StyleSheet.create({
@@ -73,7 +75,14 @@ function mirrorSkin(skin: BuddySkin): BuddySkin {
   const wrap =
     (render: PartRenderer): PartRenderer =>
     (args) =>
-      React.createElement(View, { style: FILL.mirrored, pointerEvents: 'none' }, render(args));
+      React.createElement(
+        View,
+        {
+          style: [FILL.mirrored, { right: undefined, bottom: undefined, width: args.size, height: args.size }],
+          pointerEvents: 'none',
+        },
+        render(args)
+      );
   const parts = {} as BuddySkin['parts'];
   (Object.keys(skin.parts) as BuddyPart[]).forEach((k) => {
     const r = skin.parts[k];
@@ -102,17 +111,35 @@ function mirrorSkin(skin: BuddySkin): BuddySkin {
  */
 export function createImageSkin(
   sources: Partial<Record<BuddyPart, ImageSourcePropType>>,
-  pivots?: Partial<BuddyPivots>
+  pivots?: Partial<BuddyPivots>,
+  /** Optional uniform scale of every image part about (centre x, scaleOriginY fraction). Pivots are NOT adjusted here. */
+  options?: { scale?: number; scaleOriginY?: number }
 ): BuddySkin {
   const fallback = mirrorSkin(vectorSkin); // faces left
   const parts = { ...fallback.parts } as BuddySkin['parts'];
   (Object.keys(sources) as BuddyPart[]).forEach((part) => {
     const source = sources[part];
     if (!source) return;
-    parts[part] = () =>
-      React.createElement(Image, { source, resizeMode: 'contain', style: FILL.fill });
+    const scale = part === 'zzz' ? 1 : options?.scale ?? 1;
+    const originY = options?.scaleOriginY ?? 0.5;
+    parts[part] = ({ size }) =>
+      React.createElement(Image, {
+        source,
+        resizeMode: 'contain',
+        // Explicit width/height = size (never left/right/bottom insets): an Image without its own size
+        // is measured from its intrinsic pixels and can overflow the avatar box on device.
+        style:
+          scale === 1
+            ? { position: 'absolute', left: 0, top: 0, width: size, height: size }
+            : [
+                { position: 'absolute', left: 0, top: 0, width: size, height: size },
+                // RN scales about the centre; shift so the scale pivots on the feet.
+                { transform: [{ translateY: (originY - 0.5) * size }, { scale }, { translateY: -(originY - 0.5) * size }] },
+              ],
+      });
   });
   return {
+    zzzFullCanvas: !!sources.zzz,
     nativeFacing: 'left',
     groundY: fallback.groundY,
     parts,

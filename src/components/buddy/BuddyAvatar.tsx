@@ -1,7 +1,7 @@
 // Animated Buddy rig. This file only POSITIONS and ANIMATES parts; a
 // BuddySkin (src/buddy/buddySkin.ts) draws them. All motion is transform or
-// opacity on the native driver. Animated nodes (10): root, tail, body, head,
-// earLeft, earRight, eyesClosed, mouthHappy, zzz, caption.
+// opacity on the native driver. Animated nodes (11): root, tail, body, head,
+// earLeft, earRight, eyesOpen, eyesClosed, mouthHappy, zzz, caption.
 //
 // Lifecycle rule: every Animated handle and timer started by the mood effect
 // is tracked locally and torn down in that effect's cleanup (runs on mood
@@ -12,6 +12,8 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { BuddySkin, vectorSkin } from '../../buddy/buddySkin';
+import { imageSkinFor } from '../../buddy/imageSkin';
+import { tokens } from '../../ui/tokens';
 import { BuddyMood, BuddyTrick, nextTrickDelayMs, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
 
 export interface BuddyAvatarProps {
@@ -34,13 +36,14 @@ export interface BuddyAvatarProps {
   replayKey?: number;
   /** Injectable random source for blink/flick/trick timing. */
   rng?: () => number;
-  /** Art provider. Default: built-in vector skin. */
+  /** Art provider. Default: pre-rendered image skin (vector parts fill in for missing images). */
   skin?: BuddySkin;
 }
 
 type Timer = ReturnType<typeof setTimeout>;
 
-const TAP_HAPPY_MS = 1500;
+// Must outlast the 3-hop happy sequence (~2.3s) or the tap reaction is cut off mid-hop.
+const TAP_HAPPY_MS = 2600;
 const CAPTION_HOLD_MS = 1400;
 const DEG_RANGE = { inputRange: [-360, 360], outputRange: ['-360deg', '360deg'] };
 
@@ -63,8 +66,9 @@ export function BuddyAvatar({
   excitedSettleMs = 3000,
   replayKey,
   rng: rngProp = Math.random,
-  skin = vectorSkin,
+  skin: skinProp,
 }: BuddyAvatarProps) {
+  const skin = skinProp ?? imageSkinFor(appearance);
   // ----- animated values (one set per Buddy, never recreated) -----
   const v = useConst(() => ({
     breath: new Animated.Value(0), // 0..1
@@ -271,32 +275,35 @@ export function BuddyAvatar({
     to(v.shiftX, 0, 300);
 
     // breathing (slower when sleepy)
-    const breathMs = sleepy ? 3200 : 1700;
+    const breathMs = sleepy ? 3600 : 2600;
     run(Animated.loop(Animated.sequence([timing(v.breath, 1, breathMs), timing(v.breath, 0, breathMs)])));
 
-    const hop = (height: number, spinDeg = 0) =>
+    // Hop timings are per phase (ms): squash down, rise, fall. Slow enough to read on a phone.
+    const hop = (height: number, spinDeg = 0, t = { squash: 180, up: 260, down: 300 }) =>
       Animated.sequence([
-        timing(v.squash, 0.88, 70),
+        timing(v.squash, 0.88, t.squash, Easing.out(Easing.quad)),
         Animated.parallel([
-          Animated.timing(v.hopY, { toValue: -height, duration: 180, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          timing(v.squash, 1.06, 180),
-          ...(spinDeg ? [Animated.timing(v.spin, { toValue: spinDeg, duration: 340, easing: sine, useNativeDriver: true })] : []),
+          Animated.timing(v.hopY, { toValue: -height, duration: t.up, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          timing(v.squash, 1.06, t.up, Easing.out(Easing.quad)),
+          ...(spinDeg ? [Animated.timing(v.spin, { toValue: spinDeg, duration: 700, easing: Easing.inOut(Easing.quad), useNativeDriver: true })] : []),
         ]),
         Animated.parallel([
-          Animated.timing(v.hopY, { toValue: 0, duration: 170, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-          timing(v.squash, 1, 170),
+          Animated.timing(v.hopY, { toValue: 0, duration: t.down, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          timing(v.squash, 0.94, t.down, Easing.in(Easing.quad)),
         ]),
+        // soft landing: spring the squash back to rest instead of snapping
+        Animated.spring(v.squash, { toValue: 1, speed: 12, bounciness: 8, useNativeDriver: true }),
         ...(spinDeg ? [Animated.timing(v.spin, { toValue: 0, duration: 1, useNativeDriver: true })] : []),
       ]);
     const wag = (amp: number, halfMs: number) =>
       Animated.loop(Animated.sequence([timing(v.tail, amp, halfMs), timing(v.tail, -amp, halfMs)]));
     const blink = () => {
-      const once = Animated.sequence([timing(v.lid, 1, 70), Animated.delay(50), timing(v.lid, 0, 90)]);
+      const once = Animated.sequence([timing(v.lid, 1, 110), Animated.delay(80), timing(v.lid, 0, 140)]);
       run(rng() < 0.2 ? Animated.sequence([once, Animated.delay(120), once]) : once);
     };
     const flick = () => {
       const ear = rng() < 0.5 ? v.flickL : v.flickR;
-      run(Animated.sequence([timing(ear, -16, 110), timing(ear, 8, 110), timing(ear, 0, 120)]));
+      run(Animated.sequence([timing(ear, -16, 170), timing(ear, 8, 170), timing(ear, 0, 190)]));
     };
 
     if (m === 'idle' || m === 'curious') {
@@ -333,12 +340,12 @@ export function BuddyAvatar({
             } else if (trick === 'stretch') {
               run(Animated.sequence([timing(v.trickPose, -1, 450), Animated.delay(1100), timing(v.trickPose, 0, 450)]));
             } else {
-              const step = (to_: number) => timing(v.shake, to_, 70);
-              const ear = (to_: number) => timing(v.earShake, to_, 70);
+              const step = (to_: number) => timing(v.shake, to_, 110);
+              const ear = (to_: number) => timing(v.earShake, to_, 110);
               run(
                 Animated.sequence([
                   ...[5, -5, 5, -5, 4, -4, 0].map((d) => Animated.parallel([step(d), ear(d * 4)])),
-                  timing(v.earShake, 0, 60),
+                  timing(v.earShake, 0, 90),
                 ])
               );
             }
@@ -356,7 +363,7 @@ export function BuddyAvatar({
     } else if (m === 'happy') {
       const variant = tapCount.current % 3;
       const h = size * 0.13;
-      run(wag(30, 80));
+      run(wag(30, 210)); // ~420ms period
       run(
         Animated.sequence([
           hop(h),
@@ -367,15 +374,16 @@ export function BuddyAvatar({
       if (variant === 2) {
         run(
           Animated.sequence(
-            [4, -4, 4, -4, 0].map((d) => timing(v.shake, d, 70))
+            [4, -4, 4, -4, 0].map((d) => timing(v.shake, d, 110))
           )
         );
       }
       chain(blink, 700, 1200);
     } else if (m === 'excited') {
       const h = size * 0.17;
-      run(Animated.loop(Animated.timing(v.tail, { toValue: 360, duration: 450, easing: Easing.linear, useNativeDriver: true })));
-      const jumps = Animated.sequence([hop(h), Animated.delay(60), hop(h), Animated.delay(60), hop(h * 1.2, 360)]);
+      run(Animated.loop(Animated.timing(v.tail, { toValue: 360, duration: 700, easing: Easing.linear, useNativeDriver: true })));
+      const eh = { squash: 120, up: 200, down: 240 }; // excited hops: a touch quicker than the tap hop, still readable
+      const jumps = Animated.sequence([hop(h, 0, eh), Animated.delay(120), hop(h, 0, eh), Animated.delay(120), hop(h * 1.2, 360, eh)]);
       run(excitedSettleMs == null ? Animated.loop(Animated.sequence([jumps, Animated.delay(500)])) : jumps);
       chain(blink, 1500, 3000);
     } else if (sleepy) {
@@ -431,6 +439,7 @@ export function BuddyAvatar({
     onPress?.();
   };
 
+  const eyesOpenOpacity = v.lid.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   const flipped = facing !== skin.nativeFacing;
   const headX = flipped ? 1 - geo.neckX : geo.neckX;
   const zzzLeft = (headX + (facing === 'right' ? 0.04 : -0.12)) * size;
@@ -443,7 +452,7 @@ export function BuddyAvatar({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={name ? `${name}` : 'Your dog'}
-      style={{ width: size, height: size }}
+      style={{ position: 'relative', width: size, height: size, overflow: 'visible' }}
     >
       <View style={[styles.box, flipped && { transform: [{ scaleX: -1 }] }]} pointerEvents="none">
         <View
@@ -454,7 +463,7 @@ export function BuddyAvatar({
             width: shadowW,
             height: shadowH,
             borderRadius: shadowH,
-            backgroundColor: '#8B6F47',
+            backgroundColor: tokens.brown,
             opacity: 0.15,
           }}
         />
@@ -467,7 +476,8 @@ export function BuddyAvatar({
           <Animated.View style={[styles.box, { transform: styles.head as never }]}>
             <Animated.View style={[styles.box, { transform: styles.earRight as never }]}>{parts.earRight}</Animated.View>
             {parts.head}
-            {parts.eyesOpen}
+            {/* Open eyes fade out exactly as the closed eyes fade in, so no pupils show through a blink or sleepy eyes. */}
+            <Animated.View style={[styles.box, { opacity: eyesOpenOpacity }]}>{parts.eyesOpen}</Animated.View>
             <Animated.View style={[styles.box, { opacity: v.lid }]}>{parts.eyesClosed}</Animated.View>
             <Animated.View style={[styles.box, { opacity: v.tongue }]}>{parts.mouthHappy}</Animated.View>
             <Animated.View style={[styles.box, { transform: styles.earLeft as never }]}>{parts.earLeft}</Animated.View>
@@ -477,7 +487,12 @@ export function BuddyAvatar({
       {effectiveMood === 'sleepy' && (
         <Animated.View
           pointerEvents="none"
-          style={[{ position: 'absolute', left: zzzLeft, top: size * 0.12 }, styles.zzz as never]}
+          style={[
+            skin.zzzFullCanvas
+              ? { position: 'absolute', left: 0, top: 0, width: size, height: size }
+              : { position: 'absolute', left: zzzLeft, top: size * 0.12 },
+            styles.zzz as never,
+          ]}
         >
           {parts.zzz}
         </Animated.View>
@@ -498,12 +513,12 @@ export function BuddyAvatar({
 const captionStyles = StyleSheet.create({
   wrap: { position: 'absolute', bottom: '100%', alignItems: 'center', paddingBottom: 4 },
   bubble: {
-    backgroundColor: '#FAFAF8',
-    borderColor: '#DCE8BE',
+    backgroundColor: tokens.white,
+    borderColor: tokens.meadow,
     borderWidth: 1.5,
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  text: { color: '#8B6F47', fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  text: { color: tokens.brown, fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

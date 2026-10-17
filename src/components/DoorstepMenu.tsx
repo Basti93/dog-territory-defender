@@ -1,12 +1,15 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { ListRow, mix, palette, radii, shadows, spacing, tokens } from '../ui';
 
 // The Doorstep's burger menu (openspec/changes/home-dashboard, design.md
-// Decision 13) — a small transient overlay for the two "not so important"
-// actions the founder asked to be tucked away: Debug Log and Log a Walk We
-// Missed. Not a full-screen destination itself (that's why its open/closed
-// state lives in DoorstepScreen as local component state, not as another
-// App.tsx showX boolean) — a plain RN Modal, no new dependency.
+// Decision 13) — a small transient overlay for the "not so important"
+// actions the founder asked to be tucked away: Debug Log, Log a Walk We
+// Missed and Settings. Not a full-screen destination itself (that's why its
+// open/closed state lives in DoorstepScreen as local component state, not as
+// another App.tsx showX boolean) — a plain RN Modal, no new dependency.
 interface DoorstepMenuProps {
   visible: boolean;
   onClose: () => void;
@@ -17,20 +20,16 @@ interface DoorstepMenuProps {
 }
 
 export function DoorstepMenu({ visible, onClose, onOpenDebugLog, onOpenLogMissedWalk, onOpenSettings }: DoorstepMenuProps) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <View style={styles.sheet}>
-          <TouchableOpacity style={styles.row} onPress={onOpenDebugLog}>
-            <Text style={styles.rowText}>Debug Log</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={onOpenLogMissedWalk}>
-            <Text style={styles.rowText}>Log a walk we missed</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.row} onPress={onOpenSettings}>
-            <Text style={styles.rowText}>Settings</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Inner Pressable swallows taps so touching the sheet does not close it. */}
+        <Pressable style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]} onPress={() => {}}>
+          <ListRow title="Debug Log" icon="icon-pin" onPress={onOpenDebugLog} />
+          <ListRow title="Log a walk we missed" icon="icon-walks" onPress={onOpenLogMissedWalk} />
+          <ListRow title="Settings" icon="icon-settings" onPress={onOpenSettings} />
+        </Pressable>
       </Pressable>
     </Modal>
   );
@@ -39,23 +38,17 @@ export function DoorstepMenu({ visible, onClose, onOpenDebugLog, onOpenLogMissed
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    // Warm brown scrim, never pure black.
+    backgroundColor: mix(tokens.brown, tokens.text, 0.3) + '40',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FAFAF8',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  row: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-  },
-  rowText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1A2A1A',
+    backgroundColor: palette.background,
+    borderTopLeftRadius: radii.card + 4,
+    borderTopRightRadius: radii.card + 4,
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xl,
+    ...shadows.floating,
   },
 });

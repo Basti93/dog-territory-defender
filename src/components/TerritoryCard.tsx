@@ -1,20 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Cell } from '../storage/HomeRangeRepository';
 import { Territory } from '../storage/TerritoryRepository';
 import { streetsKnown } from '../utils/grid';
 import { TerritoryTitle } from '../utils/territoryTitles';
 import { TerritoryPortrait } from './TerritoryPortrait';
-
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  warm: '#F39C12',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
+import { Badge, Card, Chip, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../ui';
 
 interface TerritoryCardProps {
   territory: Territory;
@@ -49,13 +41,13 @@ export function TerritoryCard({ territory, cells, title, incomeRevealed, display
   };
 
   return (
-    <View style={styles.card}>
+    <Card style={styles.card}>
       <TerritoryPortrait cells={cells} onPress={onOpenMap} />
 
       <View style={styles.header}>
         {isRenaming ? (
           <TextInput
-            style={styles.nameInput}
+            style={[textStyle('h2'), styles.nameInput]}
             value={draftName}
             onChangeText={setDraftName}
             onSubmitEditing={submitRename}
@@ -63,113 +55,71 @@ export function TerritoryCard({ territory, cells, title, incomeRevealed, display
             autoFocus
           />
         ) : (
-          <Text style={styles.name}>{territory.name}</Text>
+          <Text style={[textStyle('h2'), styles.name]}>{territory.name}</Text>
         )}
-        <TouchableOpacity onPress={() => (isRenaming ? submitRename() : setIsRenaming(true))} hitSlop={8}>
-          <Text style={styles.editIcon}>{isRenaming ? '✓' : '✎'}</Text>
-        </TouchableOpacity>
+        <PressableScale
+          style={styles.editButton}
+          onPress={() => (isRenaming ? submitRename() : setIsRenaming(true))}
+          hitSlop={8}
+          accessibilityLabel={isRenaming ? 'Save name' : 'Rename territory'}
+        >
+          <Text style={[textStyle('h2'), { color: tokens.blue }]}>{isRenaming ? '✓' : '✎'}</Text>
+        </PressableScale>
       </View>
 
-      {title && (
-        <View style={styles.titleBadge}>
-          <Text style={styles.titleBadgeText}>{title}</Text>
-        </View>
-      )}
+      {title && <Badge label={title} tint="meadow" />}
 
       <View style={styles.statGrid}>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Streets known</Text>
-          <Text style={styles.statValue}>{streetsKnown(cells.length)}</Text>
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Walks here</Text>
-          <Text style={styles.statValue}>{territory.walksHere}</Text>
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Treats earned here</Text>
-          <Text style={styles.statValue}>{Math.floor(territory.treatsEarnedHere)}</Text>
-        </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>First claimed</Text>
-          <Text style={styles.statValue}>{new Date(territory.createdAt).toLocaleDateString()}</Text>
-        </View>
+        <MiniStat label="Streets known" value={`${streetsKnown(cells.length)}`} />
+        <MiniStat label="Walks here" value={`${territory.walksHere}`} />
+        <MiniStat label="Treats earned here" value={`${Math.floor(territory.treatsEarnedHere)}`} />
+        <MiniStat label="First claimed" value={new Date(territory.createdAt).toLocaleDateString()} />
       </View>
 
       {incomeRevealed && (
-        <Text style={styles.incomeLine}>≈{displayRate.toFixed(1)} treats/hour from this territory</Text>
+        <Chip tint="warm" icon="icon-treat" label={`≈${displayRate.toFixed(1)} treats/hour from this territory`} />
       )}
+    </Card>
+  );
+}
+
+/** Small clay stat tile (same look as ui/StatTile, sized for a 2x2 grid inside a card). */
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.miniStat}>
+      <Text style={[textStyle('small'), { color: palette.muted }]}>{label}</Text>
+      <Text style={textStyle('h2')}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    backgroundColor: COLORS.white,
-    padding: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  name: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
+  card: { marginBottom: spacing.lg, gap: spacing.sm },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  name: { flex: 1 },
   nameInput: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.blue,
+    borderBottomWidth: 2,
+    borderBottomColor: tokens.green,
     paddingVertical: 2,
+    lineHeight: undefined, // fixed lineHeight clips text inside a TextInput
   },
-  editIcon: {
-    fontSize: 16,
-    color: COLORS.blue,
+  editButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    backgroundColor: palette.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.soft,
   },
-  titleBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EAF7EE',
-    borderRadius: 8,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  titleBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.green,
-  },
-  statGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statCell: {
-    width: '47%',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  incomeLine: {
-    fontSize: 12,
-    color: COLORS.warm,
-    fontWeight: '600',
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  miniStat: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: palette.meadowTint,
+    borderRadius: radii.tile,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
 });

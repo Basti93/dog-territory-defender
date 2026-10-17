@@ -1,13 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyMood } from './buddy/buddyMood';
-import { AnimatedNumber, PressableScale, TreatPop } from '../ui';
-import { ArtKey } from '../art/artAssets';
-import { CardIcon } from './den/CardIcon';
-import { YARD_ORDER, YardScene } from './den/YardScene';
+import {
+  AnimatedNumber,
+  ArtImage,
+  Button,
+  Card,
+  Header,
+  Screen,
+  TreatPop,
+  palette,
+  radii,
+  shadows,
+  spacing,
+  textStyle,
+  tokens,
+} from '../ui';
+import { buildingArt } from '../art/artAssets';
+import { YARD_ORDER, YardBuildingKey, YardScene, artTierForLevel, yardHeightFor } from './den/YardScene';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import {
@@ -26,28 +40,13 @@ import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { streetsKnown } from '../utils/grid';
 
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  warm: '#F39C12',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
-
-const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; color: string; lightColor: string }> = {
-  doghouse: { name: 'Doghouse', sub: 'Treat storage', color: '#8B6F47', lightColor: '#D4A76A' },
-  bakery: { name: 'Treat Bakery', sub: 'Passive treats', color: '#C87941', lightColor: '#F5CBA7' },
-  sniffGarden: { name: 'Sniff Garden', sub: 'Helps Buddy find more on a walk', color: '#3A9E5F', lightColor: '#A8D5A2' },
+const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; art: 'doghouse' | 'bakery' | 'garden' }> = {
+  doghouse: { name: 'Doghouse', sub: 'Treat storage', art: 'doghouse' },
+  bakery: { name: 'Treat Bakery', sub: 'Passive treats', art: 'bakery' },
+  sniffGarden: { name: 'Sniff Garden', sub: 'Helps Buddy find more on a walk', art: 'garden' },
 };
 
 const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
-
-const CARD_ICON_ART: Record<BuildingKey, ArtKey> = {
-  doghouse: 'icon-den',
-  bakery: 'icon-treat',
-  sniffGarden: 'icon-paw',
-};
 
 // How long Buddy stays excited after an upgrade (fun review: settle in ~3s).
 const EXCITED_AFTER_UPGRADE_MS = 3000;
@@ -106,6 +105,7 @@ export function DenScreen({
   onClose,
   onTreatsChanged,
 }: DenScreenProps) {
+  const insets = useSafeAreaInsets();
   const [state, setState] = useState<DenEconomyState | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
@@ -120,6 +120,11 @@ export function DenScreen({
   const [upgrade, setUpgrade] = useState<{ building: BuildingKey; n: number } | null>(null);
   const [excited, setExcited] = useState(false);
   const excitedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Building tapped in the yard: Buddy hops toward it and its card is highlighted below.
+  const [selected, setSelected] = useState<BuildingKey | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const cardY = useRef<Partial<Record<BuildingKey, number>>>({});
+  const { height: screenHeight } = useWindowDimensions();
 
   useEffect(() => {
     onAccrualShown?.();
@@ -164,9 +169,9 @@ export function DenScreen({
 
   if (!state) {
     return (
-      <View style={styles.container}>
+      <Screen>
         <BuddyLoading appearance={buddyAppearance} text="Loading…" />
-      </View>
+      </Screen>
     );
   }
 
@@ -180,7 +185,14 @@ export function DenScreen({
   })
     .filter((c): c is { building: BuildingKey; cost: number } => c !== null && c.cost <= state.treats)
     .sort((a, b) => a.cost - b.cost)[0];
-  const sceneMood: BuddyMood = excited ? 'excited' : cheapestAffordable ? 'curious' : 'idle';
+  const curiousTarget: YardBuildingKey | null = selected ?? cheapestAffordable?.building ?? null;
+  const sceneMood: BuddyMood = excited ? 'excited' : curiousTarget ? 'curious' : 'idle';
+
+  const handleSelectBuilding = (building: BuildingKey) => {
+    setSelected(building);
+    const y = cardY.current[building];
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
+  };
 
   const handleUpgrade = async (building: BuildingKey) => {
     const result = upgradeBuilding(state, building);
@@ -209,111 +221,64 @@ export function DenScreen({
     }
   };
 
+  const dog = dogDisplayName(state.dogName);
+  const xpIntoLevel = state.xp - cumulativeXpForLevel(state.level);
+  const xpForLevel = cumulativeXpForLevel(state.level + 1) - cumulativeXpForLevel(state.level);
+  const atMaxLevel = state.level >= BALANCE.leveling.maxLevel;
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>The Den</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+      {/* The yard is the hero: pinned to the top ~48% of the screen. */}
+      <YardScene
+        appearance={buddyAppearance}
+        name={dog}
+        buildings={YARD_ORDER.map((key) => ({ key, level: getBuildingLevel(state, key) }))}
+        mood={sceneMood}
+        curiousAbout={curiousTarget}
+        upgrade={upgrade}
+        onSelectBuilding={handleSelectBuilding}
+        height={yardHeightFor(screenHeight)}
+      >
+        <HeaderOverlay onClose={onClose} />
+      </YardScene>
 
-      {showOverflowNotice && (
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>Your Treat Bakery filled up while you were away! 🦴</Text>
-        </View>
-      )}
+      <ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: spacing.xxl + insets.bottom }]} showsVerticalScrollIndicator={false}>
+        {showOverflowNotice && (
+          <Card tint="warm">
+            <Text style={textStyle('body')}>Your Treat Bakery filled up while you were away! 🦴</Text>
+          </Card>
+        )}
 
-      {achievementNotices.map((id, i) => (
-        <View key={`${id}-${i}`} style={styles.notice}>
-          <Text style={styles.noticeText}>🏅 New badge: {ACHIEVEMENTS[id].copyTitle}</Text>
-        </View>
-      ))}
+        {achievementNotices.map((id, i) => (
+          <Card key={`${id}-${i}`} tint="warm">
+            <Text style={textStyle('body')}>🏅 New badge: {ACHIEVEMENTS[id].copyTitle}</Text>
+          </Card>
+        ))}
 
-      <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.treatsRow}>
-          <Text style={styles.treatsLabel}>Treats</Text>
-          <View>
+          <View style={styles.treatsChip}>
+            <ArtImage art="icon-treat" size={36} />
             <AnimatedNumber
               value={Math.floor(state.treats)}
               format={(n) => `${n} / ${cap}`}
-              style={styles.treatsValue}
+              style={textStyle('h1')}
             />
             {accrualPop > 0 && <TreatPop amount={accrualPop} style={styles.accrualPop} />}
           </View>
+          <Text style={[textStyle('small'), { color: palette.muted }]}>Treats</Text>
         </View>
 
-        <View style={styles.levelBar}>
-          <View style={styles.levelBarHeader}>
-            <Text style={styles.levelBarLabel}>
-              {dogDisplayName(state.dogName)} — Level {state.level}
+        {tease && (
+          <Card tint="warm">
+            <Text style={[textStyle('small'), { color: palette.muted }]}>Next up in the Den</Text>
+            <Text style={textStyle('h2')}>
+              {BUILDING_DISPLAY[tease.building].name} — {tease.cost} treats
+              {tease.affordable ? ' (you can afford it now!)' : ''}
             </Text>
-            {state.level < BALANCE.leveling.maxLevel && (
-              <Text style={styles.levelBarSub}>
-                {Math.floor(state.xp - cumulativeXpForLevel(state.level))} /{' '}
-                {cumulativeXpForLevel(state.level + 1) - cumulativeXpForLevel(state.level)} XP
-              </Text>
-            )}
-          </View>
-          <View style={styles.levelBarTrack}>
-            <View
-              style={[
-                styles.levelBarFill,
-                {
-                  width:
-                    state.level >= BALANCE.leveling.maxLevel
-                      ? '100%'
-                      : `${Math.min(
-                          100,
-                          ((state.xp - cumulativeXpForLevel(state.level)) /
-                            (cumulativeXpForLevel(state.level + 1) - cumulativeXpForLevel(state.level))) *
-                            100
-                        )}%`,
-                },
-              ]}
-            />
-          </View>
-          {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
-          <Text style={styles.levelBarRate}>
-            {dogDisplayName(state.dogName)} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a
-            walk.
-            {state.level < BALANCE.leveling.maxLevel
-              ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.`
-              : ''}
-          </Text>
-          {/* "Buddy knows N streets by heart" (openspec/changes/home-range/design.md Decision 5's
-              headline stat) — hidden entirely until the Home Range cell count has loaded. */}
-          {rangeCellCount !== null && (
-            <Text style={styles.levelBarRate}>
-              {dogDisplayName(state.dogName)} knows {streetsKnown(rangeCellCount)} street
-              {streetsKnown(rangeCellCount) === 1 ? '' : 's'} by heart.
-            </Text>
-          )}
-          {/* Permanent territory-income line (openspec/changes/territories/
-              design.md Decision 6) — "once true, always shown," same
-              convention as the streets-known line above. */}
-          {state.territoryIncomeRevealed && territoryIncomeRate !== null && (
-            <Text style={styles.levelBarRate}>
-              🌍 {dogDisplayName(state.dogName)}'s territories bring home ≈{Math.round(territoryIncomeRate)} treats an hour.
-            </Text>
-          )}
-        </View>
+          </Card>
+        )}
 
-        <YardScene
-          appearance={buddyAppearance}
-          name={dogDisplayName(state.dogName)}
-          buildings={YARD_ORDER.map((key) => ({
-            key,
-            level: getBuildingLevel(state, key),
-            color: BUILDING_DISPLAY[key].color,
-            lightColor: BUILDING_DISPLAY[key].lightColor,
-          }))}
-          mood={sceneMood}
-          curiousAbout={cheapestAffordable?.building ?? null}
-          upgrade={upgrade}
-        />
-
-        {message && <Text style={styles.message}>{message}</Text>}
+        {message && <Text style={[textStyle('small'), styles.message]}>{message}</Text>}
 
         {BUILDING_ORDER.map((building) => {
           const display = BUILDING_DISPLAY[building];
@@ -321,187 +286,127 @@ export function DenScreen({
           const maxed = level >= BALANCE.maxBuildingLevel;
           const cost = maxed ? null : upgradeCost(building, level + 1);
           const isTease = tease?.building === building;
+          const affordable = cost !== null && cost <= state.treats;
 
           return (
-            <PressableScale
+            <View
               key={building}
-              style={[styles.card, { borderColor: display.color }, isTease && styles.cardTease]}
-              disabled={maxed}
-              onPress={maxed ? undefined : () => handleUpgrade(building)}
+              onLayout={(e) => {
+                cardY.current[building] = e.nativeEvent.layout.y;
+              }}
             >
-              <CardIcon artKey={CARD_ICON_ART[building]} color={display.color} lightColor={display.lightColor} />
-              <View style={styles.cardBody}>
-                <Text style={styles.cardName}>{display.name}</Text>
-                <Text style={styles.cardSub}>{display.sub}</Text>
-                <Text style={styles.cardEffect}>
-                  Level {level} — {effectText(building, level, state)}
-                </Text>
-                {!maxed ? (
-                  <>
-                    <Text style={styles.cardNextEffect}>Next: {effectText(building, level + 1, state)}</Text>
-                    <Text style={[styles.cardCost, { color: display.color }]}>
-                      {isTease ? 'Next upgrade: ' : 'Upgrade: '}
-                      {cost} treats
+              <Card style={selected === building ? styles.cardSelected : undefined}>
+                <View style={styles.cardRow}>
+                  <ArtImage art={buildingArt(display.art, artTierForLevel(level))} size={80} />
+                  <View style={styles.cardBody}>
+                    <Text style={textStyle('h2')}>{display.name}</Text>
+                    <Text style={[textStyle('small'), { color: palette.muted }]}>{display.sub}</Text>
+                    <Text style={[textStyle('small'), styles.cardEffect]}>
+                      Level {level} — {effectText(building, level, state)}
                     </Text>
-                  </>
-                ) : (
-                  <Text style={styles.cardMaxed}>Max level!</Text>
+                    {!maxed ? (
+                      <Text style={[textStyle('small'), { color: palette.muted }]}>
+                        Next: {effectText(building, level + 1, state)}
+                      </Text>
+                    ) : (
+                      <Text style={[textStyle('small'), { color: palette.greenText }]}>Max level!</Text>
+                    )}
+                  </View>
+                </View>
+                {!maxed && (
+                  <Button
+                    label={`${isTease ? 'Next upgrade: ' : 'Upgrade: '}${cost} treats`}
+                    variant={affordable ? 'primary' : 'secondary'}
+                    onPress={() => handleUpgrade(building)}
+                    style={styles.cardButton}
+                  />
                 )}
-              </View>
-            </PressableScale>
+              </Card>
+            </View>
           );
         })}
+
+        <Card>
+          <View style={styles.levelHeader}>
+            <Text style={textStyle('h2')}>
+              {dog} — Level {state.level}
+            </Text>
+            {!atMaxLevel && (
+              <Text style={[textStyle('small'), { color: palette.muted }]}>
+                {Math.floor(xpIntoLevel)} / {xpForLevel} XP
+              </Text>
+            )}
+          </View>
+          <View style={styles.levelBarTrack}>
+            <View
+              style={[
+                styles.levelBarFill,
+                { width: atMaxLevel ? '100%' : `${Math.min(100, (xpIntoLevel / xpForLevel) * 100)}%` },
+              ]}
+            />
+          </View>
+          {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
+          <Text style={[textStyle('small'), styles.levelBarRate]}>
+            {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
+            {!atMaxLevel ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.` : ''}
+          </Text>
+          {/* "Buddy knows N streets by heart" (openspec/changes/home-range/design.md Decision 5's
+              headline stat) — hidden entirely until the Home Range cell count has loaded. */}
+          {rangeCellCount !== null && (
+            <Text style={[textStyle('small'), styles.levelBarRate]}>
+              {dog} knows {streetsKnown(rangeCellCount)} street
+              {streetsKnown(rangeCellCount) === 1 ? '' : 's'} by heart.
+            </Text>
+          )}
+          {/* Permanent territory-income line (openspec/changes/territories/
+              design.md Decision 6) — "once true, always shown," same
+              convention as the streets-known line above. */}
+          {state.territoryIncomeRevealed && territoryIncomeRate !== null && (
+            <Text style={[textStyle('small'), styles.levelBarRate]}>
+              🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate)} treats an hour.
+            </Text>
+          )}
+        </Card>
       </ScrollView>
     </View>
   );
 }
 
+/** "The Den" title + back button over the sky; keeps the status-bar inset. */
+function HeaderOverlay({ onClose }: { onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.headerOverlay, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
+      <Header title="The Den" icon="icon-den" onBack={onClose} style={styles.headerRow} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  empty: {
-    padding: 24,
-    textAlign: 'center',
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  notice: {
-    backgroundColor: '#FFF3E0',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  noticeText: {
-    fontSize: 13,
-    color: COLORS.text,
-  },
-  scroll: {
-    padding: 16,
-    gap: 12,
-  },
-  treatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    marginBottom: 12,
-  },
-  treatsLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  treatsValue: {
-    fontSize: 16,
-    color: COLORS.warm,
-    fontWeight: '700',
-  },
-  levelBar: {
-    marginBottom: 16,
-  },
-  levelBarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  levelBarLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  levelBarSub: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  levelBarTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#eee',
-    overflow: 'hidden',
-  },
-  levelBarFill: {
-    height: '100%',
-    backgroundColor: COLORS.green,
-  },
-  levelBarRate: {
-    marginTop: 6,
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  accrualPop: {
-    position: 'absolute',
-    right: 0,
-    top: -4,
-  },
-  message: {
-    fontSize: 13,
-    color: COLORS.warm,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  card: {
+  container: { flex: 1, backgroundColor: palette.background },
+  headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: spacing.lg },
+  headerRow: { marginBottom: 0 },
+  scroll: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
+  treatsRow: { alignItems: 'center', gap: spacing.xs },
+  treatsChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    marginBottom: 12,
-    backgroundColor: COLORS.white,
+    gap: spacing.sm,
+    backgroundColor: palette.warmTint,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    ...shadows.soft,
   },
-  cardTease: {
-    backgroundColor: '#FFF8E7',
-  },
-  cardBody: {
-    flex: 1,
-    gap: 2,
-  },
-  cardName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  cardSub: {
-    fontSize: 12,
-    color: COLORS.muted,
-  },
-  cardEffect: {
-    fontSize: 13,
-    color: COLORS.text,
-    marginTop: 2,
-  },
-  cardNextEffect: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 1,
-  },
-  cardCost: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  cardMaxed: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.green,
-    marginTop: 2,
-  },
+  accrualPop: { position: 'absolute', right: 0, top: -spacing.md },
+  message: { color: tokens.warm, textAlign: 'center' },
+  cardSelected: { borderWidth: 3, borderColor: tokens.green },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cardBody: { flex: 1, gap: 2 },
+  cardEffect: { marginTop: spacing.xs },
+  cardButton: { marginTop: spacing.md },
+  levelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: spacing.sm },
+  levelBarTrack: { height: 10, borderRadius: 5, backgroundColor: palette.border, overflow: 'hidden' },
+  levelBarFill: { height: '100%', backgroundColor: tokens.green },
+  levelBarRate: { marginTop: spacing.sm, color: palette.muted },
 });

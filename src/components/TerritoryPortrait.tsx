@@ -6,6 +6,7 @@ import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { portraitHTML } from '../web/portraitHTML';
 import { log } from '../utils/log';
+import { ArtImage, palette, shadows, textStyle } from '../ui';
 
 interface TerritoryPortraitProps {
   /** Omit when `cells` is supplied directly (see below) — the whole-Range Doorstep portrait's original use. */
@@ -104,12 +105,12 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
         <Image source={{ uri: dataUrl }} resizeMode="contain" style={[styles.image, { height }]} />
       ) : failed ? (
         <View style={styles.fallback}>
-          <Text style={styles.fallbackIcon}>🐾</Text>
-          <Text style={styles.fallbackText}>Tap to see your Home Range on the map.</Text>
+          <ArtImage art="icon-paw" size={32} />
+          <Text style={[textStyle('small'), styles.fallbackText]}>Tap to see your Home Range on the map.</Text>
         </View>
       ) : (
         <View style={styles.fallback}>
-          <Text style={styles.fallbackText}>Getting your territory ready…</Text>
+          <Text style={[textStyle('small'), styles.fallbackText]}>Getting your territory ready…</Text>
         </View>
       )}
       {/* Never visible, never interactive — exists only to render the
@@ -130,9 +131,12 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#F0F4EE',
+    borderWidth: 3,
+    borderColor: palette.background,
+    backgroundColor: palette.meadowTint,
+    ...shadows.soft,
     minHeight: 160,
     alignItems: 'center',
     justifyContent: 'center',
@@ -146,12 +150,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  fallbackIcon: {
-    fontSize: 24,
-  },
   fallbackText: {
-    fontSize: 13,
-    color: '#8A9A8A',
+    color: palette.muted,
     textAlign: 'center',
   },
   hiddenWebView: {

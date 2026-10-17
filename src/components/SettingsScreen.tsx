@@ -1,29 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Platform, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, Modal, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyAppearancePicker } from './buddy';
 import { BuddyLoading } from './BuddyLoading';
-import { PressableScale } from '../ui';
+import { Button, Card, Header, ListRow, mix, palette, PressableScale, radii, Screen, spacing, textStyle, tokens } from '../ui';
 import { dogDisplayName } from '../economy/denEconomy';
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { WalkRepository } from '../storage/WalkRepository';
-import { cancelScheduledWalkReminder } from '../notifications/scheduler';
+import * as Notifications from 'expo-notifications';
+import { cancelScheduledWalkReminder, requestNotificationPermission } from '../notifications/scheduler';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 
 // This app's first Settings screen (openspec/changes/walk-reminder/design.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
 // reminder. Not a general-purpose preferences screen; don't bolt unrelated
 // settings onto this without revisiting that decision first.
-
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
 
 // Anchor time the picker first opens to when the player turns the reminder
 // on with no previously-set time of their own — a starting point for them to
@@ -66,6 +59,9 @@ export function SettingsScreen({
   // imperative system dialog (DateTimePickerAndroid.open below) — the
   // package's own documented per-platform idiom.
   const [iosPickerDate, setIosPickerDate] = useState<Date | null>(null);
+  // True when the OS has notifications off for this app — shown as a warm
+  // inline hint with a button to the system settings.
+  const [permissionDenied, setPermissionDenied] = useState(false);
 
   useEffect(() => {
     notificationRepository.getState().then((state) => {
@@ -73,6 +69,10 @@ export function SettingsScreen({
       setHour(state.walkReminderHour);
       setMinute(state.walkReminderMinute);
       setLoaded(true);
+      // Surface a later revocation too: reminder on, but the OS says no.
+      if (state.walkReminderEnabled) {
+        Notifications.getPermissionsAsync().then((p) => setPermissionDenied(!p.granted)).catch(() => {});
+      }
     });
   }, [notificationRepository]);
 
@@ -129,6 +129,12 @@ export function SettingsScreen({
       return;
     }
 
+    // Ask for notification permission first; if the OS says no, keep the
+    // toggle off and point to system settings instead of silently failing.
+    const granted = await requestNotificationPermission();
+    setPermissionDenied(!granted);
+    if (!granted) return;
+
     // Turning on requires picking a time before the reminder is actually
     // enabled — the toggle itself doesn't flip to "on" until a time is
     // confirmed (openspec/changes/walk-reminder/specs/walk-reminder/spec.md's
@@ -138,65 +144,77 @@ export function SettingsScreen({
 
   if (!loaded) {
     return (
-      <View style={styles.container}>
+      <Screen>
         <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
-      </View>
+      </Screen>
     );
   }
 
   if (editingLook) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{dogDisplayName(dogName)}'s look</Text>
-          <TouchableOpacity onPress={() => setEditingLook(false)} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
-            <Text style={styles.closeText}>Back</Text>
-          </TouchableOpacity>
-        </View>
+      <Screen padded={false}>
+        <Header
+          title={`${dogDisplayName(dogName)}'s look`}
+          icon="icon-paw"
+          onBack={() => setEditingLook(false)}
+          style={styles.lookHeader}
+        />
         <BuddyAppearancePicker
           name={dogDisplayName(dogName)}
           initial={buddyAppearance}
+          topInset={0}
           onSave={async (look) => {
             await onSaveAppearance(look);
             setEditingLook(false);
           }}
         />
-      </View>
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+    <Screen backdrop="sky">
+      <Header title="Settings" icon="icon-settings" onBack={onClose} />
 
-      <View style={styles.body}>
-        <PressableScale style={styles.timeRow} onPress={() => setEditingLook(true)}>
-          <Text style={styles.timeLabel}>Change {dogDisplayName(dogName)}'s look</Text>
-          <Text style={styles.timeValue}>Edit</Text>
-        </PressableScale>
-
+      <Card tint="sky" style={styles.reminderCard}>
         <View style={styles.row}>
           <View style={styles.rowText}>
-            <Text style={styles.rowTitle}>Daily walk reminder</Text>
-            <Text style={styles.rowSubtitle}>
+            <Text style={textStyle('h2')}>Daily walk reminder</Text>
+            <Text style={[textStyle('small'), styles.rowSubtitle]}>
               A gentle nudge at a time you choose, whenever a walk hasn't happened yet that day.
             </Text>
           </View>
-          <Switch value={enabled} onValueChange={handleToggle} trackColor={{ true: COLORS.green }} />
+          <Switch value={enabled} onValueChange={handleToggle} trackColor={{ true: tokens.green }} />
         </View>
 
-        {enabled && hour !== null && minute !== null && (
-          <TouchableOpacity style={styles.timeRow} onPress={openPicker}>
-            <Text style={styles.timeLabel}>Reminder time</Text>
-            <Text style={styles.timeValue}>{formatTime(hour, minute)}</Text>
-          </TouchableOpacity>
+        {permissionDenied && (
+          <View style={styles.hintBox}>
+            <Text style={textStyle('small')}>
+              Notifications are off for this app in Android settings. Switch them on and your reminder can say hello.
+            </Text>
+            <Button label="Open settings" variant="secondary" onPress={() => Linking.openSettings()} />
+          </View>
         )}
-      </View>
+
+        {enabled && hour !== null && minute !== null && (
+          <PressableScale style={styles.timeRow} onPress={openPicker}>
+            <Text style={textStyle('body')}>Reminder time</Text>
+            <Text style={[textStyle('h2'), { color: palette.greenText }]}>{formatTime(hour, minute)}</Text>
+          </PressableScale>
+        )}
+        <Text style={[textStyle('small'), styles.rowSubtitle]}>
+          On some phones (Samsung, Xiaomi) battery optimisation can silence reminders — set the app to 'Unrestricted'.
+        </Text>
+      </Card>
+
+      <ListRow
+        icon="icon-paw"
+        title={`Change ${dogDisplayName(dogName)}'s look`}
+        subtitle="Edit"
+        onPress={() => setEditingLook(true)}
+        style={styles.lookRow}
+      />
+
 
       {Platform.OS === 'ios' && iosPickerDate && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setIosPickerDate(null)}>
@@ -211,125 +229,49 @@ export function SettingsScreen({
                 }}
               />
               <View style={styles.iosPickerActions}>
-                <TouchableOpacity onPress={() => setIosPickerDate(null)}>
-                  <Text style={styles.iosPickerCancel}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                <Button label="Cancel" variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPickerDate(null)} />
+                <Button
+                  label="Done"
+                  style={styles.iosPickerButton}
                   onPress={() => {
                     const picked = iosPickerDate;
                     setIosPickerDate(null);
                     if (picked) applyTimeChoice(picked.getHours(), picked.getMinutes());
                   }}
-                >
-                  <Text style={styles.iosPickerDone}>Done</Text>
-                </TouchableOpacity>
+                />
               </View>
             </View>
           </View>
         </Modal>
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  loading: {
-    flex: 1,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    color: COLORS.muted,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  body: {
-    padding: 24,
-    gap: 16,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  rowText: {
-    flex: 1,
-  },
-  rowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  rowSubtitle: {
-    fontSize: 13,
-    color: COLORS.muted,
-    marginTop: 4,
-  },
+  lookRow: { marginTop: spacing.lg },
+  reminderCard: { gap: spacing.md },
+  hintBox: { gap: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  rowText: { flex: 1 },
+  rowSubtitle: { color: palette.muted, marginTop: spacing.xs },
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    backgroundColor: '#F5F5F0',
+    minHeight: 52,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.tile,
+    backgroundColor: palette.card,
   },
-  timeLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  timeValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.green,
-  },
-  iosPickerBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    justifyContent: 'flex-end',
-  },
+  lookHeader: { paddingHorizontal: spacing.lg },
+  iosPickerBackdrop: { flex: 1, backgroundColor: mix(tokens.brown, tokens.text, 0.3) + '40', justifyContent: 'flex-end' },
   iosPickerSheet: {
-    backgroundColor: COLORS.white,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    padding: 16,
+    backgroundColor: palette.background,
+    borderTopLeftRadius: radii.card,
+    borderTopRightRadius: radii.card,
+    padding: spacing.lg,
   },
-  iosPickerActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-  },
-  iosPickerCancel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.muted,
-  },
-  iosPickerDone: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.blue,
-  },
+  iosPickerActions: { flexDirection: 'row', gap: spacing.md, paddingTop: spacing.sm },
+  iosPickerButton: { flex: 1 },
 });

@@ -27,3 +27,4 @@ walk-log*.txt
 # Cloud credentials for scripts/generateArt.mjs (never commit)
 vertex.json
 *.serviceaccount.json
+testing/screenshots/

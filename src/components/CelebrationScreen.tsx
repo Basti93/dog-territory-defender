@@ -1,24 +1,27 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Image, View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+
+import { artOr } from '../art/artAssets';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyAvatar } from './buddy';
-import { AnimatedNumber, Confetti, PressableScale } from '../ui';
+import {
+  AnimatedNumber,
+  ArtImage,
+  Button,
+  Card,
+  Chip,
+  Confetti,
+  Screen,
+  palette,
+  spacing,
+  textStyle,
+} from '../ui';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../utils/grid';
-
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  warm: '#F39C12',
-  brown: '#8B6F47',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
 
 const BUILDING_NAMES: Record<BuildingKey, string> = {
   doghouse: 'Doghouse',
@@ -89,46 +92,83 @@ export function CelebrationScreen({
   walkId = null,
   onContinue,
 }: CelebrationScreenProps) {
+  const burstArt = artOr('celebration-burst', null);
+  const burst = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!burstArt) return;
+    // One-shot: scale 0.6 -> 1, opacity 0 -> 1 -> settles at 0.85.
+    const anim = Animated.timing(burst, { toValue: 1, duration: 600, useNativeDriver: true });
+    anim.start();
+    return () => anim.stop();
+  }, [burst, burstArt]);
+
+  const { width, height: windowHeight } = useWindowDimensions();
+  const ground = artOr('yard-ground', null);
+  const dog = dogDisplayName(dogName);
+  const stageWidth = width * 1.2;
+  // 3:2 ground, height capped at ~55% of the screen so the backdrop stays visible.
+  const groundHeight = Math.min(stageWidth * (2 / 3), windowHeight * 0.55);
+  const groundWidth = groundHeight * 1.5;
+
   return (
     <View style={styles.container}>
-      {/* Gentle thank-you confetti: self-unmounts, never blocks touches. */}
-      <Confetti />
+      {burstArt ? (
+        <Animated.Image
+          source={burstArt}
+          resizeMode="contain"
+          style={[
+            styles.burst,
+            {
+              opacity: burst.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0, 1, 0.85] }),
+              transform: [{ scale: burst.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
+            },
+          ]}
+        />
+      ) : null}
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <BuddyAvatar appearance={buddyAppearance} size={140} mood="excited" excitedSettleMs={null} name={dogDisplayName(dogName)} />
-        <Text style={styles.title}>
-          {hasTerritory ? pickCelebrationHeadline(walkId, dogDisplayName(dogName)) : 'Walk claimed! 🌱'}
+      <Screen scroll style={styles.screen} contentStyle={styles.content}>
+        {/* Buddy on a grass strip. */}
+        <View style={[styles.stage, { width: stageWidth }]}>
+          {ground && (
+            <Image
+              source={ground}
+              resizeMode="contain"
+              style={[styles.ground, { width: groundWidth, height: groundHeight }]}
+            />
+          )}
+          <BuddyAvatar appearance={buddyAppearance} size={170} mood="excited" excitedSettleMs={null} name={dog} />
+        </View>
+
+        <Text style={[textStyle('display'), styles.title]}>
+          {hasTerritory ? pickCelebrationHeadline(walkId, dog) : 'Walk claimed! 🌱'}
         </Text>
-        <Text style={styles.area}>
+        <Text style={[textStyle('body'), styles.area]}>
           {hasTerritory ? `${(cellsPainted * CELL_M * CELL_M).toFixed(0)} m² is now yours` : 'Every step of it is yours'}
         </Text>
 
-        <View style={styles.treatsRow}>
-          <AnimatedNumber from={0} value={treatsEarned} format={(n) => `+${n} treats`} style={styles.treatsEarned} />
-        </View>
+        <Card tint="warm" style={styles.treatsCard}>
+          <ArtImage art="icon-treat" size={48} />
+          <AnimatedNumber from={0} value={treatsEarned} format={(n) => `+${n} treats`} style={textStyle('display')} />
+        </Card>
 
         {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier
             (design.md Decision 3's UI rule): a routine walk shows the treats total above with
             no multiplier line at all, not "×1.00," nothing. See
             openspec/changes/home-range-rewards/tasks.md task 3.2. */}
         {bloomMultiplier >= BALANCE.freshGround.displayThresholdMultiplier && (
-          <View style={styles.levelBox}>
-            <Text style={styles.levelText}>
-              That ground had gone lovely and wild again — {dogDisplayName(dogName)} brought home extra treats for it.
-            </Text>
-          </View>
+          <Beat label="Fresh ground">
+            That ground had gone lovely and wild again — {dog} brought home extra treats for it.
+          </Beat>
         )}
 
         {/* New Ground beat — fires once this walk's New Ground cell count clears the
             dilated-set-difference threshold (design.md Decision 5). See
             openspec/changes/home-range-rewards/tasks.md task 3.1. */}
         {newGroundCellCount >= NEW_GROUND_MIN_CELLS && (
-          <View style={styles.levelBox}>
-            <Text style={styles.levelText}>
-              New ground! {dogDisplayName(dogName)} learned {streetsKnown(newGroundCellCount)} new street
-              {streetsKnown(newGroundCellCount) === 1 ? '' : 's'} today.
-            </Text>
-          </View>
+          <Beat label="New ground">
+            New ground! {dog} learned {streetsKnown(newGroundCellCount)} new street
+            {streetsKnown(newGroundCellCount) === 1 ? '' : 's'} today.
+          </Beat>
         )}
 
         {/* New-territory discovery beat — fires only when this walk creates
@@ -141,9 +181,7 @@ export function CelebrationScreen({
             interpolate the new territory's own name (newTerritoryName) —
             kept as a prop for whenever that copy is finalized. */}
         {newTerritoryName !== null && (
-          <View style={styles.levelBox}>
-            <Text style={styles.levelText}>A new territory! {dogDisplayName(dogName)} found a second home.</Text>
-          </View>
+          <Beat label="New territory" icon="icon-pin">A new territory! {dog} found a second home.</Beat>
         )}
 
         {/* Territory merge beat — always framed as a positive event, never a
@@ -151,149 +189,88 @@ export function CelebrationScreen({
             TODO(game-master copy pass): same interpolation note as above —
             mergedTerritoryNames is kept as a prop for the finalized copy. */}
         {mergedTerritoryNames !== null && (
-          <View style={styles.levelBox}>
-            <Text style={styles.levelText}>{dogDisplayName(dogName)} connected his two worlds!</Text>
-          </View>
+          <Beat label="Two worlds" icon="icon-pin">{dog} connected his two worlds!</Beat>
         )}
 
         {tease && (
-          <View style={styles.teaseBox}>
-            <Text style={styles.teaseLabel}>Next up in the Den</Text>
-            <Text style={styles.teaseText}>
-              {BUILDING_NAMES[tease.building]} — {tease.cost} treats
-              {tease.affordable ? ' (you can afford it now!)' : ''}
-            </Text>
-          </View>
+          <Card tint="sky" style={styles.beatCard}>
+            <View style={styles.teaseRow}>
+              <ArtImage art="icon-den" size={40} />
+              <View style={styles.beatText}>
+                <Text style={[textStyle('small'), { color: palette.muted }]}>Next up in the Den</Text>
+                <Text style={textStyle('h2')}>
+                  {BUILDING_NAMES[tease.building]} — {tease.cost} treats
+                  {tease.affordable ? ' (you can afford it now!)' : ''}
+                </Text>
+              </View>
+            </View>
+          </Card>
         )}
 
         {unlockedAchievements.length > 0 && (
-          <View style={styles.badgeBox}>
-            <Text style={styles.badgeLabel}>New badge{unlockedAchievements.length > 1 ? 's' : ''}!</Text>
-            {unlockedAchievements.map((id) => (
-              <Text key={id} style={styles.badgeText}>
-                🏅 {ACHIEVEMENTS[id].copyTitle}
-              </Text>
-            ))}
-          </View>
+          <Card tint="meadow" style={styles.beatCard}>
+            <View style={styles.teaseRow}>
+              <ArtImage art="icon-badge" size={40} />
+              <View style={styles.beatText}>
+                <Text style={[textStyle('small'), { color: palette.muted }]}>
+                  New badge{unlockedAchievements.length > 1 ? 's' : ''}!
+                </Text>
+                {unlockedAchievements.map((id) => (
+                  <Text key={id} style={textStyle('h2')}>
+                    🏅 {ACHIEVEMENTS[id].copyTitle}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          </Card>
         )}
 
         {leveledUpTo !== null && oldTreatsPerWalk !== null && newTreatsPerWalk !== null && (
-          <View style={styles.levelBox}>
+          <Beat label={`Level ${leveledUpTo}`}>
             {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in. */}
-            <Text style={styles.levelText}>
-              {dogDisplayName(dogName)} reached Level {leveledUpTo} — he brings home {newTreatsPerWalk} treats a walk
-              now, up from {oldTreatsPerWalk}
-            </Text>
-          </View>
+            {dog} reached Level {leveledUpTo} — he brings home {newTreatsPerWalk} treats a walk now, up from{' '}
+            {oldTreatsPerWalk}
+          </Beat>
         )}
 
         {cliffhangerTitle !== null && (
-          <View style={styles.levelBox}>
-            {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), title filled in. */}
-            <Text style={styles.levelText}>One more walk and he's a {cliffhangerTitle}</Text>
-          </View>
+          // Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), title filled in.
+          <Beat label="Almost there">One more walk and he's a {cliffhangerTitle}</Beat>
         )}
 
-        <PressableScale style={styles.continueButton} onPress={onContinue}>
-          <Text style={styles.continueButtonText}>Nice walk! 🐾</Text>
-        </PressableScale>
-      </ScrollView>
+        <Button label="Nice walk! 🐾" onPress={onContinue} style={styles.continueButton} />
+      </Screen>
+
+      {/* Gentle thank-you confetti: self-unmounts, never blocks touches. */}
+      <Confetti />
     </View>
   );
 }
 
+/** One celebration beat: a small Chip label over the warm sentence, in a tinted card. */
+function Beat({ label, icon, children }: { label: string; icon?: 'icon-pin'; children: React.ReactNode }) {
+  return (
+    <Card tint="meadow" style={styles.beatCard}>
+      <Chip label={label} icon={icon} tint="warm" style={styles.beatChip} />
+      <Text style={textStyle('body')}>{children}</Text>
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    justifyContent: 'center',
-  },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 16,
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-  },
-  area: {
-    fontSize: 16,
-    color: COLORS.muted,
-    marginTop: 8,
-  },
-  treatsRow: {
-    marginTop: 24,
-  },
-  treatsEarned: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.warm,
-  },
-  teaseBox: {
-    marginTop: 24,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#FFF8E7',
-    alignItems: 'center',
-  },
-  teaseLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  teaseText: {
-    fontSize: 14,
-    color: COLORS.text,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  badgeBox: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#EAF7EE',
-    alignItems: 'center',
-    gap: 2,
-  },
-  badgeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  badgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text,
-    textAlign: 'center',
-  },
-  levelBox: {
-    marginTop: 12,
-  },
-  levelText: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  continueButton: {
-    marginTop: 32,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 10,
-    backgroundColor: COLORS.green,
-  },
-  continueButtonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
+  container: { flex: 1, backgroundColor: palette.background },
+  screen: { backgroundColor: 'transparent' },
+  burst: { position: 'absolute', top: 40, alignSelf: 'center', width: 320, height: 320 },
+  content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  // Fixed-height box so the grass strip sits under Buddy's paws.
+  stage: { height: 210, alignItems: 'center', justifyContent: 'flex-end' },
+  ground: { position: 'absolute', bottom: -spacing.xxl * 2 },
+  title: { textAlign: 'center' },
+  area: { color: palette.muted, textAlign: 'center' },
+  treatsCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'stretch', justifyContent: 'center' },
+  beatCard: { alignSelf: 'stretch' },
+  beatChip: { marginBottom: spacing.sm },
+  teaseRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  beatText: { flex: 1, gap: 2 },
+  continueButton: { alignSelf: 'stretch', marginTop: spacing.md },
 });

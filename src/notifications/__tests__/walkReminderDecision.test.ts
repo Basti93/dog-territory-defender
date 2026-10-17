@@ -3,6 +3,8 @@ import { calendarDayKey } from '../../utils/manualWalkLog';
 import {
   defaultWalkReminderFields,
   hasWalkOnDay,
+  planReminderDates,
+  REMINDER_WINDOW_DAYS,
   reconcileWalkReminderIgnoreStreak,
   recordWalkReminderScheduled,
   shouldScheduleWalkReminderToday,
@@ -157,22 +159,23 @@ describe('firedCount/followedCount across a short multi-day sequence', () => {
     // Day 0: nothing pending yet, schedules and fires.
     expect(shouldScheduleWalkReminderToday(state, atDay(0), [])).toBe(true);
     state = recordWalkReminderScheduled(state, atDay(0));
-    expect(state.walkReminderFiredCount).toBe(1);
+    expect(state.walkReminderFiredCount).toBe(0); // counted when the day is resolved
     expect(state.walkReminderPendingDate).toBe(dayKey(0));
 
     // Day 1: reconcile day 0 (no walk on day 0 -> ignored), then schedule day 1.
     state = reconcileWalkReminderIgnoreStreak(state, atDay(1), []);
     expect(state.walkReminderConsecutiveIgnores).toBe(1);
+    expect(state.walkReminderFiredCount).toBe(1);
     expect(state.walkReminderFollowedCount).toBe(0);
     expect(shouldScheduleWalkReminderToday(state, atDay(1), [])).toBe(true);
     state = recordWalkReminderScheduled(state, atDay(1));
-    expect(state.walkReminderFiredCount).toBe(2);
+    expect(state.walkReminderFiredCount).toBe(1);
 
     // Day 2: reconcile day 1 (walked on day 1 -> followed, streak resets).
     state = reconcileWalkReminderIgnoreStreak(state, atDay(2), [walkOn(1)]);
     expect(state.walkReminderConsecutiveIgnores).toBe(0);
     expect(state.walkReminderFollowedCount).toBe(1);
-    expect(state.walkReminderFiredCount).toBe(2); // unchanged by reconciliation itself
+    expect(state.walkReminderFiredCount).toBe(2);
   });
 });
 
@@ -180,3 +183,66 @@ function dayKey(dayOffset: number): string {
   const d = new Date(atDay(dayOffset));
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
+
+describe('reconcile across a multi-day gap (rolling window, app closed for days)', () => {
+  it('counts every passed scheduled day and auto-sleeps at 3 ignores', () => {
+    const state = enabledState({ walkReminderPendingDate: dayKey(0) });
+    const result = reconcileWalkReminderIgnoreStreak(state, atDay(5), []);
+    expect(result.walkReminderEnabled).toBe(false);
+    expect(result.walkReminderConsecutiveIgnores).toBe(3);
+    expect(result.walkReminderPendingDate).toBeNull();
+  });
+
+  it('a walked day in the gap resets the streak', () => {
+    const state = enabledState({ walkReminderPendingDate: dayKey(0) });
+    const result = reconcileWalkReminderIgnoreStreak(state, atDay(3), [walkOn(1)]);
+    // day0 ignored, day1 walked, day2 ignored
+    expect(result.walkReminderEnabled).toBe(true);
+    expect(result.walkReminderConsecutiveIgnores).toBe(1);
+    expect(result.walkReminderFollowedCount).toBe(1);
+    expect(result.walkReminderFiredCount).toBe(3);
+  });
+
+  it('does not resolve a pending day in the future', () => {
+    const state = enabledState({ walkReminderPendingDate: dayKey(2) });
+    expect(reconcileWalkReminderIgnoreStreak(state, atDay(0), [])).toBe(state);
+  });
+});
+
+describe('planReminderDates', () => {
+  it('returns 7 entries when time is still ahead today and no walk', () => {
+    const dates = planReminderDates(atDay(0, 9), 18, 30, false);
+    expect(dates).toHaveLength(REMINDER_WINDOW_DAYS);
+    expect(dates[0].getDate()).toBe(1);
+    expect(dates[6].getDate()).toBe(7);
+    dates.forEach((d) => {
+      expect(d.getHours()).toBe(18);
+      expect(d.getMinutes()).toBe(30);
+    });
+  });
+
+  it('skips today when a walk already happened', () => {
+    const dates = planReminderDates(atDay(0, 9), 18, 0, true);
+    expect(dates).toHaveLength(7);
+    expect(dates[0].getDate()).toBe(2);
+    expect(dates[6].getDate()).toBe(8);
+  });
+
+  it('skips today when the time has passed', () => {
+    const dates = planReminderDates(atDay(0, 20), 18, 0, false);
+    expect(dates).toHaveLength(7);
+    expect(dates[0].getDate()).toBe(2);
+    expect(dates[6].getDate()).toBe(8);
+  });
+
+  it('keeps the local clock time across a DST change', () => {
+    // Late March / late October cover EU and US DST switches.
+    for (const month of [2, 9, 10]) {
+      const now = new Date(2026, month, 20, 9, 0, 0).getTime();
+      planReminderDates(now, 7, 45, false, 14).forEach((d) => {
+        expect(d.getHours()).toBe(7);
+        expect(d.getMinutes()).toBe(45);
+      });
+    }
+  });
+});

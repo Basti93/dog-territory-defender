@@ -1,13 +1,15 @@
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { WalkRepository } from '../storage/WalkRepository';
+import { calendarDayKey } from '../utils/manualWalkLog';
 import { log } from '../utils/log';
 import {
   reconcileWalkReminderIgnoreStreak,
   recordWalkReminderScheduled,
-  shouldScheduleWalkReminderToday,
+  hasWalkOnDay,
+  planReminderDates,
   WALK_REMINDER_BODY,
 } from './walkReminderDecision';
-import { cancelScheduledWalkReminder, requestNotificationPermission, scheduleWalkReminderNotification } from './scheduler';
+import { cancelScheduledWalkReminder, requestNotificationPermission, scheduleWalkReminderWindow } from './scheduler';
 
 export interface WalkReminderDeps {
   walkRepository: WalkRepository;
@@ -53,7 +55,15 @@ export async function checkAndScheduleWalkReminder(deps: WalkReminderDeps, now: 
   // must never be left with a stale scheduled notification (Decision 5).
   await cancelScheduledWalkReminder();
 
-  if (!shouldScheduleWalkReminderToday(reconciled, now, walks)) {
+  // Rolling window: schedule the next REMINDER_WINDOW_DAYS days at once, so
+  // reminders still fire if the app stays closed for days (no backend). Every
+  // app open / saved walk replans the whole window from scratch.
+  if (!reconciled.walkReminderEnabled || reconciled.walkReminderHour === null || reconciled.walkReminderMinute === null) {
+    return;
+  }
+  const walkedToday = hasWalkOnDay(walks, calendarDayKey(now));
+  const dates = planReminderDates(now, reconciled.walkReminderHour, reconciled.walkReminderMinute, walkedToday);
+  if (dates.length === 0) {
     return;
   }
 
@@ -63,7 +73,6 @@ export async function checkAndScheduleWalkReminder(deps: WalkReminderDeps, now: 
     return;
   }
 
-  // Non-null: guaranteed by shouldScheduleWalkReminderToday's own check above.
-  await scheduleWalkReminderNotification(reconciled.walkReminderHour as number, reconciled.walkReminderMinute as number, WALK_REMINDER_BODY, new Date(now));
-  await notificationRepository.saveState(recordWalkReminderScheduled(reconciled, now));
+  await scheduleWalkReminderWindow(dates, WALK_REMINDER_BODY);
+  await notificationRepository.saveState(recordWalkReminderScheduled(reconciled, dates[0].getTime()));
 }

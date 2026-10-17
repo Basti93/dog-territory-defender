@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
 
 import { Walk, AppState as AppStateType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, stopWatchingLocation, getInitialLocation } from './src/utils/gps';
@@ -43,7 +44,7 @@ import { createSqliteBuddyAppearanceRepository } from './src/storage/sqliteBuddy
 import { BuddyAppearancePicker } from './src/components/buddy';
 import { BuddyMood, resolveBuddyMood } from './src/components/buddy/buddyMood';
 import { useBuddyAppearance } from './src/components/useBuddyAppearance';
-import { FadeSlideIn } from './src/ui';
+import { Button, FadeSlideIn, palette, spacing, textStyle, tokens, useAppFonts } from './src/ui';
 import {
   applyPassiveAccrual,
   canOfferRouteRefreshToday,
@@ -71,15 +72,14 @@ const personalStatsRepository = createSqlitePersonalStatsRepository();
 const notificationRepository = createSqliteNotificationRepository();
 const buddyAppearanceRepository = createSqliteBuddyAppearanceRepository();
 
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
+// Keep the native splash up until the fonts gate opens, so no blank frame flashes.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
+  const { loaded: fontsLoaded } = useAppFonts();
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded]);
   const [appState, setAppState] = useState<AppStateType>({
     walk: null,
     isTracking: false,
@@ -772,14 +772,17 @@ export default function App() {
 
   const distance = appState.walk ? cumulativeDistance(appState.walk.locations) / 1000 : 0;
 
+  // Fonts gate: first render waits so no screen flashes the system font.
+  if (!fontsLoaded) return null;
+
   if (needsDogName) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="dog-name">
-            <DogNamePromptScreen onSubmit={submitDogName} />
+            <DogNamePromptScreen onSubmit={submitDogName} buddyAppearance={buddyAppearance} />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -825,7 +828,7 @@ export default function App() {
   if (celebration) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="celebration">
             <CelebrationScreen
               cellsPainted={celebration.cellsPainted}
@@ -850,7 +853,7 @@ export default function App() {
               }}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -858,7 +861,7 @@ export default function App() {
   if (showDoorstep) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           {/* FadeSlideIn rule: Android WebViews inside an animating-opacity parent can
               render blank. Never wrap a screen that hosts a WebView (MapView,
               WalkPortraitScreen, Doorstep/Territories via TerritoryPortrait) in
@@ -913,7 +916,7 @@ export default function App() {
                 setShowSettings(true);
               }}
             />
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -921,7 +924,7 @@ export default function App() {
   if (showTerritories) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             <TerritoriesScreen
               buddyAppearance={buddyAppearance}
               territoryRepository={territoryRepository}
@@ -930,7 +933,7 @@ export default function App() {
               onOpenMap={() => setShowTerritories(false)}
               onClose={() => setShowTerritories(false)}
             />
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -942,7 +945,7 @@ export default function App() {
   if (viewingWalk) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             <WalkPortraitScreen
               walk={viewingWalk}
               walkRepository={walkRepository}
@@ -950,7 +953,7 @@ export default function App() {
               dogName={dogName}
               onClose={() => setViewingWalk(null)}
             />
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -958,7 +961,7 @@ export default function App() {
   if (showHistory) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="history">
             <WalkHistoryScreen
               buddyAppearance={buddyAppearance}
@@ -972,7 +975,7 @@ export default function App() {
               }}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -980,7 +983,7 @@ export default function App() {
   if (showDen) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="den">
             <DenScreen
               repository={denEconomyRepository}
@@ -998,7 +1001,7 @@ export default function App() {
               onTreatsChanged={setTreats}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -1006,7 +1009,7 @@ export default function App() {
   if (showDebugLog) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="debug-log">
             <DebugLogScreen
               notificationRepository={notificationRepository}
@@ -1016,7 +1019,7 @@ export default function App() {
               }}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -1024,7 +1027,7 @@ export default function App() {
   if (showSettings) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="settings">
             <SettingsScreen
               notificationRepository={notificationRepository}
@@ -1038,7 +1041,7 @@ export default function App() {
               }}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -1046,7 +1049,7 @@ export default function App() {
   if (showStats) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="stats">
             <StatsScreen
               buddyAppearance={buddyAppearance}
@@ -1058,7 +1061,7 @@ export default function App() {
               }}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -1066,7 +1069,7 @@ export default function App() {
   if (showLogMissedWalk) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
           <FadeSlideIn key="log-missed-walk">
             <LogMissedWalkScreen
               onLog={logMissedWalk}
@@ -1078,7 +1081,7 @@ export default function App() {
               routeRefreshAvailable={routeRefreshAvailable}
             />
           </FadeSlideIn>
-        </SafeAreaView>
+        </View>
       </SafeAreaProvider>
     );
   }
@@ -1119,17 +1122,17 @@ export default function App() {
         />
 
         <View style={styles.stats}>
-          <Text style={styles.statLabel}>Distance</Text>
-          <Text style={styles.statValue}>{distance.toFixed(2)} km</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>Distance</Text>
+          <Text style={textStyle('body')}>{distance.toFixed(2)} km</Text>
 
-          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Points</Text>
-          <Text style={styles.statValue}>{appState.walk?.locations.length || 0}</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>Points</Text>
+          <Text style={textStyle('body')}>{appState.walk?.locations.length || 0}</Text>
 
-          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Treats</Text>
-          <Text style={styles.statValue}>{treats !== null ? Math.floor(treats) : '…'}</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>Treats</Text>
+          <Text style={textStyle('body')}>{treats !== null ? Math.floor(treats) : '…'}</Text>
 
-          <Text style={[styles.statLabel, { marginLeft: 20 }]}>Level</Text>
-          <Text style={styles.statValue}>{level !== null ? `${dogDisplayName(dogName)} — Level ${level}` : '…'}</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>Level</Text>
+          <Text style={textStyle('body')}>{level !== null ? `${dogDisplayName(dogName)} — Level ${level}` : '…'}</Text>
         </View>
 
         <View style={styles.buttons}>
@@ -1140,9 +1143,7 @@ export default function App() {
             // lives one tap away on the Doorstep, and the rest moved to the
             // Doorstep's direct-access row or burger menu. All that's left
             // here is a way back to the Doorstep itself.
-            <TouchableOpacity style={styles.backToDoorstepButton} onPress={() => setShowDoorstep(true)}>
-              <Text style={styles.backToDoorstepButtonText}>← Back to Doorstep</Text>
-            </TouchableOpacity>
+            <Button label="← Back to Doorstep" variant="secondary" onPress={() => setShowDoorstep(true)} />
           ) : (
             <>
               {/* Two-way terminal action model (design.md's Technical Split
@@ -1153,18 +1154,14 @@ export default function App() {
                   explicit non-goal (design.md Decisions 8-13's own framing:
                   "the live map + Finish Walk/Cancel screen... is never
                   interrupted by or dismissible to the Doorstep"). */}
-              <TouchableOpacity style={[styles.button, styles.stopButton]} onPress={finishWalk}>
-                <Text style={styles.buttonText}>Finish Walk</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={resetWalk}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
+              <Button label="Finish Walk" onPress={finishWalk} />
+              <Button label="Cancel" variant="secondary" labelColor={tokens.warm} onPress={resetWalk} />
             </>
           )}
 
           {appState.walk && !appState.isTracking && appState.walk.closed && (
-            <TouchableOpacity
-              style={[styles.button, styles.newButton]}
+            <Button
+              label="New Walk"
               onPress={() => {
                 resetWalk();
                 // Once the idle screen's own Start Walk button is gone
@@ -1174,13 +1171,11 @@ export default function App() {
                 // "why New Walk also returns to the Doorstep").
                 setShowDoorstep(true);
               }}
-            >
-              <Text style={styles.buttonText}>New Walk</Text>
-            </TouchableOpacity>
+            />
           )}
         </View>
 
-        {appState.error && <Text style={styles.error}>{appState.error}</Text>}
+        {appState.error && <Text style={[textStyle('min'), styles.error]}>{appState.error}</Text>}
       </View>
     </SafeAreaView>
     </SafeAreaProvider>
@@ -1190,79 +1185,34 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: palette.background,
   },
   map: {
     flex: 1,
   },
+  // No bottom padding: SafeAreaView already adds the bottom inset.
   controls: {
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: palette.background,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: palette.border,
   },
   stats: {
     flexDirection: 'row',
-    marginBottom: 16,
-    paddingVertical: 12,
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: spacing.sm,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
   },
   statLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: 16,
-    color: COLORS.text,
-    fontWeight: '700',
-    marginTop: 2,
+    color: palette.muted,
   },
   buttons: {
-    gap: 8,
-  },
-  button: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  stopButton: {
-    backgroundColor: COLORS.blue,
-  },
-  cancelButton: {
-    backgroundColor: '#E74C3C',
-  },
-  newButton: {
-    backgroundColor: COLORS.green,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  // The idle map screen's single "back to Doorstep" control (design.md
-  // Decision 9), replacing the removed six-button stack.
-  backToDoorstepButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: '#E0E0DA',
-    alignItems: 'center',
-  },
-  backToDoorstepButtonText: {
-    color: COLORS.text,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  buttonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
+    gap: spacing.sm,
   },
   error: {
-    color: '#E74C3C',
-    marginTop: 8,
-    fontSize: 12,
+    color: tokens.warm,
+    marginTop: spacing.sm,
   },
 });

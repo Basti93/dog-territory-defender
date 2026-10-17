@@ -9,6 +9,7 @@ export type BuildingLevel = 1 | 2 | 3;
 export type ArtKey =
   | `${BuildingId}-${BuildingLevel}`
   | 'yard-ground'
+  | 'yard-ground-wide'
   | 'icon-treat'
   | 'icon-paw'
   | 'icon-pin'
@@ -28,7 +29,29 @@ export function buildingArt(building: BuildingId, level: BuildingLevel): ArtKey 
 // Metro fails at bundle time on a missing file.
 // When a PNG lands in assets/art/, add a line, for example:
 //   'doghouse-1': require('../../assets/art/doghouse-1.png'),
-export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {};
+export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
+  'doghouse-1': require('../../assets/art/doghouse-1.png'),
+  'doghouse-2': require('../../assets/art/doghouse-2.png'),
+  'doghouse-3': require('../../assets/art/doghouse-3.png'),
+  'bakery-1': require('../../assets/art/bakery-1.png'),
+  'bakery-2': require('../../assets/art/bakery-2.png'),
+  'bakery-3': require('../../assets/art/bakery-3.png'),
+  'garden-1': require('../../assets/art/garden-1.png'),
+  'garden-2': require('../../assets/art/garden-2.png'),
+  'garden-3': require('../../assets/art/garden-3.png'),
+  'yard-ground': require('../../assets/art/yard-ground.png'),
+  'yard-ground-wide': require('../../assets/art/yard-ground-wide.png'),
+  'icon-treat': require('../../assets/art/icon-treat.png'),
+  'icon-paw': require('../../assets/art/icon-paw.png'),
+  'icon-pin': require('../../assets/art/icon-pin.png'),
+  'icon-badge': require('../../assets/art/icon-badge.png'),
+  'icon-home': require('../../assets/art/icon-home.png'),
+  'icon-settings': require('../../assets/art/icon-settings.png'),
+  'icon-walks': require('../../assets/art/icon-walks.png'),
+  'icon-den': require('../../assets/art/icon-den.png'),
+  'doorstep-sky': require('../../assets/art/doorstep-sky.png'),
+  'celebration-burst': require('../../assets/art/celebration-burst.png'),
+};
 
 export function hasArt(key: ArtKey): boolean {
   return artAssets[key] !== undefined;

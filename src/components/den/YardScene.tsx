@@ -1,14 +1,16 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
+import { buddyFeetInset } from '../../buddy/imageSkin';
 import { BuildingId, BuildingLevel, artOr, buildingArt } from '../../art/artAssets';
 import { BuddyAvatar } from '../buddy';
 import { BuddyMood } from '../buddy/buddyMood';
-import { tokens } from '../../ui';
+import { ArtImage, Badge, PressableScale, palette } from '../../ui';
 
-// The Den's yard scene (buddy-comes-alive, task 3.3): ground, the three
-// buildings and Buddy. Presentation only; the parent owns all state.
+// The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
+// Presentation only; the parent owns all state. It is the hero of the Den, so
+// the buildings are large (stage 1 160px, stage 2 210px, stage 3 260px).
 
 export type YardBuildingKey = 'doghouse' | 'bakery' | 'sniffGarden';
 
@@ -27,11 +29,121 @@ export function artTierForLevel(level: number): BuildingLevel {
   return 1;
 }
 
+/** Sprite box edge (px) per art stage. Sprites are square with transparent margins. */
+export const STAGE_SIZE: Record<BuildingLevel, number> = { 1: 160, 2: 210, 3: 260 };
+
+/** Yard height: ~48% of the screen, never so short that a stage-3 doghouse gets squashed. */
+export const YARD_MIN_HEIGHT = 380;
+export const YARD_MAX_HEIGHT = 440;
+export function yardHeightFor(screenHeight: number): number {
+  return Math.max(YARD_MIN_HEIGHT, Math.min(YARD_MAX_HEIGHT, Math.round(screenHeight * 0.48)));
+}
+
+const BUDDY_SIZE = 130;
+// All vertical shares below are measured from the TOP of the yard (H = yard height).
+// Buddy's FEET stand here; his box is lowered by buddyFeetInset so the empty canvas below his paws doesn't float him.
+const BUDDY_FEET_TOP = 0.95;
+const BUDDY_CX = 0.58; // front-centre, in the gap between the bakery and garden badges
+/** Side buildings may hang this share of their own width past the screen edge (the hill bleeds off-screen too). */
+const EDGE_OVERLAP = 0.1;
+const BADGE_W = 72;
+const BADGE_H = 28;
+/** A building sprite's visual tile base sits at this share of the sprite height; the rest is transparent margin. */
+const SPRITE_BASE_FRAC = 0.86;
+
+// Where each building's TILE BASE stands: horizontal centre as a share of the yard width,
+// and base line as a share of yard height from the top. All three are inside the grass.
+const PLACEMENT: Record<YardBuildingKey, { cx: number; baseTop: number }> = {
+  doghouse: { cx: 0.5, baseTop: 0.62 },
+  bakery: { cx: 0.2, baseTop: 0.9 },
+  sniffGarden: { cx: 0.8, baseTop: 0.9 },
+};
+
+const BUILDING_NAME: Record<YardBuildingKey, string> = {
+  doghouse: 'Doghouse',
+  bakery: 'Treat Bakery',
+  sniffGarden: 'Sniff Garden',
+};
+
+/** yard-ground-wide.png is a 2:1 hill (2048x1024) filling everything under its horizon edge to edge; measured horizon peaks ~26% from the image top (centre), ~39% at the sides. */
+export const GROUND_ASPECT = 2;
+const GROUND_HORIZON_IN_IMAGE = 0.26;
+/** Target horizon, share of yard height from the top (sky above). */
+const GROUND_HORIZON_TOP = 0.4;
+/** Ground is at least this much wider than the screen so its edges bleed off both sides. */
+const GROUND_MIN_WIDTH_SHARE = 1.25;
+
+export interface GroundBox {
+  width: number;
+  height: number;
+  left: number;
+  /** Image top, px from the yard top (its bottom edge is the yard bottom, or lower). */
+  top: number;
+  /** Horizon peak, px from the yard top. */
+  horizonY: number;
+}
+
+/**
+ * Hill geometry. Anchored to the yard bottom so no sky shows under it; sized so the horizon lands at
+ * ~0.40H (a wider screen makes it taller, so the horizon rises a little). Contain-fit, never cropped.
+ */
+export function groundBox(width: number, height: number): GroundBox {
+  const hForHorizon = (height * (1 - GROUND_HORIZON_TOP)) / (1 - GROUND_HORIZON_IN_IMAGE);
+  const groundHeight = Math.max(hForHorizon, (width * GROUND_MIN_WIDTH_SHARE) / GROUND_ASPECT);
+  const groundWidth = groundHeight * GROUND_ASPECT;
+  const top = height - groundHeight;
+  return {
+    width: groundWidth,
+    height: groundHeight,
+    left: (width - groundWidth) / 2,
+    top,
+    horizonY: top + GROUND_HORIZON_IN_IMAGE * groundHeight,
+  };
+}
+
+export interface LayoutBox {
+  left: number;
+  bottom: number;
+  size: number;
+}
+
+export interface YardLayout {
+  sprites: Record<YardBuildingKey, LayoutBox>;
+  buddy: LayoutBox;
+  /** Badge boxes are BADGE_W x BADGE_H; `size` is unused (BADGE_W). */
+  badges: Record<YardBuildingKey, LayoutBox>;
+  ground: GroundBox;
+}
+
+/** Pure geometry (px, `bottom` measured up from the yard floor) so it can be unit-tested. */
+export function yardLayout(width: number, height: number, sizes: Record<YardBuildingKey, number>): YardLayout {
+  const sprites = {} as Record<YardBuildingKey, LayoutBox>;
+  const badges = {} as Record<YardBuildingKey, LayoutBox>;
+  const buddy: LayoutBox = { left: width * BUDDY_CX - BUDDY_SIZE / 2, bottom: height * (1 - BUDDY_FEET_TOP) - buddyFeetInset(BUDDY_SIZE), size: BUDDY_SIZE };
+  for (const key of YARD_ORDER) {
+    const size = sizes[key];
+    const place = PLACEMENT[key];
+    // Shift inward rather than clip off the screen edge.
+    const overlap = key === 'doghouse' ? 0 : size * EDGE_OVERLAP;
+    const left = Math.max(-overlap, Math.min(width - size + overlap, width * place.cx - size / 2));
+    // box bottom is lowered by the transparent margin under the tile so the TILE BASE lands on baseTop
+    const bottom = height * (1 - place.baseTop) - (1 - SPRITE_BASE_FRAC) * size;
+    sprites[key] = { left, bottom, size };
+    const badgeLeft = left + size / 2 - BADGE_W / 2;
+    // The doghouse badge sits just above Buddy's box (on the doghouse's lower body), never on his head;
+    // the side badges hang at their building's base, below Buddy's head height.
+    // Under each tile; the side ones hang a little lower so they stay below Buddy's head height.
+    // Under each tile. The doghouse badge would land on Buddy's head, so it never dips below his box top.
+    const underTile = height * (1 - place.baseTop) - BADGE_H - 4;
+    const badgeBottom = key === 'doghouse' ? Math.max(underTile + 12, buddy.bottom + buddy.size) : underTile;
+    badges[key] = { left: badgeLeft, bottom: badgeBottom, size: BADGE_W };
+  }
+  return { sprites, buddy, badges, ground: groundBox(width, height) };
+}
+
 interface YardBuilding {
   key: YardBuildingKey;
   level: number;
-  color: string;
-  lightColor: string;
 }
 
 interface YardSceneProps {
@@ -39,36 +151,61 @@ interface YardSceneProps {
   name: string;
   buildings: YardBuilding[];
   mood: BuddyMood;
-  /** Building Buddy sniffs toward (cheapest affordable upgrade), or null. */
+  /** Building Buddy sniffs toward (tapped, else cheapest affordable upgrade), or null. */
   curiousAbout: YardBuildingKey | null;
   /** Changes on every successful upgrade; `building` bounces and sparkles. */
   upgrade: { building: YardBuildingKey; n: number } | null;
+  /** Tap on a building (the screen scrolls to its upgrade card). */
+  onSelectBuilding: (key: YardBuildingKey) => void;
+  height: number;
+  /** Overlay drawn on top of the scene (the Den header). */
+  children?: React.ReactNode;
 }
 
-// Capped so Buddy's top stays below the middle building's level badge (scene height 224).
-const BUDDY_SIZE = 96;
-
-export function YardScene({ appearance, name, buildings, mood, curiousAbout, upgrade }: YardSceneProps) {
-  const groundArt = artOr('yard-ground', null);
-  // Buddy looks toward the building he is curious about; right otherwise.
-  const facing = curiousAbout === 'doghouse' ? 'left' : 'right';
+export function YardScene({
+  appearance,
+  name,
+  buildings,
+  mood,
+  curiousAbout,
+  upgrade,
+  onSelectBuilding,
+  height,
+  children,
+}: YardSceneProps) {
+  const { width } = useWindowDimensions();
+  const sky = artOr('doorstep-sky', null);
+  const ground = artOr('yard-ground-wide', null);
+  // Buddy looks toward the building he is curious about: bakery is on the left, the rest on the right.
+  const facing = curiousAbout === 'bakery' ? 'left' : 'right';
+  const sizes = {} as Record<YardBuildingKey, number>;
+  for (const b of buildings) sizes[b.key] = STAGE_SIZE[artTierForLevel(b.level)];
+  const layout = yardLayout(width, height, sizes);
+  const g = layout.ground;
+  const renderSprite = (b: YardBuilding) => {
+    const box = layout.sprites[b.key];
+    return (
+      <BuildingSprite
+        key={b.key}
+        building={b}
+        size={box.size}
+        left={box.left}
+        bottom={box.bottom}
+        bounceN={upgrade && upgrade.building === b.key ? upgrade.n : 0}
+        onPress={() => onSelectBuilding(b.key)}
+      />
+    );
+  };
   return (
-    <View style={styles.scene}>
-      {groundArt ? (
-        <Image source={groundArt} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-      ) : (
-        <View style={styles.ground} />
+    <View style={[styles.scene, { height }]}>
+      {sky && <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
+      {ground && (
+        // Native ratio, contain (never crop the horizon); the hill bleeds past both side edges and the bottom.
+        <Image source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, top: g.top }]} />
       )}
-      <View style={styles.buildingRow}>
-        {buildings.map((b) => (
-          <BuildingSprite
-            key={b.key}
-            building={b}
-            bounceN={upgrade && upgrade.building === b.key ? upgrade.n : 0}
-          />
-        ))}
-      </View>
-      <View style={styles.buddy} pointerEvents="box-none">
+      {/* Draw order: side buildings, Buddy, then the doghouse last so it stays tappable. */}
+      {buildings.filter((b) => b.key !== 'doghouse').map(renderSprite)}
+      <View style={[styles.buddy, { left: layout.buddy.left, bottom: layout.buddy.bottom }]} pointerEvents="box-none">
         <BuddyAvatar
           appearance={appearance}
           size={BUDDY_SIZE}
@@ -79,11 +216,36 @@ export function YardScene({ appearance, name, buildings, mood, curiousAbout, upg
           excitedSettleMs={null}
         />
       </View>
+      {buildings.filter((b) => b.key === 'doghouse').map(renderSprite)}
+      {/* Level badges sit above everything so none is ever hidden. */}
+      {buildings.map((b) => {
+        const box = layout.badges[b.key];
+        return (
+          <View key={b.key} pointerEvents="none" style={[styles.badgeWrap, { left: box.left, bottom: box.bottom }]}>
+            <Badge label={`Lv ${b.level}`} tint="warm" />
+          </View>
+        );
+      })}
+      {children}
     </View>
   );
 }
 
-function BuildingSprite({ building, bounceN }: { building: YardBuilding; bounceN: number }) {
+function BuildingSprite({
+  building,
+  size,
+  left,
+  bottom,
+  bounceN,
+  onPress,
+}: {
+  building: YardBuilding;
+  size: number;
+  left: number;
+  bottom: number;
+  bounceN: number;
+  onPress: () => void;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const sparkle = useRef(new Animated.Value(0)).current;
 
@@ -102,18 +264,13 @@ function BuildingSprite({ building, bounceN }: { building: YardBuilding; bounceN
     return () => anim.stop();
   }, [bounceN, scale, sparkle]);
 
-  const art = artOr(buildingArt(ART_ID[building.key], artTierForLevel(building.level)), null);
-
   return (
-    <Animated.View style={[styles.sprite, { transform: [{ scale }] }]}>
-      {art ? (
-        <Image source={art} style={styles.spriteArt} resizeMode="contain" />
-      ) : (
-        <DrawnBuilding building={building} />
-      )}
-      <View style={[styles.badge, { borderColor: building.color }]}>
-        <Text style={styles.badgeText}>Lv {building.level}</Text>
-      </View>
+    <View style={[styles.sprite, { left, bottom, width: size, height: size }]} pointerEvents="box-none">
+      <Animated.View style={{ transform: [{ scale }] }}>
+        <PressableScale onPress={onPress} accessibilityLabel={`Show the ${BUILDING_NAME[building.key]} upgrade`}>
+          <ArtImage art={buildingArt(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
+        </PressableScale>
+      </Animated.View>
       <Animated.Text
         pointerEvents="none"
         style={[
@@ -126,98 +283,20 @@ function BuildingSprite({ building, bounceN }: { building: YardBuilding; bounceN
       >
         ✨
       </Animated.Text>
-    </Animated.View>
-  );
-}
-
-// Simple rounded stand-ins until the pre-rendered sprites land.
-function DrawnBuilding({ building }: { building: YardBuilding }) {
-  const { key, color, lightColor } = building;
-  if (key === 'doghouse') {
-    return (
-      <View style={styles.drawn}>
-        <View style={[styles.roof, { backgroundColor: color }]} />
-        <View style={[styles.body, { backgroundColor: lightColor, borderColor: color }]}>
-          <View style={[styles.door, { backgroundColor: color }]} />
-        </View>
-      </View>
-    );
-  }
-  if (key === 'bakery') {
-    return (
-      <View style={styles.drawn}>
-        <View style={styles.awning}>
-          <View style={[styles.stripe, { backgroundColor: tokens.warm }]} />
-          <View style={[styles.stripe, { backgroundColor: tokens.white }]} />
-          <View style={[styles.stripe, { backgroundColor: tokens.warm }]} />
-          <View style={[styles.stripe, { backgroundColor: tokens.white }]} />
-        </View>
-        <View style={[styles.body, { backgroundColor: lightColor, borderColor: color }]}>
-          <View style={[styles.window, { backgroundColor: tokens.white }]} />
-        </View>
-      </View>
-    );
-  }
-  return (
-    <View style={[styles.drawn, styles.bushRow]}>
-      <View style={[styles.bush, { backgroundColor: lightColor, borderColor: color, width: 30, height: 30 }]} />
-      <View style={[styles.bush, { backgroundColor: lightColor, borderColor: color, width: 38, height: 38 }]} />
-      <View style={[styles.bush, { backgroundColor: lightColor, borderColor: color, width: 28, height: 28 }]} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   scene: {
-    height: 224,
-    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: tokens.meadow,
-    marginBottom: 16,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    backgroundColor: palette.skyTint,
   },
-  // Fallback for the 'yard-ground' sprite: a soft green strip at the bottom.
-  ground: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 90,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    backgroundColor: tokens.green,
-    opacity: 0.3,
-  },
-  buildingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    paddingTop: 16,
-    paddingHorizontal: 8,
-  },
-  buddy: {
-    position: 'absolute',
-    bottom: 0,
-    alignSelf: 'center',
-  },
-  sprite: { alignItems: 'center', width: 88 },
-  spriteArt: { width: 72, height: 72 },
-  drawn: { width: 72, height: 66, alignItems: 'center', justifyContent: 'flex-end' },
-  roof: { width: 52, height: 22, borderTopLeftRadius: 26, borderTopRightRadius: 26, marginBottom: -2 },
-  body: { width: 52, height: 38, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'flex-end' },
-  door: { width: 16, height: 20, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  window: { width: 20, height: 16, borderRadius: 6, marginBottom: 8 },
-  awning: { flexDirection: 'row', width: 60, height: 14, borderTopLeftRadius: 8, borderTopRightRadius: 8, overflow: 'hidden' },
-  stripe: { flex: 1 },
-  bushRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' },
-  bush: { borderRadius: 20, borderWidth: 2, marginHorizontal: -3 },
-  badge: {
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    backgroundColor: tokens.white,
-  },
-  badgeText: { fontSize: 12, fontWeight: '700', color: tokens.text },
-  sparkle: { position: 'absolute', top: 0, right: 8, fontSize: 18 },
+  ground: { position: 'absolute' },
+  sprite: { position: 'absolute' },
+  badgeWrap: { position: 'absolute', width: BADGE_W, height: BADGE_H, alignItems: 'center' },
+  buddy: { position: 'absolute' },
+  sparkle: { position: 'absolute', top: 0, right: 8, fontSize: 24 },
 });

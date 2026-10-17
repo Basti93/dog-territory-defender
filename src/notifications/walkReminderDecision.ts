@@ -1,5 +1,5 @@
 import { Walk } from '../types';
-import { calendarDayKey } from '../utils/manualWalkLog';
+import { calendarDayKey, startOfLocalDay } from '../utils/manualWalkLog';
 import type { NotificationBookkeepingState } from './notificationDecision';
 
 // Pure decision logic for the opt-in daily walk reminder
@@ -67,24 +67,47 @@ export function reconcileWalkReminderIgnoreStreak(
     return state;
   }
 
-  const todayKey = calendarDayKey(now);
-  if (state.walkReminderPendingDate === todayKey) {
-    // Still the same day the reminder was scheduled for — not resolved yet.
+  const pendingStart = parseCalendarDayKey(state.walkReminderPendingDate);
+  const todayStart = startOfLocalDay(now);
+  if (pendingStart === null || pendingStart >= todayStart) {
+    // Still today (or a future day) — not resolved yet.
     return state;
   }
 
-  const walked = hasWalkOnDay(walks, state.walkReminderPendingDate);
-  const nextConsecutiveIgnores = walked ? 0 : state.walkReminderConsecutiveIgnores + 1;
+  // Rolling window: several scheduled days may have passed since the last
+  // app open. Resolve each one in order (capped at the window length — no
+  // reminders beyond it were ever scheduled). Each resolved day was a
+  // scheduled reminder, so it also counts toward the fired total.
+  let ignores = state.walkReminderConsecutiveIgnores;
+  let followed = state.walkReminderFollowedCount;
+  let fired = state.walkReminderFiredCount;
+  let enabled = state.walkReminderEnabled;
+  const first = new Date(pendingStart);
+  for (let i = 0; i < REMINDER_WINDOW_DAYS + 1; i++) {
+    const day = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i);
+    if (day.getTime() >= todayStart) break;
+    fired += 1;
+    if (hasWalkOnDay(walks, calendarDayKey(day.getTime()))) {
+      ignores = 0;
+      followed += 1;
+    } else {
+      ignores += 1;
+      if (ignores >= 3) {
+        // Auto-sleep (design.md Decision 7): flips the same persisted flag
+        // the player's toggle controls, so Settings stays honest.
+        enabled = false;
+        break;
+      }
+    }
+  }
 
   return {
     ...state,
     walkReminderPendingDate: null,
-    walkReminderConsecutiveIgnores: nextConsecutiveIgnores,
-    walkReminderFollowedCount: walked ? state.walkReminderFollowedCount + 1 : state.walkReminderFollowedCount,
-    // Auto-sleep (design.md Decision 7): flips the same persisted flag the
-    // player's manual toggle controls, so Settings stays honest — never a
-    // separate silent bypass that leaves the toggle visually "on".
-    walkReminderEnabled: nextConsecutiveIgnores >= 3 ? false : state.walkReminderEnabled,
+    walkReminderConsecutiveIgnores: ignores,
+    walkReminderFollowedCount: followed,
+    walkReminderFiredCount: fired,
+    walkReminderEnabled: enabled,
   };
 }
 
@@ -101,18 +124,55 @@ export function shouldScheduleWalkReminderToday(state: NotificationBookkeepingSt
 }
 
 /**
- * The bookkeeping update for having just actually scheduled today's reminder
- * (design.md Decision 7, step 2) — call only once the OS scheduling call
- * itself has succeeded (see walkReminder.ts's checkAndScheduleWalkReminder),
- * never speculatively, so a denied-permission or failed schedule doesn't
- * falsely count toward the 4-week fired total or the ignore streak.
+ * The bookkeeping update for having just actually scheduled the window (call
+ * only once the OS scheduling calls succeeded). Sets the pending date to the
+ * first scheduled day, unless an earlier unresolved one is already pending
+ * (today's reminder may already have fired). Fired counts are tallied when
+ * days are resolved in `reconcileWalkReminderIgnoreStreak`, not here, so
+ * re-planning the window on every app open can't inflate them.
  */
-export function recordWalkReminderScheduled(state: NotificationBookkeepingState, now: number): NotificationBookkeepingState {
+export function recordWalkReminderScheduled(state: NotificationBookkeepingState, firstScheduledAt: number): NotificationBookkeepingState {
   return {
     ...state,
-    walkReminderPendingDate: calendarDayKey(now),
-    walkReminderFiredCount: state.walkReminderFiredCount + 1,
+    walkReminderPendingDate: state.walkReminderPendingDate ?? calendarDayKey(firstScheduledAt),
   };
+}
+
+/** Number of upcoming days a reminder is scheduled for in advance, so it still fires if the app stays closed for days. */
+export const REMINDER_WINDOW_DAYS = 7;
+
+/**
+ * Pure planner for the rolling reminder window (design.md 2026-10-18
+ * decision). Returns one local Date per day at hour:minute for the next
+ * `days` calendar days starting today; today is skipped if a walk already
+ * happened or the time has passed, in which case the window extends one day
+ * so there are still `days` pending reminders. Dates are built from local calendar
+ * fields (not +24h arithmetic) so DST changes can't shift the clock time.
+ */
+export function planReminderDates(now: number, hour: number, minute: number, walkedToday: boolean, days: number = REMINDER_WINDOW_DAYS): Date[] {
+  const base = new Date(now);
+  const dates: Date[] = [];
+  // Always `days` entries: skipping today extends the window by one day.
+  for (let i = 0; dates.length < days; i++) {
+    const date = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, hour, minute, 0, 0);
+    if (i === 0 && (walkedToday || date.getTime() <= now)) continue;
+    dates.push(date);
+  }
+  return dates;
+}
+
+/** Zero-padded local 'YYYY-MM-DD' for notification `data.day` and identifiers. */
+export function reminderDayLabel(date: Date): string {
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${mm}-${dd}`;
+}
+
+// Inverse of calendarDayKey ('YYYY-M-D', month 0-based) -> local midnight ms.
+function parseCalendarDayKey(key: string): number | null {
+  const [y, m, d] = key.split('-').map(Number);
+  if ([y, m, d].some((n) => Number.isNaN(n))) return null;
+  return new Date(y, m, d).getTime();
 }
 
 // Approved copy (proposal.md's Open Questions, resolved 2026-08-22; design.md

@@ -1,98 +1,68 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput } from 'react-native';
 
-import { PressableScale } from '../ui';
+import { BuddyAppearance, defaultBuddyAppearance } from '../buddy/buddyAppearance';
+import { Button, Card, Header, palette, radii, Screen, spacing, textStyle } from '../ui';
+import { BuddyAvatar } from './buddy';
 
 // One-time, first-launch naming prompt (tasks.md task 1.1). Shown once, when
 // the Den-economy state's dogName is still null; never re-prompts once set.
 
-const COLORS = {
-  green: '#2ECC71',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
-
 interface DogNamePromptScreenProps {
   onSubmit: (name: string) => void;
+  /** Buddy shown above the form. Optional: falls back to the default look. */
+  buddyAppearance?: BuddyAppearance;
 }
 
-export function DogNamePromptScreen({ onSubmit }: DogNamePromptScreenProps) {
+export function DogNamePromptScreen({ onSubmit, buddyAppearance }: DogNamePromptScreenProps) {
   const [name, setName] = useState('');
   const trimmed = name.trim();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>What's your dog's name? 🐾</Text>
-        <Text style={styles.subtitle}>Every Level readout from here on is your dog's own.</Text>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Screen scroll backdrop="sky" contentStyle={styles.content}>
+        <Header title="Your dog" icon="icon-paw" />
+        <BuddyAvatar appearance={buddyAppearance ?? defaultBuddyAppearance()} size={140} mood="curious" />
 
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Buddy"
-          placeholderTextColor={COLORS.muted}
-          autoFocus
-          maxLength={30}
-          returnKeyType="done"
-          onSubmitEditing={() => trimmed && onSubmit(trimmed)}
-        />
+        <Card style={styles.form}>
+          <Text style={[textStyle('h1'), styles.center]}>What's your dog's name? 🐾</Text>
+          <Text style={[textStyle('body'), styles.center, styles.subtitle]}>
+            Every Level readout from here on is your dog's own.
+          </Text>
 
-        <PressableScale style={styles.button} disabled={!trimmed} onPress={() => onSubmit(trimmed)}>
-          <Text style={styles.buttonText}>Let's go!</Text>
-        </PressableScale>
-      </View>
-    </View>
+          <TextInput
+            style={[textStyle('body'), styles.input]}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Buddy"
+            placeholderTextColor={palette.muted}
+            autoFocus
+            maxLength={30}
+            returnKeyType="done"
+            onSubmitEditing={() => trimmed && onSubmit(trimmed)}
+          />
+
+          <Button label="Let's go!" disabled={!trimmed} onPress={() => onSubmit(trimmed)} />
+        </Card>
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    justifyContent: 'center',
-  },
-  content: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginTop: 8,
-    textAlign: 'center',
-  },
+  flex: { flex: 1 },
+  content: { alignItems: 'center' },
+  form: { alignSelf: 'stretch', marginTop: spacing.lg, gap: spacing.md },
+  center: { textAlign: 'center' },
+  subtitle: { color: palette.muted },
   input: {
-    marginTop: 24,
-    width: '100%',
-    borderWidth: 1.5,
-    borderColor: '#eee',
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  button: {
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 10,
-    backgroundColor: COLORS.green,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
+    borderWidth: 2,
+    borderColor: palette.border,
+    borderRadius: radii.tile,
+    backgroundColor: palette.background,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: 52,
+    lineHeight: undefined, // fixed lineHeight clips text inside a TextInput
   },
 });

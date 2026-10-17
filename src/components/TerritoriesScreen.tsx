@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView, Platform } from 'react-native';
 
 import { territoryDisplayRate, territoryMass, territoryRate } from '../economy/territoryEconomy';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
@@ -8,17 +8,10 @@ import { Territory, TerritoryId, TerritoryRepository } from '../storage/Territor
 import { assignTerritoryTitles } from '../utils/territoryTitles';
 import { TerritoryCard } from './TerritoryCard';
 
-const COLORS = {
-  blue: '#3498DB',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
-
-// Keeps the header Close tap target at least ~44px tall.
-const CLOSE_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
+import { BuddyAvatar } from './buddy';
+import { EmptyState, Header, Screen } from '../ui';
 
 interface TerritoriesScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -82,90 +75,48 @@ export function TerritoriesScreen({
 
   if (!territories || !cellsByTerritory) {
     return (
-      <View style={styles.container}>
+      <Screen>
         <BuddyLoading appearance={buddyAppearance} text="Loading…" />
-      </View>
+      </Screen>
     );
   }
 
   const titles = assignTerritoryTitles(territories, cellsByTerritory, Date.now());
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Territories</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={CLOSE_HIT_SLOP}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+  const header = <Header title="Territories" icon="icon-pin" onBack={onClose} />;
 
-      {territories.length === 0 ? (
-        <View style={styles.emptyState}>
-          <BuddyLoading appearance={buddyAppearance} text="No territories claimed yet — go for a walk to start your first one." />
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
-          {territories.map((territory) => {
-            const cells = cellsByTerritory.get(territory.id) ?? [];
-            const mass = territoryMass(cells.length, cells.reduce((sum, c) => sum + c.visits, 0));
-            return (
-              <TerritoryCard
-                key={territory.id}
-                territory={territory}
-                cells={cells}
-                title={titles.get(territory.id) ?? null}
-                incomeRevealed={incomeRevealed}
-                displayRate={territoryDisplayRate(mass, worldMass, globalRate)}
-                onRename={(name) => handleRename(territory.id, name)}
-                onOpenMap={onOpenMap}
-              />
-            );
-          })}
-        </ScrollView>
-      )}
-    </View>
+  if (territories.length === 0) {
+    return (
+      <Screen backdrop="sky">
+        {header}
+        <EmptyState title="No territories claimed yet" message="Go for a walk to start your first one.">
+          <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
+        </EmptyState>
+      </Screen>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Screen scroll backdrop="sky">
+        {header}
+        {territories.map((territory) => {
+          const cells = cellsByTerritory.get(territory.id) ?? [];
+          const mass = territoryMass(cells.length, cells.reduce((sum, c) => sum + c.visits, 0));
+          return (
+            <TerritoryCard
+              key={territory.id}
+              territory={territory}
+              cells={cells}
+              title={titles.get(territory.id) ?? null}
+              incomeRevealed={incomeRevealed}
+              displayRate={territoryDisplayRate(mass, worldMass, globalRate)}
+              onRename={(name) => handleRename(territory.id, name)}
+              onOpenMap={onOpenMap}
+            />
+          );
+        })}
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  empty: {
-    padding: 24,
-    textAlign: 'center',
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  emptyState: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    textAlign: 'center',
-  },
-  scroll: {
-    padding: 16,
-  },
-});

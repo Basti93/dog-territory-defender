@@ -1,4 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+import { tokens } from '../ui/tokens';
+import { MAP_MARKER_CSS, MAP_THEME_CSS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 export const mapHTML = `
 <!DOCTYPE html>
@@ -12,9 +14,9 @@ export const mapHTML = `
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
-    .current-position { width: 12px; height: 12px; background: #3498DB; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(52, 152, 219, 0.6); }
-    /* openspec/changes/somewhere-wild — same warm accent token as the second (wild-ground) contour. */
-    .wild-spot-marker { width: 16px; height: 16px; background: #F39C12; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(243, 156, 18, 0.6); }
+    /* Toy-world look: see mapTheme.ts. Wild marker = openspec/changes/somewhere-wild's warm accent. */
+${MAP_THEME_CSS}
+${MAP_MARKER_CSS}
   </style>
 </head>
 <body>
@@ -22,11 +24,8 @@ export const mapHTML = `
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
 
-    const map = L.map('map').setView([0, 0], 2);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 20
-    }).addTo(map);
+    const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
+${MAP_TILE_LAYER_JS}
 
     let trailPolyline = null;
     let currentMarker = null;
@@ -82,7 +81,7 @@ ${HOME_RANGE_RENDERER_SCRIPT}
         // Update current position marker
         if (!currentMarker) {
           currentMarker = L.marker([latitude, longitude], {
-            icon: L.divIcon({ className: 'current-position', iconSize: [12, 12] })
+            icon: L.divIcon({ className: 'current-position', html: ${JSON.stringify(PAW_MARKER_HTML)}, iconSize: [36, 36] })
           }).addTo(map);
         } else {
           currentMarker.setLatLng([latitude, longitude]);
@@ -110,14 +109,10 @@ ${HOME_RANGE_RENDERER_SCRIPT}
 
         if (locations.length > 1) {
           const latLngs = locations.map((loc) => [loc.latitude, loc.longitude]);
-          trailPolyline = L.polyline(latLngs, {
-            color: '#3498DB',
-            weight: 3,
-            opacity: 0.8,
-            dashArray: '5, 5',
-            lineCap: 'round',
-            lineJoin: 'round'
-          }).addTo(map);
+          // Drawn-path look: cream under-stroke + green main stroke, rounded.
+          const trailUnder = L.polyline(latLngs, { color: '${tokens.white}', weight: 10, opacity: 0.95, lineCap: 'round', lineJoin: 'round' });
+          const trailMain = L.polyline(latLngs, { color: '${tokens.green}', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' });
+          trailPolyline = L.layerGroup([trailUnder, trailMain]).addTo(map);
         }
       }
 
@@ -163,7 +158,7 @@ ${HOME_RANGE_RENDERER_SCRIPT}
         }
         if (payload) {
           wildSpotMarker = L.marker([payload.latitude, payload.longitude], {
-            icon: L.divIcon({ className: 'wild-spot-marker', iconSize: [16, 16] })
+            icon: L.divIcon({ className: 'wild-spot-marker', html: ${JSON.stringify(WILD_PIN_HTML)}, iconSize: [30, 38], iconAnchor: [15, 38] })
           }).addTo(map);
         }
         reportToRN('SHOW_WILD_SPOT_APPLIED', { hasSpot: !!payload });

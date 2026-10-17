@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { dogDisplayName } from '../economy/denEconomy';
@@ -13,6 +13,7 @@ import { resolveLabelForPoint } from '../utils/streetLookup';
 import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { walkPortraitHTML } from '../web/walkPortraitHTML';
 import { TerritoryPortrait } from './TerritoryPortrait';
+import { Chip, Header, palette, radii, Screen, shadows, spacing, textStyle } from '../ui';
 
 // Walk Portrait (openspec/changes/walk-portrait) — a full-screen, tap-in-from-
 // history view of one walk's own route, animated on top of the player's
@@ -133,9 +134,10 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
 
   if (!state) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.loading}>Getting the portrait ready…</Text>
-      </View>
+      <Screen>
+        <Header title="Walk Portrait" icon="icon-walks" onBack={onClose} />
+        <Text style={[textStyle('body'), styles.loading]}>Getting the portrait ready…</Text>
+      </Screen>
     );
   }
 
@@ -149,160 +151,87 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
   const titleLine = placeLabel ? `${dateLine}, around ${placeLabel}` : dateLine;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Walk Portrait</Text>
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
-          <Text style={styles.closeText}>Close</Text>
-        </TouchableOpacity>
-      </View>
+    <Screen>
+      <Header title="Walk Portrait" icon="icon-walks" onBack={onClose} />
 
-      <View style={styles.mapArea}>
-        {state.kind === 'trail' ? (
-          <WebView
-            ref={webViewRef}
-            originWhitelist={['*']}
-            source={{ html: walkPortraitHTML }}
-            style={styles.webView}
-            onMessage={handleWebViewMessage}
-            onLoadEnd={() => setIsWebViewReady(true)}
-          />
-        ) : rangeEmpty ? (
-          <View style={styles.emptyPortrait}>
-            <Text style={styles.emptyPortraitText}>{dog} hasn't marked out any ground yet — let's find some.</Text>
-          </View>
-        ) : (
-          <TerritoryPortrait homeRangeRepository={homeRangeRepository} onPress={() => {}} onEmptyChange={setRangeEmpty} />
-        )}
+      {/* Outer view carries the soft shadow; inner view clips the map to the rounded frame. */}
+      <View style={styles.frameShadow}>
+        <View style={styles.frame}>
+          {state.kind === 'trail' ? (
+            <WebView
+              ref={webViewRef}
+              originWhitelist={['*']}
+              source={{ html: walkPortraitHTML }}
+              style={styles.webView}
+              onMessage={handleWebViewMessage}
+              onLoadEnd={() => setIsWebViewReady(true)}
+            />
+          ) : rangeEmpty ? (
+            <View style={styles.emptyPortrait}>
+              <Text style={[textStyle('body'), styles.emptyPortraitText]}>
+                {dog} hasn't marked out any ground yet — let's find some.
+              </Text>
+            </View>
+          ) : (
+            <TerritoryPortrait homeRangeRepository={homeRangeRepository} onPress={() => {}} onEmptyChange={setRangeEmpty} />
+          )}
+        </View>
       </View>
 
       <View style={styles.metaRow}>
         {state.kind === 'trail' ? (
           <>
-            <Text style={styles.metaTitle}>{titleLine}</Text>
+            <Text style={textStyle('h2')}>{titleLine}</Text>
             <View style={styles.metaStats}>
-              <MetaStat label="Distance" value={`${(distanceMeters / 1000).toFixed(2)} km`} />
-              <MetaStat label="Duration" value={formatDuration(durationMs)} />
-              {walk.treatsEarned !== undefined && <MetaStat label="Treats" value={`${walk.treatsEarned}`} />}
+              <Chip tint="meadow" label={`Distance ${(distanceMeters / 1000).toFixed(2)} km`} />
+              <Chip tint="sky" label={`Duration ${formatDuration(durationMs)}`} />
+              {walk.treatsEarned !== undefined && <Chip tint="warm" icon="icon-treat" label={`Treats ${walk.treatsEarned}`} />}
             </View>
           </>
         ) : (
           <>
-            <Text style={styles.metaTitle}>{dateLine}</Text>
+            <Text style={textStyle('h2')}>{dateLine}</Text>
             {/* Recommended default from proposal.md's Open Question 2/design.md
                 Decision 2, accepted 2026-08-22 — a game-master line, not
                 invented here. */}
-            <Text style={styles.fallbackCopy}>
+            <Text style={[textStyle('small'), { color: palette.muted }]}>
               No trail recorded for this one. It still counts — and here's everywhere {dog} knows.
             </Text>
             {walk.treatsEarned !== undefined && (
               <View style={styles.metaStats}>
-                <MetaStat label="Treats" value={`${walk.treatsEarned}`} />
+                <Chip tint="warm" icon="icon-treat" label={`Treats ${walk.treatsEarned}`} />
               </View>
             )}
           </>
         )}
       </View>
-    </View>
+    </Screen>
   );
 }
-
-function MetaStat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.metaStat}>
-      <Text style={styles.metaStatLabel}>{label}</Text>
-      <Text style={styles.metaStatValue}>{value}</Text>
-    </View>
-  );
-}
-
-const COLORS = {
-  green: '#2ECC71',
-  blue: '#3498DB',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-};
 
 const styles = StyleSheet.create({
-  container: {
+  loading: { textAlign: 'center', color: palette.muted, paddingVertical: spacing.xl },
+  frameShadow: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    borderRadius: radii.card,
+    backgroundColor: palette.card,
+    ...shadows.card,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  loading: {
-    padding: 24,
-    textAlign: 'center',
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  mapArea: {
+  frame: {
     flex: 1,
+    borderRadius: radii.card,
+    overflow: 'hidden',
+    backgroundColor: palette.background,
   },
-  webView: {
-    flex: 1,
-  },
+  webView: { flex: 1 },
   emptyPortrait: {
     flex: 1,
-    borderRadius: 16,
-    backgroundColor: '#F0F4EE',
+    backgroundColor: palette.meadowTint,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    margin: 16,
+    padding: spacing.lg,
   },
-  emptyPortraitText: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: 'center',
-  },
-  metaRow: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    gap: 8,
-  },
-  metaTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  fallbackCopy: {
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-  metaStats: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  metaStat: {
-    gap: 2,
-  },
-  metaStatLabel: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  metaStatValue: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontWeight: '700',
-  },
+  emptyPortraitText: { color: palette.muted, textAlign: 'center' },
+  metaRow: { paddingTop: spacing.lg, gap: spacing.sm },
+  metaStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

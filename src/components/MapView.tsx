@@ -7,6 +7,7 @@ import { mapHTML } from '../web/mapHTML';
 import { buildHomeRangeRasterPayload, cellIdsToCoords } from '../web/homeRangeRaster';
 import { log } from '../utils/log';
 import { paintedCells } from '../utils/grid';
+import { palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 
 interface MapViewProps {
@@ -140,23 +141,28 @@ export function MapView({
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Toy-window frame: outer view carries the soft shadow (overflow hidden would clip it on iOS); inner view clips the WebView to the rounded corners. */}
+      <View style={styles.frameShadow}>
+      <View style={styles.frame}>
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
         source={{ html: mapHTML }}
-        style={{ flex: 1 }}
+        style={styles.webView}
         onMessage={handleWebViewMessage}
         onLoadEnd={() => {
           log('MAP_WEBVIEW_LOAD_END');
           setIsReady(true);
         }}
       />
+      </View>
+      </View>
       {/* Territories list screen entry point (openspec/changes/territories,
           design.md Decision 8) — the map screen's own chrome, floating over
           the WebView so it never competes with the map's bottom controls. */}
       {onOpenTerritories && (
         <TouchableOpacity style={styles.territoriesButton} onPress={onOpenTerritories} activeOpacity={0.85}>
-          <Text style={styles.territoriesButtonText}>🗺️ Territories</Text>
+          <Text style={[textStyle('small'), { color: tokens.text }]}>🗺️ Territories</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -164,23 +170,36 @@ export function MapView({
 }
 
 const styles = StyleSheet.create({
+  frameShadow: {
+    flex: 1,
+    borderRadius: radii.card,
+    backgroundColor: palette.background,
+    ...shadows.card,
+  },
+  frame: {
+    flex: 1,
+    borderRadius: radii.card,
+    borderWidth: 4,
+    borderColor: palette.background,
+    overflow: 'hidden',
+    backgroundColor: palette.background,
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   territoriesButton: {
     position: 'absolute',
     top: 12,
     right: 12,
-    backgroundColor: '#FAFAF8',
+    backgroundColor: palette.background,
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    shadowColor: '#000',
+    shadowColor: palette.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
     shadowRadius: 3,
     elevation: 3,
-  },
-  territoriesButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1A2A1A',
   },
 });

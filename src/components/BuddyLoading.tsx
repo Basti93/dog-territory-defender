@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
-import { tokens } from '../ui';
+import { palette, spacing, textStyle } from '../ui';
 import { BuddyAvatar } from './buddy';
 
 // Calm loading / empty-state block: a small idle Buddy above one line of text.
@@ -16,12 +16,12 @@ export function BuddyLoading({ appearance, text }: BuddyLoadingProps) {
   return (
     <View style={styles.wrap}>
       <BuddyAvatar appearance={appearance} size={72} mood="idle" />
-      <Text style={styles.text}>{text}</Text>
+      <Text style={[textStyle('body'), styles.text]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, gap: 8 },
-  text: { textAlign: 'center', color: tokens.muted, fontSize: 14 },
+  wrap: { alignItems: 'center', paddingTop: spacing.xl, paddingHorizontal: spacing.xl, gap: spacing.sm, backgroundColor: palette.background },
+  text: { textAlign: 'center', color: palette.muted },
 });

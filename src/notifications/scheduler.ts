@@ -1,7 +1,9 @@
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 import { log } from '../utils/log';
 import { TimeOfDayBucket } from './notificationDecision';
+import { reminderDayLabel } from './walkReminderDecision';
 
 // The actual expo-notifications wiring — permission request + scheduling.
 // Deliberately kept separate from notificationDecision.ts's pure logic so
@@ -28,7 +30,31 @@ const BUCKET_HOUR: Record<TimeOfDayBucket, number> = {
 };
 
 export const DEN_OVERFLOW_NOTIFICATION_DATA = { type: 'den-overflow' } as const;
-export const WALK_REMINDER_NOTIFICATION_DATA = { type: 'walk-reminder' } as const;
+export const WALK_REMINDER_NOTIFICATION_DATA = { type: 'walk-reminder', kind: 'walk-reminder' } as const;
+
+export const WALK_REMINDER_CHANNEL_ID = 'walk-reminder';
+export const DEN_OVERFLOW_CHANNEL_ID = 'den-overflow';
+const WALK_REMINDER_ID_PREFIX = 'walk-reminder-';
+
+/**
+ * Android only, idempotent: creates the notification channels before any
+ * schedule or permission request (Android 13+ won't even show the
+ * permission prompt until a channel exists). DEFAULT importance = audible
+ * but not a heads-up interruption. No-op on iOS.
+ */
+export async function ensureAndroidChannels(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(WALK_REMINDER_CHANNEL_ID, {
+    name: 'Walk reminder',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: 'default',
+  });
+  await Notifications.setNotificationChannelAsync(DEN_OVERFLOW_CHANNEL_ID, {
+    name: 'Den treats',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: 'default',
+  });
+}
 
 // Generalized from the original hour-only version (openspec/changes/
 // walk-reminder/tasks.md task 3.1) to also support the player's own
@@ -50,6 +76,7 @@ function nextOccurrenceOfTime(hour: number, minute: number, now: Date = new Date
  * not an error — callers should fail silently, not retry-nag.
  */
 export async function requestNotificationPermission(): Promise<boolean> {
+  await ensureAndroidChannels();
   const existing = await Notifications.getPermissionsAsync();
   if (existing.granted) {
     return true;
@@ -61,28 +88,32 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 /** Schedules a single one-shot local notification at the next occurrence of the given bucket's clock time. */
 export async function scheduleOverflowNotification(bucket: TimeOfDayBucket, body: string): Promise<void> {
+  await ensureAndroidChannels();
   const date = nextOccurrenceOfTime(BUCKET_HOUR[bucket], 0);
   await Notifications.scheduleNotificationAsync({
     content: { body, data: DEN_OVERFLOW_NOTIFICATION_DATA },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: DEN_OVERFLOW_CHANNEL_ID },
   });
   log('NOTIFICATION_SCHEDULED', { bucket, at: date.toISOString() });
 }
 
 /**
- * Schedules a single one-shot local walk-reminder notification at the next
- * occurrence of the player's own set hour/minute (openspec/changes/
- * walk-reminder/design.md Decision 4) — same one-shot `DATE`-trigger shape as
- * `scheduleOverflowNotification` above, reusing the existing
- * `expo-notifications` wiring rather than a second scheduling mechanism.
+ * Schedules one one-shot walk-reminder per given date (the rolling window
+ * from `planReminderDates`). Each gets a stable identifier
+ * `walk-reminder-YYYY-MM-DD` and `data.kind === 'walk-reminder'` so it can be
+ * found and cancelled without touching the Den-overflow notification.
  */
-export async function scheduleWalkReminderNotification(hour: number, minute: number, body: string, now: Date = new Date()): Promise<void> {
-  const date = nextOccurrenceOfTime(hour, minute, now);
-  await Notifications.scheduleNotificationAsync({
-    content: { body, data: WALK_REMINDER_NOTIFICATION_DATA },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
-  });
-  log('WALK_REMINDER_SCHEDULED', { hour, minute, at: date.toISOString() });
+export async function scheduleWalkReminderWindow(dates: Date[], body: string): Promise<void> {
+  await ensureAndroidChannels();
+  for (const date of dates) {
+    const day = reminderDayLabel(date);
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${WALK_REMINDER_ID_PREFIX}${day}`,
+      content: { body, data: { ...WALK_REMINDER_NOTIFICATION_DATA, day } },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: WALK_REMINDER_CHANNEL_ID },
+    });
+  }
+  log('WALK_REMINDER_SCHEDULED', { count: dates.length, days: dates.map(reminderDayLabel) });
 }
 
 /**
@@ -93,6 +124,11 @@ export async function scheduleWalkReminderNotification(hour: number, minute: num
  */
 export async function cancelScheduledWalkReminder(): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  const ours = scheduled.filter((n) => n.content.data?.type === WALK_REMINDER_NOTIFICATION_DATA.type);
+  const ours = scheduled.filter(
+    (n) =>
+      n.content.data?.kind === WALK_REMINDER_NOTIFICATION_DATA.kind ||
+      n.content.data?.type === WALK_REMINDER_NOTIFICATION_DATA.type ||
+      n.identifier.startsWith(WALK_REMINDER_ID_PREFIX)
+  );
   await Promise.all(ours.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
 }

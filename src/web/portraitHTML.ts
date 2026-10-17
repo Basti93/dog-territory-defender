@@ -1,4 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_FILTER, MAP_TILE_HOST_SUFFIX, MAP_TILE_URL, MAP_TINT_ALPHA, MAP_TINT_COLOR } from './mapTheme';
+import { tokens } from '../ui/tokens';
 
 // The Doorstep's territory portrait host (openspec/changes/home-dashboard,
 // design.md Decision 2, resolved to include OSM tiles behind the shape per
@@ -13,7 +15,7 @@ import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 // this codebase, and left genuinely unverified until task 8.7's on-device
 // pass): rather than trying to screenshot Leaflet's own DOM tile layer (a
 // hard problem in general — Leaflet renders tiles as positioned <img>
-// elements), this fetches each OSM tile image this raster's bounding box
+// elements), this fetches each map tile image this raster's bounding box
 // needs directly and draws it onto one offscreen canvas at the pixel
 // position Leaflet's own Web Mercator projection math (`map.project`) says
 // it belongs at, then draws `renderHomeRangePortrait`'s fill+outline output
@@ -66,6 +68,13 @@ ${HOME_RANGE_RENDERER_SCRIPT}
     // not a logged balance threshold.
     var CELL_PADDING = 2;
     var TILE_SUBDOMAINS = ['a', 'b', 'c'];
+    var TILE_URL_TEMPLATE = ${JSON.stringify(MAP_TILE_URL)};
+    var TILE_HOST_SUFFIX = ${JSON.stringify(MAP_TILE_HOST_SUFFIX)};
+    // Same pastel treatment as mapHTML.ts's CSS filter + tint overlay.
+    var TILE_FILTER = ${JSON.stringify(MAP_TILE_FILTER)};
+    var TINT_COLOR = ${JSON.stringify(MAP_TINT_COLOR)};
+    var TINT_ALPHA = ${MAP_TINT_ALPHA};
+    var CREDIT_TEXT = ${JSON.stringify(MAP_TILE_ATTRIBUTION)};
 
     function reportToRN(type, extra) {
       if (window.ReactNativeWebView) {
@@ -127,10 +136,20 @@ ${HOME_RANGE_RENDERER_SCRIPT}
         for (var ty = minTileY; ty <= maxTileY; ty++) {
           (function (tx, ty) {
             var sub = TILE_SUBDOMAINS[Math.abs(tx + ty) % TILE_SUBDOMAINS.length];
-            var url = 'https://' + sub + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+            var url = TILE_URL_TEMPLATE
+              .replace('{s}', sub).replace('{z}', zoom).replace('{x}', tx).replace('{y}', ty);
+            // Defence-in-depth only: guards against a future edit to the URL template drifting off the verified host.
+            if (new URL(url).hostname.slice(-TILE_HOST_SUFFIX.length) !== TILE_HOST_SUFFIX) {
+              tilePromises.push(Promise.reject(new Error('unexpected tile host')));
+              return;
+            }
             tilePromises.push(
               loadTileImage(url).then(function (img) {
+                // ctx.filter is unsupported on some WebViews; the flat tint
+                // below still applies there.
+                ctx.filter = TILE_FILTER;
                 ctx.drawImage(img, tx * TILE_SIZE - topLeftPixel.x, ty * TILE_SIZE - topLeftPixel.y, TILE_SIZE, TILE_SIZE);
+                ctx.filter = 'none';
               })
             );
           })(tx, ty);
@@ -150,6 +169,15 @@ ${HOME_RANGE_RENDERER_SCRIPT}
           settled = true;
           clearTimeout(timeoutId);
 
+          // Meadow tint over the tiles only (before the Range is drawn, so the
+          // Range keeps its own colours).
+          ctx.save();
+          ctx.globalCompositeOperation = 'multiply';
+          ctx.globalAlpha = TINT_ALPHA;
+          ctx.fillStyle = TINT_COLOR;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.restore();
+
           // Composite the Range outline + Bloom fill (renderHomeRangePortrait,
           // this script's own math-only function, shared verbatim with the
           // interactive map) on top of the tiles just drawn above.
@@ -165,6 +193,20 @@ ${HOME_RANGE_RENDERER_SCRIPT}
             overlayBottomRightPx.x - overlayTopLeftPx.x,
             overlayBottomRightPx.y - overlayTopLeftPx.y
           );
+
+          // Attribution travels with the captured image (ODbL).
+          ctx.save();
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          var creditW = ctx.measureText(CREDIT_TEXT).width;
+          ctx.fillStyle = ${JSON.stringify(tokens.white)};
+          ctx.globalAlpha = 0.85;
+          ctx.fillRect(canvas.width - creditW - 12, canvas.height - 16, creditW + 12, 16);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = ${JSON.stringify(tokens.muted)};
+          ctx.fillText(CREDIT_TEXT, canvas.width - 6, canvas.height - 3);
+          ctx.restore();
 
           try {
             var dataUrl = canvas.toDataURL('image/png');

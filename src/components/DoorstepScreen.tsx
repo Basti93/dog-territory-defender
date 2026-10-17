@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyAvatar } from './buddy';
+import { buddyFeetInset } from '../buddy/imageSkin';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyMood } from './buddy/buddyMood';
-import { FadeSlideIn, PressableScale } from '../ui';
+import { ArtImage, Button, Card, FadeSlideIn, ListRow, PressableScale, Screen, palette, radii, shadows, spacing, textStyle } from '../ui';
+import { artOr, buildingArt } from '../art/artAssets';
+import { artTierForLevel } from './den/YardScene';
 
 import { currentTitleForLevel } from '../economy/milestones';
 import { buddyTreatsPerWalk, storageCap } from '../economy/formulas';
@@ -323,17 +327,17 @@ export function DoorstepScreen({
 
   if (!ready) {
     return (
-      <View style={styles.container}>
+      <Screen>
         <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
-      </View>
+      </Screen>
     );
   }
 
   // treats/level come from App.tsx's own already-reconciled state (avoids
   // any drift with what the rest of the app is already showing); the
   // building levels this screen also needs (for the Den tease + Sniff
-  // Garden's per-walk bonus) aren't passed down separately, so they come
-  // from this screen's own fetch.
+  // Garden's per-walk bonus + the doghouse sprite) aren't passed down
+  // separately, so they come from this screen's own fetch.
   const state: DenEconomyState = { ...denState, treats, level };
   const dog = dogDisplayName(dogName);
   const title = currentTitleForLevel(level);
@@ -345,106 +349,112 @@ export function DoorstepScreen({
   // TerritoryPortrait hosts one, so only the non-portrait groups below fade in;
   // App.tsx must not wrap this screen in FadeSlideIn.
   return (
-    <View style={styles.container}>
-      {/* Buddy hero (buddy-comes-alive). Buddy sits beside the name/greeting
-          text so Start Walk stays above the fold on a ~6" phone. The burger
-          menu trigger (design.md Decision 13) lives at the top of the text
-          column: small and top-corner so it never competes with Start Walk. */}
+    <Screen scroll contentStyle={styles.content}>
+      {/* The scene: sky, grass strip, Buddy and his doghouse. Start Walk sits
+          directly under it so it stays above the fold on a ~640pt phone. */}
       <FadeSlideIn style={styles.fadeGroup}>
-      <View style={styles.hero}>
-        <BuddyAvatar
+        <DoorstepScene
           appearance={buddyAppearance}
-          size={150}
           mood={greetingPlaying ? 'excited' : buddyMood}
-          name={dog}
-          showCaption
-        />
-        <View style={styles.heroText}>
-          <View style={styles.topRow}>
-            <TouchableOpacity
+          dog={dog}
+          doghouseLevel={state.doghouseLevel}
+          menuButton={
+            <PressableScale
               style={styles.menuButton}
               onPress={() => setIsMenuOpen(true)}
               accessibilityLabel="More options"
+              hitSlop={6}
             >
-              <Text style={styles.menuButtonText}>☰</Text>
-            </TouchableOpacity>
-          </View>
+              <ArtImage art="icon-settings" size={28} />
+            </PressableScale>
+          }
+        >
           {isDozing ? (
-            <Text style={styles.dozingCaption}>Zzz…</Text>
+            <Text style={[textStyle('h1'), styles.sceneMuted]}>Zzz…</Text>
           ) : (
-            greeting && <Text style={styles.greeting}>{greeting}</Text>
+            greeting && (
+              <Text style={textStyle('h1')} numberOfLines={1} adjustsFontSizeToFit>
+                {greeting}
+              </Text>
+            )
           )}
-          <Text style={styles.dogRowName}>
+          <Text style={textStyle('h2')} numberOfLines={1}>
             {dog} · Level {level}
             {title ? ` · ${title}` : ''}
           </Text>
-          <Text style={styles.dogRowSub}>
+        </DoorstepScene>
+      </FadeSlideIn>
+
+      <View style={styles.body}>
+        <FadeSlideIn style={styles.fadeGroup}>
+          {/* Soft glow only on a fresh open; stops by itself after ~10s or on first touch. */}
+          <Button label="Start Walk" icon="icon-paw" onPress={onStartWalk} pulse={session.kind === 'fresh-open'} />
+          <Text style={[textStyle('small'), styles.centered]}>
             {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
           </Text>
-        </View>
-      </View>
-      </FadeSlideIn>
+        </FadeSlideIn>
 
-      {rangeEmpty ? (
-        <View style={styles.emptyPortrait}>
-          <Text style={styles.emptyPortraitText}>{dog} hasn't marked out any ground yet — let's find some.</Text>
-        </View>
-      ) : (
-        <TerritoryPortrait
-          homeRangeRepository={homeRangeRepository}
-          onPress={onOpenMap}
-          onEmptyChange={setRangeEmpty}
-          height={PORTRAIT_HEIGHT}
-        />
-      )}
-
-      <FadeSlideIn style={styles.fadeGroup}>
-      {awayStripLines.length > 0 && (
-        <View style={styles.awayStrip}>
-          {awayStripLines.map((line, i) => (
-            <AwayStripLineView key={i} line={line} footerTreatsRef={footerTreatsRef} />
-          ))}
-        </View>
-      )}
-
-      {/* Soft glow only on a fresh open; stops by itself after ~10s or on first touch. */}
-      <PressableScale style={styles.startButton} onPress={onStartWalk} pulse={session.kind === 'fresh-open'}>
-        <Text style={styles.startButtonText}>Start Walk</Text>
-      </PressableScale>
-
-      {/* Direct-access row (design.md Decision 12) — View Past Walks and
-          Stats & Badges only, visually subordinate to Start Walk. No Den
-          icon here — the tease footer below is already its entry point. */}
-      <View style={styles.iconRow}>
-        <PressableScale style={styles.iconRowItem} hitSlop={ICON_ROW_HIT_SLOP} onPress={onOpenHistory}>
-          <Text style={styles.iconRowText}>📖 Past Walks</Text>
-        </PressableScale>
-        <PressableScale style={styles.iconRowItem} hitSlop={ICON_ROW_HIT_SLOP} onPress={onOpenStats}>
-          <Text style={styles.iconRowText}>🏅 Stats & Badges</Text>
-        </PressableScale>
-      </View>
-
-      {tease && (
-        <PressableScale style={styles.denTease} onPress={onOpenDen}>
-          <View ref={footerTreatsRef} collapsable={false}>
-            <Text style={styles.denTeaseText}>
-              🦴 {Math.floor(state.treats)} / {cap} treats · Upgrade for {tease.cost}
+        {rangeEmpty ? (
+          <Card tint="meadow" style={styles.emptyPortrait}>
+            <Text style={[textStyle('small'), styles.centered]}>
+              {dog} hasn't marked out any ground yet — let's find some.
             </Text>
-          </View>
-        </PressableScale>
-      )}
+          </Card>
+        ) : (
+          <Card style={styles.windowCard}>
+            <TerritoryPortrait
+              homeRangeRepository={homeRangeRepository}
+              onPress={onOpenMap}
+              onEmptyChange={setRangeEmpty}
+              height={PORTRAIT_HEIGHT}
+            />
+          </Card>
+        )}
 
-      {/* Permanent territory-income line (openspec/changes/territories/
-          design.md Decision 6) — "once true, always shown," mirroring
-          getUpgradeTease's own convention. Gated on denState's own
-          territoryIncomeRevealed (not App.tsx's justRevealedTerritoryIncome,
-          which is only true on the one reveal-moment open). */}
-      {denState.territoryIncomeRevealed && (
-        <Text style={styles.territoryIncomeLine}>
-          🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate ?? 0)} treats an hour
-        </Text>
-      )}
-      </FadeSlideIn>
+        <FadeSlideIn style={styles.fadeGroup}>
+          {awayStripLines.length > 0 && (
+            <Card tint="warm" style={styles.awayStrip}>
+              {awayStripLines.map((line, i) => (
+                <AwayStripLineView key={i} line={line} footerTreatsRef={footerTreatsRef} />
+              ))}
+            </Card>
+          )}
+
+          {/* Direct-access rows (design.md Decision 12) — View Past Walks and
+              Stats & Badges only. No Den row here: the tease card below is
+              already its entry point. */}
+          <View>
+            <ListRow title="Past Walks" icon="icon-walks" onPress={onOpenHistory} />
+            <ListRow title="Stats & Badges" icon="icon-badge" onPress={onOpenStats} />
+          </View>
+
+          {tease && (
+            <PressableScale onPress={onOpenDen}>
+              <Card tint="warm">
+                <View ref={footerTreatsRef} collapsable={false}>
+                  <View style={styles.denTeaseRow}>
+                    <ArtImage art="icon-den" size={40} />
+                    <Text style={[textStyle('body'), styles.denTeaseText]}>
+                      {Math.floor(state.treats)} / {cap} treats · Upgrade for {tease.cost}
+                    </Text>
+                  </View>
+                </View>
+              </Card>
+            </PressableScale>
+          )}
+
+          {/* Permanent territory-income line (openspec/changes/territories/
+              design.md Decision 6) — "once true, always shown," mirroring
+              getUpgradeTease's own convention. Gated on denState's own
+              territoryIncomeRevealed (not App.tsx's justRevealedTerritoryIncome,
+              which is only true on the one reveal-moment open). */}
+          {denState.territoryIncomeRevealed && (
+            <Text style={[textStyle('small'), styles.centered]}>
+              🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate ?? 0)} treats an hour
+            </Text>
+          )}
+        </FadeSlideIn>
+      </View>
 
       <DoorstepMenu
         visible={isMenuOpen}
@@ -462,6 +472,71 @@ export function DoorstepScreen({
           onOpenSettings();
         }}
       />
+    </Screen>
+  );
+}
+
+// Scene content height below the status-bar inset (kept <= 300pt so Start Walk
+// stays above the fold on a 640pt phone).
+const SCENE_HEIGHT = 300;
+// Sized from the screen width so Buddy and the doghouse never overlap on a 320pt phone.
+const BUDDY_MAX = 180;
+const DOGHOUSE_MAX = 210;
+// The doghouse sprite includes its own tile and a transparent margin: its visual base is at this share of its height.
+const DOGHOUSE_BASE_FRAC = 0.86;
+// Buddy's paws stand this far above the scene bottom (on the grass strip); his box is lowered by the
+// empty canvas under his feet. Horizontal centres are shares of the screen width.
+const BUDDY_FEET_Y = 36;
+const BUDDY_CX = 0.28;
+const DOGHOUSE_CX = 0.74;
+
+interface DoorstepSceneProps {
+  appearance: BuddyAppearance;
+  mood: BuddyMood;
+  dog: string;
+  doghouseLevel: number;
+  menuButton: React.ReactNode;
+  /** Greeting + name lines, drawn over the sky. */
+  children: React.ReactNode;
+}
+
+function DoorstepScene({ appearance, mood, dog, doghouseLevel, menuButton, children }: DoorstepSceneProps) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const sky = artOr('doorstep-sky', null);
+  const ground = artOr('yard-ground', null);
+  const buddySize = Math.min(BUDDY_MAX, width * 0.5);
+  const doghouseSize = Math.min(DOGHOUSE_MAX, width * 0.52);
+  const doghouse = buildingArt('doghouse', artTierForLevel(doghouseLevel));
+  return (
+    <View style={[styles.scene, { height: insets.top + SCENE_HEIGHT }]}>
+      {sky && <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
+      {ground && (
+        // Backdrop: cover-fit so the grass bleeds past both edges.
+        <Image
+          source={ground}
+          resizeMode="cover"
+          style={[styles.ground, { width: width + 40, height: 140 }]}
+        />
+      )}
+      <View
+        style={[
+          styles.doghouse,
+          // tile base (0.86 of the sprite) lands on the same ground line as Buddy's feet
+          { left: width * DOGHOUSE_CX - doghouseSize / 2, bottom: BUDDY_FEET_Y - (1 - DOGHOUSE_BASE_FRAC) * doghouseSize },
+        ]} pointerEvents="none">
+        <ArtImage art={doghouse} size={doghouseSize} />
+      </View>
+      <View
+        style={[styles.buddy, { left: width * BUDDY_CX - buddySize / 2, bottom: BUDDY_FEET_Y - buddyFeetInset(buddySize) }]}
+        pointerEvents="box-none"
+      >
+        <BuddyAvatar appearance={appearance} size={buddySize} mood={mood} name={dog} showCaption />
+      </View>
+      <View style={[styles.sceneTop, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
+        <View style={styles.sceneText}>{children}</View>
+        {menuButton}
+      </View>
     </View>
   );
 }
@@ -492,7 +567,7 @@ function AwayStripLineView({ line, footerTreatsRef }: { line: AwayStripLine; foo
   if (collected) return null;
 
   if (line.kind !== 'treats') {
-    return <Text style={styles.stripLine}>{line.text}</Text>;
+    return <Text style={textStyle('small')}>{line.text}</Text>;
   }
 
   const flyToFooter = (dx: number, dy: number) => {
@@ -525,7 +600,7 @@ function AwayStripLineView({ line, footerTreatsRef }: { line: AwayStripLine; foo
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
       <View ref={selfRef} collapsable={false}>
-        <Animated.Text style={[styles.stripLine, { transform: [{ translateX }, { translateY }], opacity }]}>
+        <Animated.Text style={[textStyle('small'), { transform: [{ translateX }, { translateY }], opacity }]}>
           {line.text}
         </Animated.Text>
       </View>
@@ -533,151 +608,47 @@ function AwayStripLineView({ line, footerTreatsRef }: { line: AwayStripLine; foo
   );
 }
 
-const COLORS = {
-  green: '#2ECC71',
-  white: '#FAFAF8',
-  text: '#1A2A1A',
-  muted: '#8A9A8A',
-  warm: '#F39C12',
-};
-
-// Shrunk from the portrait's 160 default so Buddy's hero row fits above Start Walk.
-const PORTRAIT_HEIGHT = 120;
+// Portrait height inside its window card.
+const PORTRAIT_HEIGHT = 140;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    padding: 20,
-    gap: 12,
-  },
+  // Full-bleed: the scene spans edge to edge, the body below re-adds padding.
+  content: { paddingHorizontal: 0, paddingTop: 0 },
   // FadeSlideIn wrappers fill their parent by default; here they only wrap
-  // their own content and keep the container's 12px rhythm between children.
-  fadeGroup: {
-    flex: 0,
-    gap: 12,
+  // their own content and keep the same rhythm between children.
+  fadeGroup: { flex: 0, gap: spacing.md },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
+  centered: { textAlign: 'center', color: palette.muted },
+  scene: {
+    overflow: 'hidden',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    backgroundColor: palette.skyTint,
+    ...shadows.soft,
   },
-  hero: {
+  ground: { position: 'absolute', bottom: -24, left: -20 },
+  doghouse: { position: 'absolute' },
+  buddy: { position: 'absolute' },
+  sceneTop: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
-  heroText: {
-    flex: 1,
-    gap: 4,
-  },
-  loading: {
-    padding: 12,
-    textAlign: 'center',
-    color: COLORS.muted,
-    fontSize: 14,
-  },
-  dogArt: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  dogArtEmoji: {
-    fontSize: 40,
-  },
-  greeting: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  dozingCaption: {
-    fontSize: 13,
-    color: COLORS.muted,
-    fontStyle: 'italic',
-  },
-  dogRow: {
-    gap: 2,
-  },
-  dogRowName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  dogRowSub: {
-    fontSize: 13,
-    color: COLORS.muted,
-  },
-  emptyPortrait: {
-    borderRadius: 16,
-    backgroundColor: '#F0F4EE',
-    minHeight: PORTRAIT_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  emptyPortraitText: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: 'center',
-  },
-  awayStrip: {
-    gap: 6,
-  },
-  stripLine: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.text,
-    backgroundColor: '#FFF8E7',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  startButton: {
-    backgroundColor: COLORS.green,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  startButtonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  denTease: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  denTeaseText: {
-    fontSize: 12,
-    color: COLORS.warm,
-    fontWeight: '600',
-  },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
+  sceneText: { flex: 1, gap: 2 },
+  sceneMuted: { color: palette.muted },
   menuButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: '#F0F4EE',
-  },
-  menuButtonText: {
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  iconRow: {
-    flexDirection: 'row',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: palette.background,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+    ...shadows.soft,
   },
-  iconRowItem: {
-    paddingVertical: 4,
-  },
-  iconRowText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.muted,
-  },
-  territoryIncomeLine: {
-    marginTop: 4,
-    textAlign: 'center',
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
+  windowCard: { padding: spacing.sm, borderRadius: radii.card },
+  emptyPortrait: { minHeight: PORTRAIT_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  awayStrip: { gap: spacing.sm },
+  denTeaseRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  denTeaseText: { flex: 1 },
 });

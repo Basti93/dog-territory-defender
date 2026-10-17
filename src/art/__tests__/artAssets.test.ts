@@ -7,8 +7,8 @@ describe('artAssets', () => {
     expect(buildingArt('garden', 3)).toBe('garden-3');
   });
 
-  it('artOr returns the fallback for missing art', () => {
-    expect(hasArt('icon-paw')).toBe(false);
-    expect(artOr('icon-paw', 'placeholder')).toBe('placeholder');
+  it('artOr returns the registered sprite instead of the fallback', () => {
+    expect(hasArt('icon-paw')).toBe(true);
+    expect(artOr('icon-paw', 'placeholder')).not.toBe('placeholder');
   });
 });

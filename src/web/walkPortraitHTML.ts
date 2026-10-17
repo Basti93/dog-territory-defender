@@ -1,4 +1,5 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+import { MAP_THEME_CSS, MAP_TILE_LAYER_JS } from './mapTheme';
 
 // The Walk Portrait's live, animated, non-interactive WebView host
 // (openspec/changes/walk-portrait/design.md Decision 1). Modeled directly on
@@ -32,6 +33,7 @@ export const walkPortraitHTML = `
        (current-position, wild-spot-marker) — a small, warm, non-alarming dot,
        not a pin/flag. See proposal.md's resolved "no end-of-trail marker". */
     .walk-start-marker { width: 14px; height: 14px; background: #2ECC71; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 6px rgba(46, 204, 113, 0.6); }
+${MAP_THEME_CSS}
   </style>
 </head>
 <body>
@@ -64,10 +66,7 @@ ${HOME_RANGE_RENDERER_SCRIPT}
       attributionControl: false
     }).setView([0, 0], 2);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 20
-    }).addTo(map);
+${MAP_TILE_LAYER_JS}
 
     var homeRangeLayerGroup = null;
     var basePolyline = null;

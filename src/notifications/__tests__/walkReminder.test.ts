@@ -50,9 +50,12 @@ describe('checkAndScheduleWalkReminder', () => {
 
     await checkAndScheduleWalkReminder(deps, NOW);
 
-    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    // NOW is 09:00 and the reminder is 18:00 -> today + 6 more days.
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(7);
+    const first = mockScheduleNotificationAsync.mock.calls[0][0];
+    expect(first.identifier).toBe('walk-reminder-2026-08-22');
+    expect(first.content.data).toEqual({ type: 'walk-reminder', kind: 'walk-reminder', day: '2026-08-22' });
     const state = await deps.notificationRepository.getState();
-    expect(state.walkReminderFiredCount).toBe(1);
     expect(state.walkReminderPendingDate).not.toBeNull();
   });
 
@@ -68,10 +71,12 @@ describe('checkAndScheduleWalkReminder', () => {
 
     await checkAndScheduleWalkReminder(deps, NOW);
 
-    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+    // Today is skipped; the window extends so 7 future days are still scheduled.
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(7);
+    const ids = mockScheduleNotificationAsync.mock.calls.map((c) => c[0].identifier);
+    expect(ids).not.toContain('walk-reminder-2026-08-22');
     const state = await deps.notificationRepository.getState();
     expect(state.walkReminderFiredCount).toBe(0);
-    expect(state.walkReminderPendingDate).toBeNull();
   });
 
   it('skips silently when the reminder is disabled', async () => {
@@ -113,7 +118,7 @@ describe('checkAndScheduleWalkReminder', () => {
     });
 
     await checkAndScheduleWalkReminder(deps, NOW);
-    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(7);
     const firstCallDate = (mockScheduleNotificationAsync.mock.calls[0][0].trigger.date as Date).getHours();
     expect(firstCallDate).toBe(18);
 
@@ -126,13 +131,13 @@ describe('checkAndScheduleWalkReminder', () => {
     });
     await checkAndScheduleWalkReminder(deps, NOW + 1000);
 
-    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(2);
-    const secondCallTrigger = mockScheduleNotificationAsync.mock.calls[1][0].trigger.date as Date;
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(14);
+    const secondCallTrigger = mockScheduleNotificationAsync.mock.calls[7][0].trigger.date as Date;
     expect(secondCallTrigger.getHours()).toBe(20);
     expect(secondCallTrigger.getMinutes()).toBe(15);
-    // firedCount reflects both real schedule calls (once per call in this test, since each call's a fresh day-key checkpoint before the day has passed).
+    // Re-planning the window never inflates the fired total (counted when days are resolved).
     const finalState = await deps.notificationRepository.getState();
-    expect(finalState.walkReminderFiredCount).toBe(2);
+    expect(finalState.walkReminderFiredCount).toBe(0);
   });
 
   it('never fires when a walk is saved before the reminder check runs (already-walked-today guardrail holds even mid-session)', async () => {
@@ -146,7 +151,7 @@ describe('checkAndScheduleWalkReminder', () => {
 
     // App opens in the morning with no walk yet -> schedules for 18:00.
     await checkAndScheduleWalkReminder(deps, NOW);
-    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(7);
 
     // Walk finishes mid-afternoon, same day -> App.tsx's finishWalk calls
     // this again right away (design.md Decision 4's gap-closing rationale).
@@ -158,6 +163,20 @@ describe('checkAndScheduleWalkReminder', () => {
     // in a live app; this mock has nothing pending to actually remove), and
     // nothing new was scheduled for the rest of today.
     expect(mockGetAllScheduledNotificationsAsync).toHaveBeenCalledTimes(2);
-    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(1); // still just the one from this morning
+    // Replanned without today: 7 from this morning + 7 from the replan.
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledTimes(14);
+    const replanIds = mockScheduleNotificationAsync.mock.calls.slice(7).map((c) => c[0].identifier);
+    expect(replanIds).not.toContain('walk-reminder-2026-08-22');
+  });
+
+  it('cancels reminders by kind/identifier prefix and never the overflow notification', async () => {
+    const deps = await makeDeps();
+    mockGetAllScheduledNotificationsAsync.mockResolvedValue([
+      { identifier: 'walk-reminder-2026-08-23', content: { data: { kind: 'walk-reminder', day: '2026-08-23' } } },
+      { identifier: 'overflow-1', content: { data: { type: 'den-overflow' } } },
+    ]);
+    await checkAndScheduleWalkReminder(deps, NOW);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(mockCancelScheduledNotificationAsync).toHaveBeenCalledWith('walk-reminder-2026-08-23');
   });
 });
