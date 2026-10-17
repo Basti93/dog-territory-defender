@@ -1,0 +1,81 @@
+// Pure Buddy mood + trick logic (design.md Decision 4). No React, no timers:
+// the component owns timing, this file owns decisions.
+import type { GreetingFlavor, SessionKind } from '../DoorstepScreen';
+
+export type BuddyMood = 'idle' | 'happy' | 'excited' | 'sleepy' | 'curious';
+export type BuddyTrick = 'sit' | 'stretch' | 'shake';
+
+export const BUDDY_TRICKS: readonly BuddyTrick[] = ['sit', 'stretch', 'shake'];
+export const TRICK_DELAY_MIN_MS = 12000;
+export const TRICK_DELAY_MAX_MS = 25000;
+export const SLEEPY_START_HOUR = 22; // inclusive
+export const SLEEPY_END_HOUR = 6; // exclusive
+
+export interface BuddyMoodInput {
+  sessionKind: SessionKind;
+  greetingFlavor: GreetingFlavor | null;
+  /** Local hour 0-23. */
+  hour: number;
+  /** True when a Somewhere Wild line is in the away strip. */
+  curious: boolean;
+}
+
+export interface BuddyMoodResult {
+  /** Mood Buddy settles into. */
+  mood: BuddyMood;
+  /** True: play a one-off joyful `excited` greeting first (~3s), then `mood`. */
+  playGreeting: boolean;
+}
+
+export function isSleepyHour(hour: number): boolean {
+  return hour >= SLEEPY_START_HOUR || hour < SLEEPY_END_HOUR;
+}
+
+/**
+ * Priority: long-absence greeting (excited once, never sleepy: coming back is
+ * a delight, never a guilt signal) > sleepy (same-day reopen or 22:00-06:00)
+ * > curious > idle. Transient happy/excited from taps/screens is applied by
+ * the caller or BuddyAvatar, not here.
+ */
+export function resolveBuddyMood(input: BuddyMoodInput): BuddyMoodResult {
+  const longAbsence = input.sessionKind === 'fresh-open' && input.greetingFlavor === 'long-absence';
+  if (longAbsence) {
+    return { mood: input.curious ? 'curious' : 'idle', playGreeting: true };
+  }
+  if (input.sessionKind === 'same-day-reopen' || isSleepyHour(input.hour)) {
+    return { mood: 'sleepy', playGreeting: false };
+  }
+  return { mood: input.curious ? 'curious' : 'idle', playGreeting: false };
+}
+
+/** Never returns `previous`. rng is () => [0,1). */
+export function pickTrick(rng: () => number, previous: BuddyTrick | null): BuddyTrick {
+  const options = BUDDY_TRICKS.filter((t) => t !== previous);
+  const index = Math.min(options.length - 1, Math.max(0, Math.floor(rng() * options.length)));
+  return options[index];
+}
+
+/** 12000-25000 ms. */
+export function nextTrickDelayMs(rng: () => number): number {
+  const span = TRICK_DELAY_MAX_MS - TRICK_DELAY_MIN_MS;
+  const r = Math.min(1, Math.max(0, rng()));
+  return TRICK_DELAY_MIN_MS + Math.floor(r * span);
+}
+
+/** Random delay in [minMs, maxMs] for blinks, ear flicks, head tilts. */
+export function randomDelayMs(rng: () => number, minMs: number, maxMs: number): number {
+  const r = Math.min(1, Math.max(0, rng()));
+  return minMs + Math.floor(r * (maxMs - minMs));
+}
+
+export const TAP_CAPTIONS = [
+  'Hi, it\'s me!',
+  'Right there, that\'s the spot.',
+  '{name} loves that.',
+  'Another wiggle for you.',
+] as const;
+
+export function tapCaption(tapIndex: number, name?: string | null): string {
+  const raw = TAP_CAPTIONS[((tapIndex % TAP_CAPTIONS.length) + TAP_CAPTIONS.length) % TAP_CAPTIONS.length];
+  return raw.replace('{name}', name && name.trim() ? name.trim() : 'Buddy');
+}

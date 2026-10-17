@@ -1,5 +1,9 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyAvatar } from './buddy';
+import { AnimatedNumber, Confetti, PressableScale } from '../ui';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
@@ -15,9 +19,6 @@ const COLORS = {
   text: '#1A2A1A',
   muted: '#8A9A8A',
 };
-
-const CONFETTI_COLORS = [COLORS.green, COLORS.blue, COLORS.warm, COLORS.brown];
-const CONFETTI_COUNT = 8;
 
 const BUILDING_NAMES: Record<BuildingKey, string> = {
   doghouse: 'Doghouse',
@@ -48,33 +49,25 @@ interface CelebrationScreenProps {
   /** The [survivor, absorbed] Territory names when this walk caused a merge, or `null` — openspec/changes/territories/design.md Decision 3. Framed as a positive event ("Buddy connected his two worlds!"), never a loss for the absorbed Territory. */
   mergedTerritoryNames?: [string, string] | null;
   dogName?: string | null;
+  /** Buddy's look (buddy-comes-alive). */
+  buddyAppearance: BuddyAppearance;
+  /** Walk id; picks the headline variant so it stays the same across re-renders. */
+  walkId?: string | null;
   onContinue: () => void;
 }
 
-function ConfettiPiece({ left, color, delay }: { left: number; color: string; delay: number }) {
-  const anim = useRef(new Animated.Value(0)).current;
+// Game-master celebration headlines (fun review). {name} is the dog's name.
+const HEADLINES = [
+  '{name} claimed a new corner of the neighbourhood!',
+  'What a walk! {name} is thrilled.',
+  'Tails up, you two did it.',
+];
 
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 1200,
-      delay,
-      useNativeDriver: true,
-    }).start();
-  }, [anim, delay]);
-
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 260] });
-  const opacity = anim.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] });
-  const rotate = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
-
-  return (
-    <Animated.View
-      style={[
-        styles.confettiPiece,
-        { left, backgroundColor: color, opacity, transform: [{ translateY }, { rotate }] },
-      ]}
-    />
-  );
+/** Same walk id always gives the same headline. */
+export function pickCelebrationHeadline(walkId: string | null | undefined, dog: string): string {
+  let hash = 0;
+  for (const ch of walkId ?? '') hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return HEADLINES[hash % HEADLINES.length].replace('{name}', dog);
 }
 
 export function CelebrationScreen({
@@ -92,34 +85,26 @@ export function CelebrationScreen({
   newTerritoryName = null,
   mergedTerritoryNames = null,
   dogName = null,
+  buddyAppearance,
+  walkId = null,
   onContinue,
 }: CelebrationScreenProps) {
-  const confetti = useMemo(
-    () =>
-      Array.from({ length: CONFETTI_COUNT }, (_, i) => ({
-        left: 20 + Math.random() * 260,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-        delay: Math.random() * 300,
-      })),
-    []
-  );
-
   return (
     <View style={styles.container}>
-      <View style={styles.confettiLayer} pointerEvents="none">
-        {confetti.map((piece, i) => (
-          <ConfettiPiece key={i} left={piece.left} color={piece.color} delay={piece.delay} />
-        ))}
-      </View>
+      {/* Gentle thank-you confetti: self-unmounts, never blocks touches. */}
+      <Confetti />
 
-      <View style={styles.content}>
-        <Text style={styles.title}>{hasTerritory ? 'Territory claimed! 🌱' : 'Walk claimed! 🌱'}</Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        <BuddyAvatar appearance={buddyAppearance} size={140} mood="excited" excitedSettleMs={null} name={dogDisplayName(dogName)} />
+        <Text style={styles.title}>
+          {hasTerritory ? pickCelebrationHeadline(walkId, dogDisplayName(dogName)) : 'Walk claimed! 🌱'}
+        </Text>
         <Text style={styles.area}>
           {hasTerritory ? `${(cellsPainted * CELL_M * CELL_M).toFixed(0)} m² is now yours` : 'Every step of it is yours'}
         </Text>
 
         <View style={styles.treatsRow}>
-          <Text style={styles.treatsEarned}>+{treatsEarned} treats</Text>
+          <AnimatedNumber from={0} value={treatsEarned} format={(n) => `+${n} treats`} style={styles.treatsEarned} />
         </View>
 
         {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier
@@ -209,10 +194,10 @@ export function CelebrationScreen({
           </View>
         )}
 
-        <TouchableOpacity style={styles.continueButton} onPress={onContinue}>
+        <PressableScale style={styles.continueButton} onPress={onContinue}>
           <Text style={styles.continueButtonText}>Nice walk! 🐾</Text>
-        </TouchableOpacity>
-      </View>
+        </PressableScale>
+      </ScrollView>
     </View>
   );
 }
@@ -223,17 +208,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     justifyContent: 'center',
   },
-  confettiLayer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  confettiPiece: {
-    position: 'absolute',
-    top: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-  },
   content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 16,
     alignItems: 'center',
     paddingHorizontal: 24,
   },
@@ -264,7 +242,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   teaseLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.muted,
     textTransform: 'uppercase',
@@ -285,7 +263,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   badgeLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.muted,
     textTransform: 'uppercase',

@@ -1,6 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyAvatar } from './buddy';
+import { BuddyLoading } from './BuddyLoading';
+import { BuddyMood } from './buddy/buddyMood';
+import { FadeSlideIn, PressableScale } from '../ui';
+
 import { currentTitleForLevel } from '../economy/milestones';
 import { buddyTreatsPerWalk, storageCap } from '../economy/formulas';
 import { DenEconomyState, dogDisplayName, getUpgradeTease } from '../economy/denEconomy';
@@ -35,6 +41,10 @@ import { DoorstepMenu } from './DoorstepMenu';
 // Doorstep), calling them here again would repeat-fire the same away-strip
 // line/greeting on every visit. This module still exports them (App.tsx
 // imports from here), it just no longer calls them itself.
+
+const BUDDY_GREETING_MS = 3000;
+// Keeps the compact icon-row layout while giving a >= 44px tap target.
+const ICON_ROW_HIT_SLOP = { top: 14, bottom: 14, left: 8, right: 8 };
 
 export type SessionKind = 'same-day-reopen' | 'fresh-open';
 export type GreetingFlavor = 'first-open' | 'long-absence';
@@ -202,6 +212,15 @@ interface DoorstepScreenProps {
   denEconomyRepository: DenEconomyRepository;
   homeRangeRepository: HomeRangeRepository;
   walkRepository: WalkRepository;
+  /** Buddy's look, loaded by App.tsx (buddy-comes-alive). */
+  buddyAppearance: BuddyAppearance;
+  /** False until the stored look has loaded (or the ~1.5s fallback fired); the Doorstep waits so Buddy never flashes the default colour then recolours. */
+  buddyAppearanceLoaded?: boolean;
+  /** Mood Buddy settles into, resolved once per launch by App.tsx (not per Doorstep mount). */
+  buddyMood?: BuddyMood;
+  /** True only for the first Doorstep mount of a long-absence launch; App clears it via onBuddyGreetingStarted. */
+  playGreeting?: boolean;
+  onBuddyGreetingStarted?: () => void;
   /** Optional so existing callers/tests keep working unchanged — when supplied, the wild-cluster away-strip line can name its Territory (openspec/changes/territories) and the territory-income reveal/permanent line below can render. */
   territoryRepository?: TerritoryRepository;
   /** The current global territoryRate, treats/hour — from App.tsx's own applyPassiveAccrual call, not re-derived here. Read whenever `territoryIncomeRevealed` is true (from this screen's own denState fetch), for the permanent footer line. */
@@ -232,6 +251,11 @@ export function DoorstepScreen({
   denEconomyRepository,
   homeRangeRepository,
   walkRepository,
+  buddyAppearance,
+  buddyAppearanceLoaded = true,
+  buddyMood = 'idle',
+  playGreeting = false,
+  onBuddyGreetingStarted,
   territoryRepository,
   territoryIncomeRate,
   onAcknowledgePendingAchievements,
@@ -258,6 +282,24 @@ export function DoorstepScreen({
   // proposal.md's own "Den tease footer" item 5).
   const footerTreatsRef = useRef<View>(null);
 
+  // Buddy's mood and the long-absence greeting are resolved once per launch
+  // in App.tsx (this screen remounts on every return trip). A long-absence
+  // open plays one joyful ~3s greeting, then settles into `buddyMood`. Never
+  // a guilt signal: coming back is a delight.
+  const [greetingPlaying, setGreetingPlaying] = useState(playGreeting);
+  useEffect(() => {
+    if (!playGreeting) return;
+    setGreetingPlaying(true);
+    onBuddyGreetingStarted?.(); // App clears the flag so later remounts don't replay it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playGreeting]);
+  const ready = !!denState && !!session && buddyAppearanceLoaded;
+  useEffect(() => {
+    if (!greetingPlaying || !ready) return;
+    const t = setTimeout(() => setGreetingPlaying(false), BUDDY_GREETING_MS);
+    return () => clearTimeout(t);
+  }, [greetingPlaying, ready]);
+
   // Per-mount live fetch, deliberately (design.md Decision 10's "what stays
   // live" note): building levels (feeding getUpgradeTease/storageCap/
   // buddyTreatsPerWalk) should reflect any Den upgrade made since the last
@@ -279,10 +321,10 @@ export function DoorstepScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!denState || !session) {
+  if (!ready) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Getting things ready…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
       </View>
     );
   }
@@ -299,49 +341,64 @@ export function DoorstepScreen({
   const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
   const isDozing = session.kind === 'same-day-reopen';
 
+  // Android WebViews inside an animating-opacity parent can render blank.
+  // TerritoryPortrait hosts one, so only the non-portrait groups below fade in;
+  // App.tsx must not wrap this screen in FadeSlideIn.
   return (
     <View style={styles.container}>
-      {/* Burger menu trigger (design.md Decision 13) — the "settings/
-          options and debug... not so important stuff" the founder asked to
-          be tucked away, small and top-corner so it never competes with
-          Start Walk for attention. */}
-      <View style={styles.topRow}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setIsMenuOpen(true)}
-          accessibilityLabel="More options"
-        >
-          <Text style={styles.menuButtonText}>☰</Text>
-        </TouchableOpacity>
+      {/* Buddy hero (buddy-comes-alive). Buddy sits beside the name/greeting
+          text so Start Walk stays above the fold on a ~6" phone. The burger
+          menu trigger (design.md Decision 13) lives at the top of the text
+          column: small and top-corner so it never competes with Start Walk. */}
+      <FadeSlideIn style={styles.fadeGroup}>
+      <View style={styles.hero}>
+        <BuddyAvatar
+          appearance={buddyAppearance}
+          size={150}
+          mood={greetingPlaying ? 'excited' : buddyMood}
+          name={dog}
+          showCaption
+        />
+        <View style={styles.heroText}>
+          <View style={styles.topRow}>
+            <TouchableOpacity
+              style={styles.menuButton}
+              onPress={() => setIsMenuOpen(true)}
+              accessibilityLabel="More options"
+            >
+              <Text style={styles.menuButtonText}>☰</Text>
+            </TouchableOpacity>
+          </View>
+          {isDozing ? (
+            <Text style={styles.dozingCaption}>Zzz…</Text>
+          ) : (
+            greeting && <Text style={styles.greeting}>{greeting}</Text>
+          )}
+          <Text style={styles.dogRowName}>
+            {dog} · Level {level}
+            {title ? ` · ${title}` : ''}
+          </Text>
+          <Text style={styles.dogRowSub}>
+            {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
+          </Text>
+        </View>
       </View>
-
-      <View style={styles.dogArt}>
-        <Text style={styles.dogArtEmoji}>{isDozing ? '🐾' : '🐕'}</Text>
-        {isDozing ? (
-          <Text style={styles.dozingCaption}>Zzz…</Text>
-        ) : (
-          greeting && <Text style={styles.greeting}>{greeting}</Text>
-        )}
-      </View>
-
-      <View style={styles.dogRow}>
-        <Text style={styles.dogRowName}>
-          {dog} · Level {level}
-          {title ? ` · ${title}` : ''}
-        </Text>
-        <Text style={styles.dogRowSub}>
-          {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
-        </Text>
-      </View>
+      </FadeSlideIn>
 
       {rangeEmpty ? (
         <View style={styles.emptyPortrait}>
           <Text style={styles.emptyPortraitText}>{dog} hasn't marked out any ground yet — let's find some.</Text>
         </View>
       ) : (
-        <TerritoryPortrait homeRangeRepository={homeRangeRepository} onPress={onOpenMap} onEmptyChange={setRangeEmpty} />
+        <TerritoryPortrait
+          homeRangeRepository={homeRangeRepository}
+          onPress={onOpenMap}
+          onEmptyChange={setRangeEmpty}
+          height={PORTRAIT_HEIGHT}
+        />
       )}
 
+      <FadeSlideIn style={styles.fadeGroup}>
       {awayStripLines.length > 0 && (
         <View style={styles.awayStrip}>
           {awayStripLines.map((line, i) => (
@@ -350,30 +407,31 @@ export function DoorstepScreen({
         </View>
       )}
 
-      <TouchableOpacity style={styles.startButton} onPress={onStartWalk}>
+      {/* Soft glow only on a fresh open; stops by itself after ~10s or on first touch. */}
+      <PressableScale style={styles.startButton} onPress={onStartWalk} pulse={session.kind === 'fresh-open'}>
         <Text style={styles.startButtonText}>Start Walk</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Direct-access row (design.md Decision 12) — View Past Walks and
           Stats & Badges only, visually subordinate to Start Walk. No Den
           icon here — the tease footer below is already its entry point. */}
       <View style={styles.iconRow}>
-        <TouchableOpacity style={styles.iconRowItem} onPress={onOpenHistory}>
+        <PressableScale style={styles.iconRowItem} hitSlop={ICON_ROW_HIT_SLOP} onPress={onOpenHistory}>
           <Text style={styles.iconRowText}>📖 Past Walks</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconRowItem} onPress={onOpenStats}>
+        </PressableScale>
+        <PressableScale style={styles.iconRowItem} hitSlop={ICON_ROW_HIT_SLOP} onPress={onOpenStats}>
           <Text style={styles.iconRowText}>🏅 Stats & Badges</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
 
       {tease && (
-        <TouchableOpacity style={styles.denTease} onPress={onOpenDen}>
+        <PressableScale style={styles.denTease} onPress={onOpenDen}>
           <View ref={footerTreatsRef} collapsable={false}>
             <Text style={styles.denTeaseText}>
               🦴 {Math.floor(state.treats)} / {cap} treats · Upgrade for {tease.cost}
             </Text>
           </View>
-        </TouchableOpacity>
+        </PressableScale>
       )}
 
       {/* Permanent territory-income line (openspec/changes/territories/
@@ -386,6 +444,7 @@ export function DoorstepScreen({
           🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate ?? 0)} treats an hour
         </Text>
       )}
+      </FadeSlideIn>
 
       <DoorstepMenu
         visible={isMenuOpen}
@@ -482,15 +541,33 @@ const COLORS = {
   warm: '#F39C12',
 };
 
+// Shrunk from the portrait's 160 default so Buddy's hero row fits above Start Walk.
+const PORTRAIT_HEIGHT = 120;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
     padding: 20,
-    gap: 16,
+    gap: 12,
+  },
+  // FadeSlideIn wrappers fill their parent by default; here they only wrap
+  // their own content and keep the container's 12px rhythm between children.
+  fadeGroup: {
+    flex: 0,
+    gap: 12,
+  },
+  hero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroText: {
+    flex: 1,
+    gap: 4,
   },
   loading: {
-    padding: 24,
+    padding: 12,
     textAlign: 'center',
     color: COLORS.muted,
     fontSize: 14,
@@ -527,7 +604,7 @@ const styles = StyleSheet.create({
   emptyPortrait: {
     borderRadius: 16,
     backgroundColor: '#F0F4EE',
-    minHeight: 160,
+    minHeight: PORTRAIT_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,

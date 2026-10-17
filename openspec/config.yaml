@@ -11,16 +11,19 @@ schema: spec-driven
 context: |
   Dog Territory Defender: location-based mobile game for urban dog owners.
   Spring-like, joyful tone. Cookie-clicker background loop (The Den). Anti-snowball social layer.
-  Stack: Expo SDK 54, React Native 0.74, React 18, TypeScript 5.3 strict. Local persistence via expo-sqlite
+  Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript 5.9 strict. Local persistence via expo-sqlite
   (repository pattern, DynamoDB-shaped schema, AWS sync planned later — no cloud backend yet).
   Phase 0 (Walking Skeleton) built; Phase 1 (Core Game Loop — treats economy + Den screen) in progress.
   See openspec/specs/game-phases/spec.md. Phase-gated: never build a later phase's features early.
-  Confirm target phase before proposing scope.
+  Default phase is Phase 1; ask only when a request clearly belongs to a later phase.
+  Two process tiers: game-design changes (mechanics, economy, phases) need an OpenSpec change; presentation work
+  (UI, art, copy, tuning) and bug fixes/refactors go straight to code (see CLAUDE.md).
+  The main session orchestrates; implementation, research and review go to sonnet subagents.
   Never use aggressive language ("conquer", "destroy", "kill", "battle") — use "claim", "defend", "protect".
   No dark mode. Full rules: CLAUDE.md, openspec/specs/den-economy/spec.md, openspec/specs/pack-collection/spec.md,
   openspec/specs/anti-snowball/spec.md (numeric thresholds are load-bearing).
-  Every significant decision is logged in the introducing OpenSpec change's proposal.md/design.md —
-  no separate decisions log.
+  Game-design decisions are logged in the introducing OpenSpec change's proposal.md/design.md;
+  presentation decisions in the open change's "Decisions log (presentation)" section.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

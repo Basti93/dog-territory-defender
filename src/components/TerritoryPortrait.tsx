@@ -23,6 +23,8 @@ interface TerritoryPortraitProps {
   onPress: () => void;
   /** Called once cells are known, with whether they're empty. The caller (DoorstepScreen/TerritoryCard) renders its own "hasn't marked the map yet" copy in that case — this component itself simply renders nothing (design.md Decision 2's "TerritoryPortrait simply isn't rendered when cells.length === 0"). */
   onEmptyChange?: (isEmpty: boolean) => void;
+  /** Portrait height in px (default 160). The Doorstep passes a smaller value so Buddy fits above Start Walk. */
+  height?: number;
 }
 
 /**
@@ -37,7 +39,7 @@ interface TerritoryPortraitProps {
  * "network-dependency consequence" note): falls back to a neutral,
  * non-error line. Never a broken-image icon, never technical error text.
  */
-export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange }: TerritoryPortraitProps) {
+export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160 }: TerritoryPortraitProps) {
   const webViewRef = useRef<WebView>(null);
   const [isWebViewReady, setIsWebViewReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -97,9 +99,9 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
   }
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.container, { minHeight: height }]} onPress={onPress} activeOpacity={0.85}>
       {dataUrl ? (
-        <Image source={{ uri: dataUrl }} resizeMode="contain" style={styles.image} />
+        <Image source={{ uri: dataUrl }} resizeMode="contain" style={[styles.image, { height }]} />
       ) : failed ? (
         <View style={styles.fallback}>
           <Text style={styles.fallbackIcon}>🐾</Text>

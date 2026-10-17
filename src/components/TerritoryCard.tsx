@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     width: '47%',
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.muted,
     fontWeight: '600',
   },

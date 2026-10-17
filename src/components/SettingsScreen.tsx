@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Platform, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyAppearancePicker } from './buddy';
+import { BuddyLoading } from './BuddyLoading';
+import { PressableScale } from '../ui';
+import { dogDisplayName } from '../economy/denEconomy';
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { WalkRepository } from '../storage/WalkRepository';
 import { cancelScheduledWalkReminder } from '../notifications/scheduler';
@@ -31,6 +36,10 @@ interface SettingsScreenProps {
   onClose: () => void;
   notificationRepository: NotificationRepository;
   walkRepository: WalkRepository;
+  dogName: string | null;
+  buddyAppearance: BuddyAppearance;
+  /** Persists the new look and updates App state. */
+  onSaveAppearance: (appearance: BuddyAppearance) => void | Promise<void>;
 }
 
 function formatTime(hour: number, minute: number): string {
@@ -39,8 +48,16 @@ function formatTime(hour: number, minute: number): string {
   return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
 }
 
-export function SettingsScreen({ onClose, notificationRepository, walkRepository }: SettingsScreenProps) {
+export function SettingsScreen({
+  onClose,
+  notificationRepository,
+  walkRepository,
+  dogName,
+  buddyAppearance,
+  onSaveAppearance,
+}: SettingsScreenProps) {
   const [loaded, setLoaded] = useState(false);
+  const [editingLook, setEditingLook] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [hour, setHour] = useState<number | null>(null);
   const [minute, setMinute] = useState<number | null>(null);
@@ -122,7 +139,28 @@ export function SettingsScreen({ onClose, notificationRepository, walkRepository
   if (!loaded) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Getting things ready…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
+      </View>
+    );
+  }
+
+  if (editingLook) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{dogDisplayName(dogName)}'s look</Text>
+          <TouchableOpacity onPress={() => setEditingLook(false)} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
+            <Text style={styles.closeText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+        <BuddyAppearancePicker
+          name={dogDisplayName(dogName)}
+          initial={buddyAppearance}
+          onSave={async (look) => {
+            await onSaveAppearance(look);
+            setEditingLook(false);
+          }}
+        />
       </View>
     );
   }
@@ -131,12 +169,17 @@ export function SettingsScreen({ onClose, notificationRepository, walkRepository
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.body}>
+        <PressableScale style={styles.timeRow} onPress={() => setEditingLook(true)}>
+          <Text style={styles.timeLabel}>Change {dogDisplayName(dogName)}'s look</Text>
+          <Text style={styles.timeValue}>Edit</Text>
+        </PressableScale>
+
         <View style={styles.row}>
           <View style={styles.rowText}>
             <Text style={styles.rowTitle}>Daily walk reminder</Text>

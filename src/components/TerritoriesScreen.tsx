@@ -14,8 +14,14 @@ const COLORS = {
   text: '#1A2A1A',
   muted: '#8A9A8A',
 };
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyLoading } from './BuddyLoading';
+
+// Keeps the header Close tap target at least ~44px tall.
+const CLOSE_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
 
 interface TerritoriesScreenProps {
+  buddyAppearance: BuddyAppearance;
   territoryRepository: TerritoryRepository;
   homeRangeRepository: HomeRangeRepository;
   denEconomyRepository: DenEconomyRepository;
@@ -33,6 +39,7 @@ interface TerritoriesScreenProps {
  * shares — never a per-territory threshold.
  */
 export function TerritoriesScreen({
+  buddyAppearance,
   territoryRepository,
   homeRangeRepository,
   denEconomyRepository,
@@ -76,7 +83,7 @@ export function TerritoriesScreen({
   if (!territories || !cellsByTerritory) {
     return (
       <View style={styles.container}>
-        <Text style={styles.empty}>Loading…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
       </View>
     );
   }
@@ -87,14 +94,14 @@ export function TerritoriesScreen({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Territories</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={CLOSE_HIT_SLOP}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
 
       {territories.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No territories claimed yet — go for a walk to start your first one.</Text>
+          <BuddyLoading appearance={buddyAppearance} text="No territories claimed yet — go for a walk to start your first one." />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>

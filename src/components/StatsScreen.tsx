@@ -14,8 +14,14 @@ const COLORS = {
   text: '#1A2A1A',
   muted: '#8A9A8A',
 };
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyLoading } from './BuddyLoading';
+
+// Keeps the header Close tap target at least ~44px tall.
+const CLOSE_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
 
 interface StatsScreenProps {
+  buddyAppearance: BuddyAppearance;
   repository: PersonalStatsRepository;
   denEconomyRepository: DenEconomyRepository;
   onClose: () => void;
@@ -41,7 +47,7 @@ function buildStatCards(stats: PersonalStatsState, denState: DenEconomyState): S
   ];
 }
 
-export function StatsScreen({ repository, denEconomyRepository, onClose }: StatsScreenProps) {
+export function StatsScreen({ buddyAppearance, repository, denEconomyRepository, onClose }: StatsScreenProps) {
   const [stats, setStats] = useState<PersonalStatsState | null>(null);
   const [denState, setDenState] = useState<DenEconomyState | null>(null);
   const [unlocked, setUnlocked] = useState<UnlockedAchievement[] | null>(null);
@@ -55,7 +61,7 @@ export function StatsScreen({ repository, denEconomyRepository, onClose }: Stats
   if (!stats || !denState || !unlocked) {
     return (
       <View style={styles.container}>
-        <Text style={styles.empty}>Loading…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
       </View>
     );
   }
@@ -69,7 +75,7 @@ export function StatsScreen({ repository, denEconomyRepository, onClose }: Stats
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Stats & Badges</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={CLOSE_HIT_SLOP}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -206,7 +212,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   badgeDate: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.muted,
     marginTop: 6,
   },

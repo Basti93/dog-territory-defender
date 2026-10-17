@@ -7,154 +7,90 @@ This file tells Claude (and any AI coding agent) how to collaborate on **Dog Ter
 ## Project essentials
 
 - **Product:** Location-based mobile game for urban dog owners. Spring-like, joyful. Cookie-clicker background loop. Anti-snowball social layer.
-- **Spec-driven workflow:** [openspec/](openspec/) is the source of truth for the build plan and game design (`openspec/config.yaml`). **Always use the OpenSpec flow for non-trivial changes** — don't jump straight to code. `/opsx:explore` → `/opsx:propose <feature-name>` → `/opsx:apply` → `/opsx:archive`/`/opsx:sync`.
-- **Status tracker:** [README.md](README.md) — check Project Status section first.
-- **Master build plan:** [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) (5-phase lean-startup plan + phase-gating rule + per-phase validation process). **Do not deviate from the phase-gated approach.**
+- **Source of truth for game design:** [openspec/](openspec/) (`openspec/config.yaml`, `openspec/specs/`).
+- **Status tracker and architecture:** [README.md](README.md) — check Project Status first; its Architecture section is authoritative.
+- **Master build plan:** [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) (5-phase lean-startup plan, phase-gating rule, per-phase validation). **Do not deviate from the phase-gated approach.**
 - **Visual direction:** [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md).
-- **Engagement mechanics:** [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md) (The Den), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md) (The Pack), [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md) (the 10 anti-snowball mechanisms).
-- **Decisions log:** `openspec/changes/archive/` — every archived change's `proposal.md` (Why / Alternatives rejected) and `design.md` (Decisions / Risks) together are the decision log. Newest changes sort last alphabetically by date prefix; browse or `grep` across the archive for history.
-- **Visual prototype:** [prototype/](prototype/) — clickable HTML demo. Match its output, not its internal structure.
+- **Engagement mechanics:** [den-economy](openspec/specs/den-economy/spec.md) (The Den), [pack-collection](openspec/specs/pack-collection/spec.md) (The Pack), [anti-snowball](openspec/specs/anti-snowball/spec.md) (10 mechanisms). Numeric thresholds there are load-bearing; re-read before touching treats, Den, building levels, Pack, or anti-snowball.
+- **Decisions log:** `openspec/changes/archive/` (each change's `proposal.md` Why/Alternatives and `design.md` Decisions). Presentation decisions go in the open change's log, see Process tiers.
+- **Visual prototype:** [prototype/](prototype/) — clickable HTML demo, a design spec, not a starter codebase. Recreate its visuals and behavior in React Native; never import its React-Babel-standalone structure into `src/`. Deferred features are listed in the `PARKED FOR LATER PHASES` block atop `prototype/Dog Territory Defender.html`.
 
 ---
 
 ## Dev commands
 
 ```bash
-npm install        # install deps (legacy-peer-deps=true set in .npmrc)
-npm run start       # expo start — QR code, pick platform
-npm run android      # expo start --android
-npm run ios          # expo start --ios
-npm run web           # expo start --web
+npm install          # legacy-peer-deps=true set in .npmrc
+npm test             # jest, the test gate
+npx tsc --noEmit     # type gate (strict); run both before every commit
+npm run start        # expo start (also: android, ios, web)
 ```
 
-No lint or test scripts configured (`package.json` has none). Don't invent `npm run lint`/`npm test` commands — they don't exist yet.
+Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript 5.9. Dev client required (not Expo Go); see README Setup. No lint script exists; don't invent one.
 
-Stack: Expo SDK 54, React Native 0.74, React 18, TypeScript 5.3 (strict via `expo/tsconfig.base`). `eas.json` has build profiles (`development`/`preview`/`production`) but no build has been run from this repo yet.
+## Architecture
 
-## Architecture (current implementation, Phase 0)
+[README.md](README.md)'s Architecture section is the authoritative description; don't duplicate it here. Key folders:
 
-Single-screen app, all state in `App.tsx` via `useState`/`useRef` — no navigation, no backend, no persistence. One `Walk` in flight at a time.
-
-- `src/types.ts` — `Location`, `Walk`, `TerritoryPolygon`, `AppState` interfaces.
-- `src/utils/gps.ts` — thin wrapper over `expo-location`: `requestLocationPermission` (foreground + background), `startWatchingLocation` (1s / 2m interval callback), `getInitialLocation`.
-- `src/utils/geometry.ts` — `getDistance` (haversine), `cumulativeDistance` (sums consecutive point-to-point hops — this is what the UI's distance readout uses, not start-to-end), `canCloseWalk` (≥10 points AND start↔end < 20m — these thresholds are load-bearing, see [openspec/specs/walk-lifecycle/spec.md](openspec/specs/walk-lifecycle/spec.md) before changing), `calculatePolygonArea` (shoelace formula), `locationsToPolygon`.
-- `src/components/MapView.tsx` — real map: `react-native-webview` hosting `src/web/mapHTML.ts` (Leaflet + OpenStreetMap tiles), driven by a `postMessage` bridge (`UPDATE_LOCATION`/`UPDATE_TRAIL`/`SHOW_TERRITORY`/`RESET`). Requires internet access at walk time. The old SVG-projection `MapCanvas.tsx` placeholder was deleted once this replaced it.
-
-State flow (`App.tsx`): `startWalk()` creates a `Walk`, starts the location subscription → each GPS callback appends to `walk.locations` → `canCloseWalk()` gates the "Close Territory" button → `stopWalk()` runs `locationsToPolygon()` and marks the walk closed → `resetWalk()` clears state for the next walk.
-
-`prototype/` is the design spec (standalone HTML + React via Babel, not a real build) — see rule 1 below and `prototype/README.md`. Match its visuals/behavior; never import its structure into `src/`.
+- `src/components` (screens, `buddy/`, `den/`), `src/economy` (tunable config + pure formulas), `src/storage` (repository layer, in-memory fakes for tests)
+- `src/notifications`, `src/utils` (GPS, geometry, territory logic), `src/web` (Leaflet map HTML in a WebView)
+- `src/buddy` (Buddy appearance/animation), `src/ui` (shared UI primitives), `src/art` (art slot access)
+- `scripts/` (art generation: `blender/`, `generateArt.mjs`), `assets/art/`, `testing/` (GPX routes)
 
 ---
 
-## For AI Coding Agents — Implementation handoff
+## Process tiers
 
-When implementing the real app (i.e., you're not just planning):
+Classify each request first. Phase gating applies to all tiers.
 
-1. **The prototype is a design spec, not a starter codebase.** It's HTML + React Babel standalone — meant to be pixel-recreated in React Native + Expo (the target stack). Don't copy its structure; match its visuals and behaviors.
-2. **Always confirm the phase before writing code.** Ask: "Are we implementing Phase 0, 1, 2, 3, or 4?" Build only what that phase needs.
-3. **Read the `PARKED FOR LATER PHASES` comment block** at the top of `prototype/Dog Territory Defender.html` — those features are explicitly deferred and must not leak into earlier phases.
-4. **Use the design tokens** defined in the prototype (`T.green`, `T.blue`, etc.) and in [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md). No new colors without updating that spec's Design Tokens list and explaining why in the introducing change's `proposal.md`.
-5. **Re-read [openspec/specs/den-economy/spec.md](openspec/specs/den-economy/spec.md), [openspec/specs/pack-collection/spec.md](openspec/specs/pack-collection/spec.md), and [openspec/specs/anti-snowball/spec.md](openspec/specs/anti-snowball/spec.md)** before touching anything related to treats, the Den, building levels, Pack, or anti-snowball. Numeric thresholds there are load-bearing.
-6. **When ambiguity arises, ask the user — don't guess.** Scope clarification is cheap; rebuilding is not.
-7. **After implementation of a phase:** run the "Per-Phase Validation Process" requirement in [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) to validate before advancing.
+- **Tier A, game design** (mechanics, economy numbers, phase assignments, anti-snowball, Den/Pack rules, new capabilities with player-facing rules): OpenSpec change (`/opsx:explore` → `/opsx:propose` → `/opsx:apply` → `/opsx:archive`/`/opsx:sync`) is mandatory. Never edit `openspec/specs/` directly.
+- **Tier B, presentation** (UI layout, animation, art, copy, tuning constants, icons, polish): straight to code. Append any decision worth remembering as a dated bullet to the "Decisions log (presentation)" section at the end of `openspec/changes/buddy-comes-alive/design.md` (the one place for these, for now; create the section on first use).
+- **Tier C, bug fixes, refactors, docs**: just do it, with `npm test` and `npx tsc --noEmit` green.
+
+A small numeric tweak that changes game balance is Tier A; log it in an open change. Never silently change a load-bearing threshold.
+
+**Phases:** Default phase is Phase 1 (in progress). Only ask when a request clearly belongs to a later phase; if out-of-phase, push back kindly and park it. Scope creep is how prototypes die.
+
+## How sessions are run
+
+The main Claude session (Fable/Opus) orchestrates only: analyses, briefs, integrates, verifies, reports. Implementation, research, and review go to subagents on `sonnet` (role agents in `.claude/agents/` are fine). Main-thread tool use stays cheap: git status, tsc, jest, small greps.
+
+- `game-master`: once per new player-facing feature. `senior-architect`: only for cross-cutting changes. One reviewer pass before each commit.
+- Agents cannot test on a device: every UI change ends with a short "check on device" list for the owner.
+
+## Art & game feel
+
+- Style: pre-rendered 3D clay sprites animated in code. See `openspec/changes/buddy-comes-alive/design.md` and `assets/art/README.md`.
+- Art comes from `scripts/blender/` (headless Blender, deterministic; preferred for buildings/icons) or `scripts/generateArt.mjs` (Gemini/OpenAI; for Buddy likeness from a photo).
+- Art slots are read through `src/art/artAssets.ts`'s `artOr()`.
+- No new native dependencies without the owner's go-ahead (each forces a dev-client rebuild).
+- game-master's anti-guilt rules for Buddy are binding: Buddy is never sad, hungry, neglected, or nagging.
 
 ---
 
-## Your Core Responsibilities
+## Core responsibilities
 
-### 1. Keep the project plan up-to-date
+1. **No silent drift.** When a change alters the plan, update the doc in the same turn: phase assignment, mechanics, or tone rules via an OpenSpec change (Tier A); README status when a phase hypothesis is validated/invalidated; README folder map and `prototype/README.md` when files are added or renamed; tech/architecture decisions in the introducing change's `design.md`.
+2. **Memorize durable decisions** to the memory system (user, project, feedback, reference types). The archive is the authoritative log; memory is the quick-recall cache and can be stale, so verify against files.
+3. **Don't guess, check.** Verify files with `ls`/Glob, read numeric thresholds from the source spec, and check the den/pack/anti-snowball specs before proposing a mechanic. When ambiguity arises, ask the user.
+4. **Prefer editing over creating** files; keep docs concise enough to read end-to-end.
+5. **After a phase is implemented,** run the "Per-Phase Validation Process" in the game-phases spec before advancing.
 
-When any of the following changes, update the relevant doc **in the same turn**:
+## Tone
 
-| Change | Update |
-|---|---|
-| New feature decided | `openspec/specs/game-phases/spec.md` (assign to a phase, via an OpenSpec change) |
-| Visual / UX direction shifts | `openspec/specs/visual-design/spec.md` (via an OpenSpec change) |
-| Game mechanic added or changed | `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, or `openspec/specs/anti-snowball/spec.md` (via an OpenSpec change) |
-| Phase hypothesis validated/invalidated | `README.md` status |
-| Tech stack / architecture decision | the introducing change's `design.md` (Decisions section) |
-| Tone / language guideline added | `openspec/specs/visual-design/spec.md` (via an OpenSpec change) |
-| Prototype files added/renamed | `README.md` folder map + `prototype/README.md` |
-
-Spec-level changes go through the OpenSpec workflow (`/opsx:propose` → `/opsx:apply` → `/opsx:archive`), not a direct edit to `openspec/specs/`.
-
-**Rule:** No silent drift. If the plan no longer matches reality, fix it now.
-
-### 2. Log every significant decision in the OpenSpec change
-
-Every non-trivial change already goes through `/opsx:propose`, which produces the decision record as a side effect — no separate logging step:
-- **`proposal.md`**'s Why and Capabilities sections capture what was decided and why now.
-- **`design.md`**'s Decisions section captures the alternatives considered and rejected, with rationale — this is where "why this number/library/approach and not another" lives.
-- Once the change is archived (`/opsx:archive`), these become the permanent record under `openspec/changes/archive/`.
-
-For a decision that doesn't warrant a full change (a quick numeric tweak, a small tone fix), still write a short Decisions-style note into whatever `design.md` is already open, or start a minimal change if none is — don't let a decision go unrecorded just because it's small.
-
-**Significant** = tech choices, mechanic changes, numeric thresholds, cutting features, tone shifts, architecture moves, user preferences revealed.
-**Not significant** = typos, reordering bullets, wording clarifications that don't change meaning.
-
-### 3. Memorize key decisions to long-term memory
-
-For decisions that should persist across conversations, save to the memory system (see auto memory instructions at session start). Memory types:
-- **user** — role/preferences (e.g., "the owner is a Senior Fullstack Developer")
-- **project** — ongoing context (e.g., "Dog Territory Defender targets EU, Berlin-first beta")
-- **feedback** — collaboration guidance
-- **reference** — pointers to external systems
-
-`openspec/changes/archive/` is the authoritative log. Memory is the quick-recall cache.
-
-### 4. Respect phase boundaries
-
-- **Never** build Phase 3 features in Phase 1.
-- Every feature request: first classify which phase it belongs to.
-- If out-of-phase, push back kindly and park it for later.
-- Scope creep is how prototypes die.
-
-### 5. Preserve the tone
-
-- **Spring-like, friendly, joyful, dog-centric.**
+- Spring-like, friendly, joyful, dog-centric; warm and celebratory, not transactional. Match existing files.
 - Never "conquer," "destroy," "kill," "battle." Use "claim," "defend," "protect."
-- No dark mode.
-- Copy is warm and celebratory, not transactional.
-- Match the tone of existing files in any new file.
+- No dark mode. No emoji-heavy UI or aggressive monetization.
+- Use the design tokens in the prototype (`T.green`, `T.blue`, ...) and the visual-design spec; no new colors without updating that spec's token list and explaining why in the introducing change.
 
-### 6. Don't guess — check
+## Anti-patterns
 
-- Before referencing a file, verify with `ls` or `Glob`.
-- Before citing a numeric threshold, read it from the source spec.
-- Before proposing a mechanic, check `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, and `openspec/specs/anti-snowball/spec.md` — it may already be specified.
-- Memory can be stale — verify against current files.
-
-### 7. Default behaviors
-
-- **Prefer editing over creating** new files. Each doc has a purpose; justify a new one first.
-- **Keep docs concise.** Every doc is meant to be read end-to-end.
-- **Update `README.md`** folder map when adding or moving files.
-- **Record non-trivial decisions** in the relevant OpenSpec change's `proposal.md`/`design.md` (see rule 2 above).
-
----
-
-## How to start a new session
-
-1. Read `CLAUDE.md` (this file) → collaboration rules
-2. Read `README.md` → current status, folder map, phase we're in
-3. Check `openspec list` for active changes, and skim recent entries under `openspec/changes/archive/` → recent decisions
-4. Check `MEMORY.md` (if memory system is available) → user preferences + project context
-5. If working on implementation: open `prototype/Dog Territory Defender.html` in a text editor to see the design spec
-6. Ask the user: "What are we working on today, and which phase?"
-
----
-
-## Anti-patterns to avoid
-
-- ❌ Building Phase 3+ features when we're still in Phase 1
-- ❌ Editing `openspec/specs/` directly instead of going through `/opsx:propose` → `/opsx:apply` → `/opsx:archive`
-- ❌ Forgetting to update `README.md` status after a phase completes
-- ❌ Using aggressive/competitive language
-- ❌ Proposing dark mode, emoji-heavy UI, or aggressive monetization
-- ❌ Silently changing a numeric threshold without logging why
-- ❌ Creating a new `.md` file when an existing one could be extended
-- ❌ Copying the prototype's React-Babel-standalone structure into production code
-- ❌ Starting to code before confirming the target phase with the user
+- Building later-phase features early
+- Editing `openspec/specs/` outside the OpenSpec flow
+- Forgetting README status after a phase completes
+- Aggressive/competitive language
+- Adding a native dependency without the owner's go-ahead
+- Creating a new `.md` file when an existing one could be extended
 
 ---
 

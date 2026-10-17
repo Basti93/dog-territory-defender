@@ -90,7 +90,7 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Debug Log</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   },
   logText: {
     fontFamily: 'monospace',
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.text,
   },
 });

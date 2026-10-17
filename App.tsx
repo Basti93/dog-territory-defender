@@ -39,6 +39,11 @@ import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
 import { createSqliteNotificationRepository } from './src/storage/sqliteNotificationRepository';
+import { createSqliteBuddyAppearanceRepository } from './src/storage/sqliteBuddyAppearanceRepository';
+import { BuddyAppearancePicker } from './src/components/buddy';
+import { BuddyMood, resolveBuddyMood } from './src/components/buddy/buddyMood';
+import { useBuddyAppearance } from './src/components/useBuddyAppearance';
+import { FadeSlideIn } from './src/ui';
 import {
   applyPassiveAccrual,
   canOfferRouteRefreshToday,
@@ -64,6 +69,7 @@ const territoryRepository = createSqliteTerritoryRepository();
 const denEconomyRepository = createSqliteDenEconomyRepository();
 const personalStatsRepository = createSqlitePersonalStatsRepository();
 const notificationRepository = createSqliteNotificationRepository();
+const buddyAppearanceRepository = createSqliteBuddyAppearanceRepository();
 
 const COLORS = {
   green: '#2ECC71',
@@ -106,6 +112,12 @@ export default function App() {
   const [level, setLevel] = useState<number | null>(null);
   const [dogName, setDogName] = useState<string | null>(null);
   const [needsDogName, setNeedsDogName] = useState(false);
+  // Buddy's look (buddy-comes-alive). `choosingLook` is true only right after a
+  // brand-new player names their dog; existing players are never gated.
+  const { appearance: buddyAppearance, loaded: buddyAppearanceLoaded, saveAppearance } = useBuddyAppearance(buddyAppearanceRepository);
+  const [choosingLook, setChoosingLook] = useState(false);
+  // The Den shows the "while you were away" treat float-up once per launch.
+  const [denAccrualShown, setDenAccrualShown] = useState(false);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   // Passed down to DoorstepScreen as already-computed values — re-deriving
   // either after this mount effect has already advanced lastTickAt/consumed
@@ -125,7 +137,14 @@ export default function App() {
   const [doorstepSession, setDoorstepSession] = useState<DoorstepSession | null>(null);
   const [doorstepGreeting, setDoorstepGreeting] = useState<string | null>(null);
   const [awayStripLines, setAwayStripLines] = useState<AwayStripLine[]>([]);
+  // Buddy's mood and the one-off long-absence greeting are also once-per-launch
+  // (Doorstep remounts on every return trip). `playBuddyGreeting` is cleared
+  // when the first Doorstep mount starts the greeting so it never replays.
+  const [buddyMood, setBuddyMood] = useState<BuddyMood>('idle');
+  const [playBuddyGreeting, setPlayBuddyGreeting] = useState(false);
   const [celebration, setCelebration] = useState<WalkRewardsCelebration | null>(null);
+  // Id of the walk behind `celebration`; seeds the celebration headline pick.
+  const [celebrationWalkId, setCelebrationWalkId] = useState<string | null>(null);
   const [routeRefreshAvailable, setRouteRefreshAvailable] = useState(false);
   // "Somewhere Wild" (openspec/changes/somewhere-wild): the marker and the
   // card are both driven from this single piece of state, so they always
@@ -339,10 +358,9 @@ export default function App() {
       // down as plain props, is what prevents that.
       const doorstepNow = Date.now();
       const resolvedSession = resolveDoorstepSession(previousTick, doorstepNow);
-      setDoorstepSession(resolvedSession);
-      if (resolvedSession.greetingFlavor) {
-        setDoorstepGreeting(pickGreeting(resolvedSession.greetingFlavor, reconciled.dogName));
-      }
+      const resolvedGreeting = resolvedSession.greetingFlavor
+        ? pickGreeting(resolvedSession.greetingFlavor, reconciled.dogName)
+        : null;
       const resolvedAwayStripLines = await resolveAwayStripLines(
         {
           somewhereWildDeps: {
@@ -361,7 +379,19 @@ export default function App() {
         },
         resolvedSession.kind
       );
+      const resolvedMood = resolveBuddyMood({
+        sessionKind: resolvedSession.kind,
+        greetingFlavor: resolvedSession.greetingFlavor,
+        hour: new Date(doorstepNow).getHours(),
+        curious: resolvedAwayStripLines.some((l) => l.kind === 'somewhere-wild'),
+      });
+      // Set together, after the await, so the Doorstep never mounts "resolved"
+      // with empty strip lines (which would bake curious=false).
       setAwayStripLines(resolvedAwayStripLines);
+      setDoorstepGreeting(resolvedGreeting);
+      setBuddyMood(resolvedMood.mood);
+      setPlayBuddyGreeting(resolvedMood.playGreeting);
+      setDoorstepSession(resolvedSession);
     })();
   }, []);
 
@@ -371,6 +401,7 @@ export default function App() {
     await denEconomyRepository.saveState(next);
     setDogName(name);
     setNeedsDogName(false);
+    setChoosingLook(true);
   };
 
   const startWalk = async () => {
@@ -591,6 +622,7 @@ export default function App() {
       }
       setTreats(result.denEconomyState.treats);
       setLevel(result.denEconomyState.level);
+      setCelebrationWalkId(walk.id);
       setCelebration(result.celebration);
       setTerritoryBeat(resolvedTerritoryBeat);
 
@@ -702,6 +734,7 @@ export default function App() {
       // reordering note at the celebration screen check below) — the player
       // lands on the Doorstep once they dismiss the celebration.
       setShowDoorstep(true);
+      setCelebrationWalkId(manualWalk.id);
       setCelebration(result.celebration);
 
       // Combined second patch write (openspec/changes/walk-portrait/design.md
@@ -743,7 +776,34 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DogNamePromptScreen onSubmit={submitDogName} />
+          <FadeSlideIn key="dog-name">
+            <DogNamePromptScreen onSubmit={submitDogName} />
+          </FadeSlideIn>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (choosingLook) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container}>
+          <FadeSlideIn key="buddy-look">
+            <BuddyAppearancePicker
+              name={dogDisplayName(dogName)}
+              initial={buddyAppearance}
+              topInset={16} // inside SafeAreaView already; just a little breathing room
+              onSave={(look) => {
+                saveAppearance(look);
+                setChoosingLook(false);
+              }}
+              // Skipping keeps the default look, saved so the picker never reappears.
+              onSkip={() => {
+                saveAppearance(buddyAppearance);
+                setChoosingLook(false);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -766,26 +826,30 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <CelebrationScreen
-            cellsPainted={celebration.cellsPainted}
-            hasTerritory={celebration.hasTerritory}
-            treatsEarned={celebration.treatsEarned}
-            tease={celebration.tease}
-            unlockedAchievements={celebration.unlockedAchievements}
-            leveledUpTo={celebration.leveledUpTo}
-            oldTreatsPerWalk={celebration.oldTreatsPerWalk}
-            newTreatsPerWalk={celebration.newTreatsPerWalk}
-            cliffhangerTitle={celebration.cliffhangerTitle}
-            newGroundCellCount={celebration.newGroundCellCount}
-            bloomMultiplier={celebration.bloomMultiplier}
-            newTerritoryName={territoryBeat?.newTerritoryName ?? null}
-            mergedTerritoryNames={territoryBeat?.mergedTerritoryNames ?? null}
-            dogName={dogName}
-            onContinue={() => {
-              setCelebration(null);
-              setTerritoryBeat(null);
-            }}
-          />
+          <FadeSlideIn key="celebration">
+            <CelebrationScreen
+              cellsPainted={celebration.cellsPainted}
+              hasTerritory={celebration.hasTerritory}
+              treatsEarned={celebration.treatsEarned}
+              tease={celebration.tease}
+              unlockedAchievements={celebration.unlockedAchievements}
+              leveledUpTo={celebration.leveledUpTo}
+              oldTreatsPerWalk={celebration.oldTreatsPerWalk}
+              newTreatsPerWalk={celebration.newTreatsPerWalk}
+              cliffhangerTitle={celebration.cliffhangerTitle}
+              newGroundCellCount={celebration.newGroundCellCount}
+              bloomMultiplier={celebration.bloomMultiplier}
+              newTerritoryName={territoryBeat?.newTerritoryName ?? null}
+              mergedTerritoryNames={territoryBeat?.mergedTerritoryNames ?? null}
+              dogName={dogName}
+              buddyAppearance={buddyAppearance}
+              walkId={celebrationWalkId}
+              onContinue={() => {
+                setCelebration(null);
+                setTerritoryBeat(null);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -795,51 +859,60 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DoorstepScreen
-            dogName={dogName}
-            treats={treats ?? 0}
-            level={level ?? 1}
-            accruedDelta={accruedDelta}
-            pendingDenAchievements={pendingDenAchievements}
-            session={doorstepSession}
-            greeting={doorstepGreeting}
-            awayStripLines={awayStripLines}
-            denEconomyRepository={denEconomyRepository}
-            homeRangeRepository={homeRangeRepository}
-            walkRepository={walkRepository}
-            territoryRepository={territoryRepository}
-            territoryIncomeRate={territoryIncomeRate}
-            onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
-            onStartWalk={() => {
-              setShowDoorstep(false);
-              startWalk();
-            }}
-            onOpenMap={() => setShowDoorstep(false)}
-            onOpenDen={() => {
-              setShowDoorstep(false);
-              setShowDen(true);
-            }}
-            onOpenHistory={() => {
-              setShowDoorstep(false);
-              setShowHistory(true);
-            }}
-            onOpenStats={() => {
-              setShowDoorstep(false);
-              setShowStats(true);
-            }}
-            onOpenDebugLog={() => {
-              setShowDoorstep(false);
-              setShowDebugLog(true);
-            }}
-            onOpenLogMissedWalk={() => {
-              setShowDoorstep(false);
-              setShowLogMissedWalk(true);
-            }}
-            onOpenSettings={() => {
-              setShowDoorstep(false);
-              setShowSettings(true);
-            }}
-          />
+          {/* FadeSlideIn rule: Android WebViews inside an animating-opacity parent can
+              render blank. Never wrap a screen that hosts a WebView (MapView,
+              WalkPortraitScreen, Doorstep/Territories via TerritoryPortrait) in
+              FadeSlideIn. DoorstepScreen fades only its non-portrait children itself. */}
+            <DoorstepScreen
+              dogName={dogName}
+              treats={treats ?? 0}
+              level={level ?? 1}
+              accruedDelta={accruedDelta}
+              pendingDenAchievements={pendingDenAchievements}
+              session={doorstepSession}
+              greeting={doorstepGreeting}
+              awayStripLines={awayStripLines}
+              denEconomyRepository={denEconomyRepository}
+              homeRangeRepository={homeRangeRepository}
+              walkRepository={walkRepository}
+              buddyAppearance={buddyAppearance}
+              buddyAppearanceLoaded={buddyAppearanceLoaded}
+              buddyMood={buddyMood}
+              playGreeting={playBuddyGreeting}
+              onBuddyGreetingStarted={() => setPlayBuddyGreeting(false)}
+              territoryRepository={territoryRepository}
+              territoryIncomeRate={territoryIncomeRate}
+              onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
+              onStartWalk={() => {
+                setShowDoorstep(false);
+                startWalk();
+              }}
+              onOpenMap={() => setShowDoorstep(false)}
+              onOpenDen={() => {
+                setShowDoorstep(false);
+                setShowDen(true);
+              }}
+              onOpenHistory={() => {
+                setShowDoorstep(false);
+                setShowHistory(true);
+              }}
+              onOpenStats={() => {
+                setShowDoorstep(false);
+                setShowStats(true);
+              }}
+              onOpenDebugLog={() => {
+                setShowDoorstep(false);
+                setShowDebugLog(true);
+              }}
+              onOpenLogMissedWalk={() => {
+                setShowDoorstep(false);
+                setShowLogMissedWalk(true);
+              }}
+              onOpenSettings={() => {
+                setShowDoorstep(false);
+                setShowSettings(true);
+              }}
+            />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -849,13 +922,14 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <TerritoriesScreen
-            territoryRepository={territoryRepository}
-            homeRangeRepository={homeRangeRepository}
-            denEconomyRepository={denEconomyRepository}
-            onOpenMap={() => setShowTerritories(false)}
-            onClose={() => setShowTerritories(false)}
-          />
+            <TerritoriesScreen
+              buddyAppearance={buddyAppearance}
+              territoryRepository={territoryRepository}
+              homeRangeRepository={homeRangeRepository}
+              denEconomyRepository={denEconomyRepository}
+              onOpenMap={() => setShowTerritories(false)}
+              onClose={() => setShowTerritories(false)}
+            />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -869,13 +943,13 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <WalkPortraitScreen
-            walk={viewingWalk}
-            walkRepository={walkRepository}
-            homeRangeRepository={homeRangeRepository}
-            dogName={dogName}
-            onClose={() => setViewingWalk(null)}
-          />
+            <WalkPortraitScreen
+              walk={viewingWalk}
+              walkRepository={walkRepository}
+              homeRangeRepository={homeRangeRepository}
+              dogName={dogName}
+              onClose={() => setViewingWalk(null)}
+            />
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -885,16 +959,19 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <WalkHistoryScreen
-            repository={walkRepository}
-            homeRangeRepository={homeRangeRepository}
-            onSelectWalk={setViewingWalk}
-            onClose={() => {
-              setShowHistory(false);
-              setHomeRangeRefreshKey((k) => k + 1);
-              setShowDoorstep(true);
-            }}
-          />
+          <FadeSlideIn key="history">
+            <WalkHistoryScreen
+              buddyAppearance={buddyAppearance}
+              repository={walkRepository}
+              homeRangeRepository={homeRangeRepository}
+              onSelectWalk={setViewingWalk}
+              onClose={() => {
+                setShowHistory(false);
+                setHomeRangeRefreshKey((k) => k + 1);
+                setShowDoorstep(true);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -904,18 +981,23 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DenScreen
-            repository={denEconomyRepository}
-            personalStatsRepository={personalStatsRepository}
-            homeRangeRepository={homeRangeRepository}
-            pendingAchievements={pendingDenAchievements}
-            onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
-            onClose={() => {
-              setShowDen(false);
-              setShowDoorstep(true);
-            }}
-            onTreatsChanged={setTreats}
-          />
+          <FadeSlideIn key="den">
+            <DenScreen
+              repository={denEconomyRepository}
+              personalStatsRepository={personalStatsRepository}
+              homeRangeRepository={homeRangeRepository}
+              buddyAppearance={buddyAppearance}
+              accruedSinceLastVisit={denAccrualShown ? 0 : accruedDelta}
+              onAccrualShown={() => setDenAccrualShown(true)}
+              pendingAchievements={pendingDenAchievements}
+              onAcknowledgePendingAchievements={() => setPendingDenAchievements([])}
+              onClose={() => {
+                setShowDen(false);
+                setShowDoorstep(true);
+              }}
+              onTreatsChanged={setTreats}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -925,13 +1007,15 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <DebugLogScreen
-            notificationRepository={notificationRepository}
-            onClose={() => {
-              setShowDebugLog(false);
-              setShowDoorstep(true);
-            }}
-          />
+          <FadeSlideIn key="debug-log">
+            <DebugLogScreen
+              notificationRepository={notificationRepository}
+              onClose={() => {
+                setShowDebugLog(false);
+                setShowDoorstep(true);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -941,14 +1025,19 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <SettingsScreen
-            notificationRepository={notificationRepository}
-            walkRepository={walkRepository}
-            onClose={() => {
-              setShowSettings(false);
-              setShowDoorstep(true);
-            }}
-          />
+          <FadeSlideIn key="settings">
+            <SettingsScreen
+              notificationRepository={notificationRepository}
+              walkRepository={walkRepository}
+              dogName={dogName}
+              buddyAppearance={buddyAppearance}
+              onSaveAppearance={saveAppearance}
+              onClose={() => {
+                setShowSettings(false);
+                setShowDoorstep(true);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -958,14 +1047,17 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <StatsScreen
-            repository={personalStatsRepository}
-            denEconomyRepository={denEconomyRepository}
-            onClose={() => {
-              setShowStats(false);
-              setShowDoorstep(true);
-            }}
-          />
+          <FadeSlideIn key="stats">
+            <StatsScreen
+              buddyAppearance={buddyAppearance}
+              repository={personalStatsRepository}
+              denEconomyRepository={denEconomyRepository}
+              onClose={() => {
+                setShowStats(false);
+                setShowDoorstep(true);
+              }}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );
@@ -975,15 +1067,17 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
-          <LogMissedWalkScreen
-            onLog={logMissedWalk}
-            onClose={() => {
-              setShowLogMissedWalk(false);
-              setShowDoorstep(true);
-            }}
-            walkRepository={walkRepository}
-            routeRefreshAvailable={routeRefreshAvailable}
-          />
+          <FadeSlideIn key="log-missed-walk">
+            <LogMissedWalkScreen
+              onLog={logMissedWalk}
+              onClose={() => {
+                setShowLogMissedWalk(false);
+                setShowDoorstep(true);
+              }}
+              walkRepository={walkRepository}
+              routeRefreshAvailable={routeRefreshAvailable}
+            />
+          </FadeSlideIn>
         </SafeAreaView>
       </SafeAreaProvider>
     );

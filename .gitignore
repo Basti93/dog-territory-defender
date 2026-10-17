@@ -23,3 +23,7 @@ web-build/
 
 # adb logcat dumps pulled during on-device field testing
 walk-log*.txt
+
+# Cloud credentials for scripts/generateArt.mjs (never commit)
+vertex.json
+*.serviceaccount.json

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
+import { PressableScale } from '../ui';
+
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 import { eligibleRefreshRoutes, MissedWalkTiming } from '../utils/manualWalkLog';
 
@@ -40,7 +42,7 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Log a walk we missed</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -88,13 +90,14 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.logButton, !selected && styles.logButtonDisabled]}
+        {/* PressableScale dims itself when disabled, so no separate disabled style. */}
+        <PressableScale
+          style={styles.logButton}
           disabled={!selected}
           onPress={() => selected && onLog(selected, selectedRouteId ?? undefined)}
         >
           <Text style={styles.logButtonText}>Log this walk 🐾</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

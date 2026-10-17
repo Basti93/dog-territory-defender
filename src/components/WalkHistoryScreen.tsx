@@ -10,8 +10,14 @@ const COLORS = {
   text: '#1A2A1A',
   muted: '#8A9A8A',
 };
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyLoading } from './BuddyLoading';
+
+// Keeps the header Close tap target at least ~44px tall.
+const CLOSE_HIT_SLOP = { top: 14, bottom: 14, left: 12, right: 12 };
 
 interface WalkHistoryScreenProps {
+  buddyAppearance: BuddyAppearance;
   repository: WalkRepository;
   /**
    * Forwarded one level, unused by this screen's own rendering — the Walk
@@ -28,7 +34,7 @@ interface WalkHistoryScreenProps {
   onSelectWalk: (walk: StoredWalk) => void;
 }
 
-export function WalkHistoryScreen({ repository, onClose, onSelectWalk }: WalkHistoryScreenProps) {
+export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSelectWalk }: WalkHistoryScreenProps) {
   const [walks, setWalks] = useState<StoredWalk[] | null>(null);
 
   useEffect(() => {
@@ -59,15 +65,15 @@ export function WalkHistoryScreen({ repository, onClose, onSelectWalk }: WalkHis
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Past Walks</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={CLOSE_HIT_SLOP}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
 
       {walks === null ? (
-        <Text style={styles.empty}>Loading…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
       ) : walks.length === 0 ? (
-        <Text style={styles.empty}>No walks yet — take your dog out and claim your first territory! 🌱</Text>
+        <BuddyLoading appearance={buddyAppearance} text="No walks yet — take your dog out and claim your first territory! 🌱" />
       ) : (
         <FlatList
           data={walks}

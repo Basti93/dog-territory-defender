@@ -152,7 +152,7 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Walk Portrait</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>

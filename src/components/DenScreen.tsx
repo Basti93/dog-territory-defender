@@ -1,6 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+
+import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { BuddyLoading } from './BuddyLoading';
+import { BuddyMood } from './buddy/buddyMood';
+import { AnimatedNumber, PressableScale, TreatPop } from '../ui';
+import { ArtKey } from '../art/artAssets';
+import { CardIcon } from './den/CardIcon';
+import { YARD_ORDER, YardScene } from './den/YardScene';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import {
@@ -36,6 +43,15 @@ const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; color: 
 
 const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
 
+const CARD_ICON_ART: Record<BuildingKey, ArtKey> = {
+  doghouse: 'icon-den',
+  bakery: 'icon-treat',
+  sniffGarden: 'icon-paw',
+};
+
+// How long Buddy stays excited after an upgrade (fun review: settle in ~3s).
+const EXCITED_AFTER_UPGRADE_MS = 3000;
+
 /**
  * `level` is the building's own level being described (either its current
  * level, or level+1 for the "Next:" preview) — `state` supplies the other
@@ -66,6 +82,12 @@ interface DenScreenProps {
   personalStatsRepository: PersonalStatsRepository;
   /** Optional so existing tests/callers that don't care about the "Buddy knows N streets" stat (tasks.md task 3.3) don't need to supply a Home Range repository — omitted means the stat line simply doesn't render. */
   homeRangeRepository?: HomeRangeRepository;
+  /** Buddy's look (buddy-comes-alive). */
+  buddyAppearance: BuddyAppearance;
+  /** Treats accrued while away, from App.tsx. Shown once as a float-up on mount; 0 or omitted shows nothing. */
+  accruedSinceLastVisit?: number;
+  /** Called on mount so App.tsx does not hand the same amount to later Den visits. */
+  onAccrualShown?: () => void;
   pendingAchievements?: AchievementId[];
   onAcknowledgePendingAchievements?: () => void;
   onClose: () => void;
@@ -76,6 +98,9 @@ export function DenScreen({
   repository,
   personalStatsRepository,
   homeRangeRepository,
+  buddyAppearance,
+  accruedSinceLastVisit = 0,
+  onAccrualShown,
   pendingAchievements = [],
   onAcknowledgePendingAchievements,
   onClose,
@@ -90,6 +115,24 @@ export function DenScreen({
   // line — this screen's own fetch, independent of whatever App.tsx last
   // computed at the mount effect (the Den can be opened long after that).
   const [territoryIncomeRate, setTerritoryIncomeRate] = useState<number | null>(null);
+  // Captured once so the float-up keeps its amount after App clears its copy.
+  const [accrualPop] = useState(Math.floor(accruedSinceLastVisit));
+  const [upgrade, setUpgrade] = useState<{ building: BuildingKey; n: number } | null>(null);
+  const [excited, setExcited] = useState(false);
+  const excitedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    onAccrualShown?.();
+    // Once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (excitedTimer.current) clearTimeout(excitedTimer.current);
+    },
+    []
+  );
 
   useEffect(() => {
     repository.getState().then((s) => {
@@ -122,12 +165,22 @@ export function DenScreen({
   if (!state) {
     return (
       <View style={styles.container}>
-        <Text style={styles.empty}>Loading…</Text>
+        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
       </View>
     );
   }
 
   const tease = getUpgradeTease(state);
+  const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
+
+  // Buddy sniffs toward the cheapest upgrade he can afford right now, if any.
+  const cheapestAffordable = BUILDING_ORDER.map((b) => {
+    const lvl = getBuildingLevel(state, b);
+    return lvl >= BALANCE.maxBuildingLevel ? null : { building: b, cost: upgradeCost(b, lvl + 1) };
+  })
+    .filter((c): c is { building: BuildingKey; cost: number } => c !== null && c.cost <= state.treats)
+    .sort((a, b) => a.cost - b.cost)[0];
+  const sceneMood: BuddyMood = excited ? 'excited' : cheapestAffordable ? 'curious' : 'idle';
 
   const handleUpgrade = async (building: BuildingKey) => {
     const result = upgradeBuilding(state, building);
@@ -140,6 +193,10 @@ export function DenScreen({
       return;
     }
     setMessage(null);
+    setUpgrade((prev) => ({ building, n: (prev?.n ?? 0) + 1 }));
+    setExcited(true);
+    if (excitedTimer.current) clearTimeout(excitedTimer.current);
+    excitedTimer.current = setTimeout(() => setExcited(false), EXCITED_AFTER_UPGRADE_MS);
     setState(result);
     onTreatsChanged(result.treats);
     await repository.saveState(result);
@@ -156,7 +213,7 @@ export function DenScreen({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>The Den</Text>
-        <TouchableOpacity onPress={onClose}>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }}>
           <Text style={styles.closeText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -176,9 +233,14 @@ export function DenScreen({
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.treatsRow}>
           <Text style={styles.treatsLabel}>Treats</Text>
-          <Text style={styles.treatsValue}>
-            {Math.floor(state.treats)} / {storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel)}
-          </Text>
+          <View>
+            <AnimatedNumber
+              value={Math.floor(state.treats)}
+              format={(n) => `${n} / ${cap}`}
+              style={styles.treatsValue}
+            />
+            {accrualPop > 0 && <TreatPop amount={accrualPop} style={styles.accrualPop} />}
+          </View>
         </View>
 
         <View style={styles.levelBar}>
@@ -237,13 +299,19 @@ export function DenScreen({
           )}
         </View>
 
-        <View style={styles.denScene}>
-          <Svg width={80} height={60} viewBox="0 0 80 60">
-            <Circle cx={40} cy={40} r={18} fill="#D4A76A" opacity={0.5} />
-            <Circle cx={40} cy={40} r={10} fill="#8B6F47" opacity={0.8} />
-          </Svg>
-          <Text style={styles.denSceneCaption}>Your dog is resting in the yard 🐾</Text>
-        </View>
+        <YardScene
+          appearance={buddyAppearance}
+          name={dogDisplayName(state.dogName)}
+          buildings={YARD_ORDER.map((key) => ({
+            key,
+            level: getBuildingLevel(state, key),
+            color: BUILDING_DISPLAY[key].color,
+            lightColor: BUILDING_DISPLAY[key].lightColor,
+          }))}
+          mood={sceneMood}
+          curiousAbout={cheapestAffordable?.building ?? null}
+          upgrade={upgrade}
+        />
 
         {message && <Text style={styles.message}>{message}</Text>}
 
@@ -255,13 +323,13 @@ export function DenScreen({
           const isTease = tease?.building === building;
 
           return (
-            <TouchableOpacity
+            <PressableScale
               key={building}
               style={[styles.card, { borderColor: display.color }, isTease && styles.cardTease]}
-              onPress={() => handleUpgrade(building)}
               disabled={maxed}
+              onPress={maxed ? undefined : () => handleUpgrade(building)}
             >
-              <View style={[styles.cardIcon, { backgroundColor: display.lightColor }]} />
+              <CardIcon artKey={CARD_ICON_ART[building]} color={display.color} lightColor={display.lightColor} />
               <View style={styles.cardBody}>
                 <Text style={styles.cardName}>{display.name}</Text>
                 <Text style={styles.cardSub}>{display.sub}</Text>
@@ -280,7 +348,7 @@ export function DenScreen({
                   <Text style={styles.cardMaxed}>Max level!</Text>
                 )}
               </View>
-            </TouchableOpacity>
+            </PressableScale>
           );
         })}
       </ScrollView>
@@ -378,14 +446,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.muted,
   },
-  denScene: {
-    alignItems: 'center',
-    paddingBottom: 16,
-  },
-  denSceneCaption: {
-    marginTop: 4,
-    fontSize: 12,
-    color: COLORS.muted,
+  accrualPop: {
+    position: 'absolute',
+    right: 0,
+    top: -4,
   },
   message: {
     fontSize: 13,
@@ -405,11 +469,6 @@ const styles = StyleSheet.create({
   },
   cardTease: {
     backgroundColor: '#FFF8E7',
-  },
-  cardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
   },
   cardBody: {
     flex: 1,

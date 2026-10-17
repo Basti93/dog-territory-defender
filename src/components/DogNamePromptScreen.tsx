@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
+
+import { PressableScale } from '../ui';
 
 // One-time, first-launch naming prompt (tasks.md task 1.1). Shown once, when
 // the Den-economy state's dogName is still null; never re-prompts once set.
@@ -37,13 +39,9 @@ export function DogNamePromptScreen({ onSubmit }: DogNamePromptScreenProps) {
           onSubmitEditing={() => trimmed && onSubmit(trimmed)}
         />
 
-        <TouchableOpacity
-          style={[styles.button, !trimmed && styles.buttonDisabled]}
-          disabled={!trimmed}
-          onPress={() => onSubmit(trimmed)}
-        >
+        <PressableScale style={styles.button} disabled={!trimmed} onPress={() => onSubmit(trimmed)}>
           <Text style={styles.buttonText}>Let's go!</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );
