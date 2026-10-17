@@ -2,6 +2,7 @@ import { Walk } from '../types';
 import { cumulativeDistance } from '../utils/geometry';
 import { CELL_M } from '../utils/grid';
 import { DenEconomyState } from './denEconomy';
+import { formatNumber, t } from '../i18n';
 
 export interface PersonalStatsState {
   totalWalksClosed: number;
@@ -52,116 +53,47 @@ export interface AchievementDefinition {
   copyBody: string;
 }
 
-export const ACHIEVEMENTS: Record<AchievementId, AchievementDefinition> = {
-  'first-steps': {
-    id: 'first-steps',
-    name: 'First Steps',
-    copyTitle: 'First Steps 🐾',
-    copyBody: 'You and your dog just closed your very first loop. Every territory starts with one walk together.',
-  },
-  'paws-on-the-pavement': {
-    id: 'paws-on-the-pavement',
-    name: 'Paws on the Pavement',
-    copyTitle: 'Paws on the Pavement',
-    copyBody: "Ten walks in. Your dog's found a rhythm, and so have you.",
-  },
-  'familiar-trails': {
-    id: 'familiar-trails',
-    name: 'Familiar Trails',
-    copyTitle: 'Familiar Trails',
-    copyBody: 'Twenty-five walks. These streets are starting to feel like home.',
-  },
-  'neighborhood-legend': {
-    id: 'neighborhood-legend',
-    name: 'Neighborhood Legend',
-    copyTitle: 'Neighborhood Legend',
-    copyBody: "Fifty walks together. Every dog on the block knows your dog's name by now.",
-  },
-  'hundred-walks': {
-    id: 'hundred-walks',
-    name: '100 Walks, One Very Good Dog',
-    copyTitle: '100 Walks, One Very Good Dog',
-    copyBody: "A hundred walks, rain or shine. That's a lot of very good boy (or girl).",
-  },
-  'ground-claimed': {
-    id: 'ground-claimed',
-    name: 'Ground Claimed',
-    copyTitle: 'Ground Claimed 🌱',
-    copyBody: "That loop wasn't just a walk — it's officially yours now.",
-  },
-  'round-the-block': {
-    id: 'round-the-block',
-    name: 'Round the Block',
-    copyTitle: 'Round the Block',
-    copyBody: "5 km down. Your dog's paws have earned a rest (eventually).",
-  },
-  'cross-town-trotter': {
-    id: 'cross-town-trotter',
-    name: 'Cross-Town Trotter',
-    copyTitle: 'Cross-Town Trotter',
-    copyBody: '25 km of sniffing, trotting, and territory-claiming.',
-  },
-  'century-trail': {
-    id: 'century-trail',
-    name: 'Century Trail',
-    copyTitle: 'Century Trail',
-    copyBody: "100 km walked together. That's further than most people drive in a week.",
-  },
-  'long-way-round': {
-    id: 'long-way-round',
-    name: 'Long Way Round',
-    copyTitle: 'Long Way Round',
-    copyBody: "Now that's a walk. 3 km in one loop — someone had a lot to sniff.",
-  },
-  'big-backyard': {
-    id: 'big-backyard',
-    name: 'Big Backyard',
-    copyTitle: 'Big Backyard',
-    copyBody: "1,000 m² claimed in a single walk. That's a proper yard.",
-  },
-  'whole-city-block': {
-    id: 'whole-city-block',
-    name: 'Whole City Block',
-    copyTitle: 'Whole City Block',
-    copyBody: '5,000 m² in one loop. Your dog claimed a whole block today.',
-  },
-  'first-bakery-batch': {
-    id: 'first-bakery-batch',
-    name: 'First Bakery Batch',
-    copyTitle: 'First Bakery Batch 🦴',
-    copyBody: "Your first 100 treats earned. The Treat Bakery's just getting started.",
-  },
-  'treat-jar-overflowing': {
-    id: 'treat-jar-overflowing',
-    name: 'Treat Jar Overflowing',
-    copyTitle: 'Treat Jar Overflowing',
-    copyBody: '1,000 treats earned lifetime. Good thing the Doghouse has storage.',
-  },
-  'treats-for-days': {
-    id: 'treats-for-days',
-    name: 'Treats for Days',
-    copyTitle: 'Treats for Days',
-    copyBody: '10,000 treats earned. Your dog has never eaten better.',
-  },
-  'moving-in': {
-    id: 'moving-in',
-    name: 'Moving In',
-    copyTitle: 'Moving In',
-    copyBody: "Your first Den upgrade. The yard's starting to take shape.",
-  },
-  'handy-homebody': {
-    id: 'handy-homebody',
-    name: 'Handy Homebody',
-    copyTitle: 'Handy Homebody',
-    copyBody: "One building all the way to level 10. You've put real care into this Den.",
-  },
-  'cozy-den': {
-    id: 'cozy-den',
-    name: 'Cozy Den',
-    copyTitle: 'Cozy Den',
-    copyBody: 'Doghouse, Bakery, and Sniff Garden all at level 5. This yard feels like home.',
-  },
-};
+const ACHIEVEMENT_IDS: AchievementId[] = [
+  'first-steps',
+  'paws-on-the-pavement',
+  'familiar-trails',
+  'neighborhood-legend',
+  'hundred-walks',
+  'ground-claimed',
+  'round-the-block',
+  'cross-town-trotter',
+  'century-trail',
+  'long-way-round',
+  'big-backyard',
+  'whole-city-block',
+  'first-bakery-batch',
+  'treat-jar-overflowing',
+  'treats-for-days',
+  'moving-in',
+  'handy-homebody',
+  'cozy-den',
+];
+
+// Copy lives in src/i18n (keys `achievement.<id>.name|title|body`). The
+// getters resolve at read time so a language switch applies immediately.
+function defineAchievement(id: AchievementId): AchievementDefinition {
+  return {
+    id,
+    get name() {
+      return t(`achievement.${id}.name`);
+    },
+    get copyTitle() {
+      return t(`achievement.${id}.title`);
+    },
+    get copyBody() {
+      return t(`achievement.${id}.body`);
+    },
+  };
+}
+
+export const ACHIEVEMENTS = Object.fromEntries(
+  ACHIEVEMENT_IDS.map((id) => [id, defineAchievement(id)])
+) as Record<AchievementId, AchievementDefinition>;
 
 interface RecordResult {
   stats: PersonalStatsState;
@@ -206,15 +138,16 @@ interface ThresholdAchievement {
   id: AchievementId;
   threshold: number;
   statKey: keyof PersonalStatsState;
-  noun: string;
+  /** i18n key of the "{target} <noun> — you're at {current}" progress hint. */
+  hintKey: string;
 }
 
 const ALL_THRESHOLD_ACHIEVEMENTS: ThresholdAchievement[] = [
-  ...WALK_COUNT_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalWalksClosed' as const, noun: 'walks' })),
-  ...LIFETIME_DISTANCE_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'lifetimeDistanceMeters' as const, noun: 'm walked' })),
-  ...LONGEST_WALK_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'longestWalkDistanceM' as const, noun: 'm in one walk' })),
-  ...BIGGEST_TERRITORY_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'biggestTerritoryAreaM2' as const, noun: 'm² in one walk' })),
-  ...TREATS_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalTreatsEarnedLifetime' as const, noun: 'treats earned' })),
+  ...WALK_COUNT_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalWalksClosed' as const, hintKey: 'achievement.hint.walks' })),
+  ...LIFETIME_DISTANCE_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'lifetimeDistanceMeters' as const, hintKey: 'achievement.hint.distance' })),
+  ...LONGEST_WALK_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'longestWalkDistanceM' as const, hintKey: 'achievement.hint.longestWalk' })),
+  ...BIGGEST_TERRITORY_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'biggestTerritoryAreaM2' as const, hintKey: 'achievement.hint.biggestArea' })),
+  ...TREATS_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalTreatsEarnedLifetime' as const, hintKey: 'achievement.hint.treats' })),
 ];
 
 export interface AchievementProgress {
@@ -234,25 +167,25 @@ export function getAchievementProgress(
     return {
       current,
       target: threshold.threshold,
-      hint: `${threshold.threshold} ${threshold.noun} — you're at ${current}`,
+      hint: t(threshold.hintKey, { target: formatNumber(threshold.threshold), current: formatNumber(current) }),
     };
   }
 
   if (id === 'moving-in') {
     const sum = denState.doghouseLevel + denState.bakeryLevel + denState.sniffGardenLevel;
-    return { current: Math.min(sum, 4), target: 4, hint: 'Upgrade any building once to unlock' };
+    return { current: Math.min(sum, 4), target: 4, hint: t('achievement.hint.movingIn') };
   }
 
   if (id === 'handy-homebody') {
     const max = Math.max(denState.doghouseLevel, denState.bakeryLevel, denState.sniffGardenLevel);
-    return { current: max, target: 10, hint: `Level 10 on any building — you're at ${max}` };
+    return { current: max, target: 10, hint: t('achievement.hint.handyHomebody', { current: max }) };
   }
 
   // 'cozy-den'
   const atFive = [denState.doghouseLevel, denState.bakeryLevel, denState.sniffGardenLevel].filter(
     (level) => level >= 5
   ).length;
-  return { current: atFive, target: 3, hint: `All 3 buildings at level 5 — you're at ${atFive}/3` };
+  return { current: atFive, target: 3, hint: t('achievement.hint.cozyDen', { current: atFive }) };
 }
 
 /**

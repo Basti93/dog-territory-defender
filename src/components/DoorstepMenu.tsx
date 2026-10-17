@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ListRow, mix, palette, radii, shadows, spacing, tokens } from '../ui';
+import { t } from '../i18n';
 
 // The Doorstep's burger menu (openspec/changes/home-dashboard, design.md
 // Decision 13) — a small transient overlay for the "not so important"
@@ -26,9 +27,9 @@ export function DoorstepMenu({ visible, onClose, onOpenDebugLog, onOpenLogMissed
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Inner Pressable swallows taps so touching the sheet does not close it. */}
         <Pressable style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]} onPress={() => {}}>
-          <ListRow title="Debug Log" icon="icon-pin" onPress={onOpenDebugLog} />
-          <ListRow title="Log a walk we missed" icon="icon-walks" onPress={onOpenLogMissedWalk} />
-          <ListRow title="Settings" icon="icon-settings" onPress={onOpenSettings} />
+          <ListRow title={t('menu.debugLog')} icon="icon-pin" onPress={onOpenDebugLog} />
+          <ListRow title={t('menu.logMissedWalk')} icon="icon-walks" onPress={onOpenLogMissedWalk} />
+          <ListRow title={t('menu.settings')} icon="icon-settings" onPress={onOpenSettings} />
         </Pressable>
       </Pressable>
     </Modal>

@@ -22,11 +22,13 @@ import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../utils/grid';
+import { formatNumber, t, tPlural } from '../i18n';
 
-const BUILDING_NAMES: Record<BuildingKey, string> = {
-  doghouse: 'Doghouse',
-  bakery: 'Treat Bakery',
-  sniffGarden: 'Sniff Garden',
+// Same keys DenScreen uses for its building cards.
+const BUILDING_NAME_KEYS: Record<BuildingKey, string> = {
+  doghouse: 'den.building.doghouse.name',
+  bakery: 'den.building.bakery.name',
+  sniffGarden: 'den.building.sniffGarden.name',
 };
 
 interface CelebrationScreenProps {
@@ -59,18 +61,15 @@ interface CelebrationScreenProps {
   onContinue: () => void;
 }
 
-// Game-master celebration headlines (fun review). {name} is the dog's name.
-const HEADLINES = [
-  '{name} claimed a new corner of the neighbourhood!',
-  'What a walk! {name} is thrilled.',
-  'Tails up, you two did it.',
-];
+// Game-master celebration headlines (fun review), in src/i18n as
+// `celebration.headline.1` .. `.3`. {name} is the dog's name.
+const HEADLINE_COUNT = 3;
 
 /** Same walk id always gives the same headline. */
 export function pickCelebrationHeadline(walkId: string | null | undefined, dog: string): string {
   let hash = 0;
   for (const ch of walkId ?? '') hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return HEADLINES[hash % HEADLINES.length].replace('{name}', dog);
+  return t(`celebration.headline.${(hash % HEADLINE_COUNT) + 1}`, { name: dog });
 }
 
 export function CelebrationScreen({
@@ -140,15 +139,15 @@ export function CelebrationScreen({
         </View>
 
         <Text style={[textStyle('display'), styles.title]}>
-          {hasTerritory ? pickCelebrationHeadline(walkId, dog) : 'Walk claimed! 🌱'}
+          {hasTerritory ? pickCelebrationHeadline(walkId, dog) : t('celebration.walkClaimed')}
         </Text>
         <Text style={[textStyle('body'), styles.area]}>
-          {hasTerritory ? `${(cellsPainted * CELL_M * CELL_M).toFixed(0)} m² is now yours` : 'Every step of it is yours'}
+          {hasTerritory ? t('celebration.areaYours', { area: formatNumber(Math.round(cellsPainted * CELL_M * CELL_M)) }) : t('celebration.everyStep')}
         </Text>
 
         <Card tint="warm" style={styles.treatsCard}>
           <ArtImage art="icon-treat" size={48} />
-          <AnimatedNumber from={0} value={treatsEarned} format={(n) => `+${n} treats`} style={textStyle('display')} />
+          <AnimatedNumber from={0} value={treatsEarned} format={(n) => t('celebration.treatsEarned', { count: formatNumber(n) })} style={textStyle('display')} />
         </Card>
 
         {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier
@@ -156,8 +155,8 @@ export function CelebrationScreen({
             no multiplier line at all, not "×1.00," nothing. See
             openspec/changes/home-range-rewards/tasks.md task 3.2. */}
         {bloomMultiplier >= BALANCE.freshGround.displayThresholdMultiplier && (
-          <Beat label="Fresh ground">
-            That ground had gone lovely and wild again — {dog} brought home extra treats for it.
+          <Beat label={t('celebration.freshGround.label')}>
+            {t('celebration.freshGround.body', { dog })}
           </Beat>
         )}
 
@@ -165,9 +164,8 @@ export function CelebrationScreen({
             dilated-set-difference threshold (design.md Decision 5). See
             openspec/changes/home-range-rewards/tasks.md task 3.1. */}
         {newGroundCellCount >= NEW_GROUND_MIN_CELLS && (
-          <Beat label="New ground">
-            New ground! {dog} learned {streetsKnown(newGroundCellCount)} new street
-            {streetsKnown(newGroundCellCount) === 1 ? '' : 's'} today.
+          <Beat label={t('celebration.newGround.label')}>
+            {tPlural('celebration.newGround.body', streetsKnown(newGroundCellCount), { dog })}
           </Beat>
         )}
 
@@ -181,7 +179,7 @@ export function CelebrationScreen({
             interpolate the new territory's own name (newTerritoryName) —
             kept as a prop for whenever that copy is finalized. */}
         {newTerritoryName !== null && (
-          <Beat label="New territory" icon="icon-pin">A new territory! {dog} found a second home.</Beat>
+          <Beat label={t('celebration.newTerritory.label')} icon="icon-pin">{t('celebration.newTerritory.body', { dog })}</Beat>
         )}
 
         {/* Territory merge beat — always framed as a positive event, never a
@@ -189,7 +187,7 @@ export function CelebrationScreen({
             TODO(game-master copy pass): same interpolation note as above —
             mergedTerritoryNames is kept as a prop for the finalized copy. */}
         {mergedTerritoryNames !== null && (
-          <Beat label="Two worlds" icon="icon-pin">{dog} connected his two worlds!</Beat>
+          <Beat label={t('celebration.merge.label')} icon="icon-pin">{t('celebration.merge.body', { dog })}</Beat>
         )}
 
         {tease && (
@@ -197,10 +195,12 @@ export function CelebrationScreen({
             <View style={styles.teaseRow}>
               <ArtImage art="icon-den" size={40} />
               <View style={styles.beatText}>
-                <Text style={[textStyle('small'), { color: palette.muted }]}>Next up in the Den</Text>
+                <Text style={[textStyle('small'), { color: palette.muted }]}>{t('den.nextUp')}</Text>
                 <Text style={textStyle('h2')}>
-                  {BUILDING_NAMES[tease.building]} — {tease.cost} treats
-                  {tease.affordable ? ' (you can afford it now!)' : ''}
+                  {t(tease.affordable ? 'den.teaseAffordable' : 'den.tease', {
+                    name: t(BUILDING_NAME_KEYS[tease.building]),
+                    cost: formatNumber(tease.cost),
+                  })}
                 </Text>
               </View>
             </View>
@@ -213,7 +213,7 @@ export function CelebrationScreen({
               <ArtImage art="icon-badge" size={40} />
               <View style={styles.beatText}>
                 <Text style={[textStyle('small'), { color: palette.muted }]}>
-                  New badge{unlockedAchievements.length > 1 ? 's' : ''}!
+                  {t(unlockedAchievements.length > 1 ? 'celebration.newBadges' : 'celebration.newBadge')}
                 </Text>
                 {unlockedAchievements.map((id) => (
                   <Text key={id} style={textStyle('h2')}>
@@ -226,19 +226,23 @@ export function CelebrationScreen({
         )}
 
         {leveledUpTo !== null && oldTreatsPerWalk !== null && newTreatsPerWalk !== null && (
-          <Beat label={`Level ${leveledUpTo}`}>
+          <Beat label={t('celebration.levelUp.label', { level: leveledUpTo })}>
             {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in. */}
-            {dog} reached Level {leveledUpTo} — he brings home {newTreatsPerWalk} treats a walk now, up from{' '}
-            {oldTreatsPerWalk}
+            {t('celebration.levelUp.body', {
+              dog,
+              level: leveledUpTo,
+              newCount: formatNumber(newTreatsPerWalk),
+              oldCount: formatNumber(oldTreatsPerWalk),
+            })}
           </Beat>
         )}
 
         {cliffhangerTitle !== null && (
           // Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), title filled in.
-          <Beat label="Almost there">One more walk and he's a {cliffhangerTitle}</Beat>
+          <Beat label={t('celebration.cliffhanger.label')}>{t('celebration.cliffhanger.body', { title: cliffhangerTitle })}</Beat>
         )}
 
-        <Button label="Nice walk! 🐾" onPress={onContinue} style={styles.continueButton} />
+        <Button label={t('celebration.continue')} onPress={onContinue} style={styles.continueButton} />
       </Screen>
 
       {/* Gentle thank-you confetti: self-unmounts, never blocks touches. */}

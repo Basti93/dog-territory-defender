@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput } from 'rea
 import { BuddyAppearance, defaultBuddyAppearance } from '../buddy/buddyAppearance';
 import { Button, Card, Header, palette, radii, Screen, spacing, textStyle } from '../ui';
 import { BuddyAvatar } from './buddy';
+import { t } from '../i18n';
 
 // One-time, first-launch naming prompt (tasks.md task 1.1). Shown once, when
 // the Den-economy state's dogName is still null; never re-prompts once set.
@@ -21,20 +22,20 @@ export function DogNamePromptScreen({ onSubmit, buddyAppearance }: DogNamePrompt
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen scroll backdrop="sky" contentStyle={styles.content}>
-        <Header title="Your dog" icon="icon-paw" />
+        <Header title={t('dogName.header')} icon="icon-paw" />
         <BuddyAvatar appearance={buddyAppearance ?? defaultBuddyAppearance()} size={140} mood="curious" />
 
         <Card style={styles.form}>
-          <Text style={[textStyle('h1'), styles.center]}>What's your dog's name? 🐾</Text>
+          <Text style={[textStyle('h1'), styles.center]}>{t('dogName.question')}</Text>
           <Text style={[textStyle('body'), styles.center, styles.subtitle]}>
-            Every Level readout from here on is your dog's own.
+            {t('dogName.subtitle')}
           </Text>
 
           <TextInput
             style={[textStyle('body'), styles.input]}
             value={name}
             onChangeText={setName}
-            placeholder="e.g. Buddy"
+            placeholder={t('dogName.placeholder')}
             placeholderTextColor={palette.muted}
             autoFocus
             maxLength={30}
@@ -42,7 +43,7 @@ export function DogNamePromptScreen({ onSubmit, buddyAppearance }: DogNamePrompt
             onSubmitEditing={() => trimmed && onSubmit(trimmed)}
           />
 
-          <Button label="Let's go!" disabled={!trimmed} onPress={() => onSubmit(trimmed)} />
+          <Button label={t('dogName.submit')} disabled={!trimmed} onPress={() => onSubmit(trimmed)} />
         </Card>
       </Screen>
     </KeyboardAvoidingView>

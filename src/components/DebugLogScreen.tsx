@@ -7,6 +7,7 @@ import { getDebugLogText, getDebugLogCount, clearDebugLog } from '../utils/debug
 import * as Notifications from 'expo-notifications';
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { Button, Card, Header, palette, radii, Screen, spacing, textStyle } from '../ui';
+import { formatDate, t } from '../i18n';
 
 interface DebugLogScreenProps {
   onClose: () => void;
@@ -35,8 +36,8 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
           all
             .filter((n) => n.content.data?.kind === 'walk-reminder' || n.content.data?.type === 'walk-reminder')
             .map((n) => {
-              const t = n.trigger as { value?: number; date?: number } | null;
-              const when = t?.value ?? t?.date;
+              const trigger = n.trigger as { value?: number; date?: number } | null;
+              const when = trigger?.value ?? trigger?.date;
               return when ? new Date(when).toLocaleString() : String(n.content.data?.day ?? n.identifier);
             })
             .sort()
@@ -70,7 +71,7 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
   const handleShare = async () => {
     const text = await getDebugLogText();
     if (!text) {
-      Alert.alert('Nothing to share', 'The debug log is empty.');
+      Alert.alert(t('debug.nothingToShare'), t('debug.emptyLog'));
       return;
     }
     const file = new File(Paths.cache, `dog-territory-debug-log-${Date.now()}.txt`);
@@ -79,15 +80,15 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(file.uri, { mimeType: 'text/plain' });
     } else {
-      Alert.alert('Sharing not available', `Log saved to ${file.uri}`);
+      Alert.alert(t('debug.sharingUnavailable'), t('debug.savedTo', { uri: file.uri }));
     }
   };
 
   const handleClear = () => {
-    Alert.alert('Clear debug log?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('debug.clearTitle'), t('debug.clearMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Clear',
+        text: t('debug.clear'),
         style: 'destructive',
         onPress: async () => {
           await clearDebugLog();
@@ -99,18 +100,21 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
 
   return (
     <Screen>
-      <Header title="Debug Log" icon="icon-den" onBack={onClose} />
+      <Header title={t('menu.debugLog')} icon="icon-den" onBack={onClose} />
 
       <View style={styles.actions}>
-        <Button label="Share" variant="secondary" style={styles.actionButton} onPress={handleShare} />
-        <Button label="Clear" variant="secondary" style={styles.actionButton} onPress={handleClear} />
+        <Button label={t('debug.share')} variant="secondary" style={styles.actionButton} onPress={handleShare} />
+        <Button label={t('debug.clear')} variant="secondary" style={styles.actionButton} onPress={handleClear} />
       </View>
 
       {walkReminderSummary && (
         <Card tint="meadow" style={styles.walkReminderSummary}>
           <Text style={textStyle('small')}>
-            Walk Reminder — started {new Date(walkReminderSummary.startedAt).toLocaleDateString()} · fired{' '}
-            {walkReminderSummary.firedCount} · followed {walkReminderSummary.followedCount}
+            {t('debug.reminderSummary', {
+              date: formatDate(walkReminderSummary.startedAt),
+              fired: walkReminderSummary.firedCount,
+              followed: walkReminderSummary.followedCount,
+            })}
           </Text>
         </Card>
       )}
@@ -118,16 +122,16 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
       {pendingReminders && (
         <Card tint="meadow" style={styles.walkReminderSummary}>
           <Text style={textStyle('small')}>
-            Pending reminders: {pendingReminders.length}
+            {t('debug.pendingReminders', { count: pendingReminders.length })}
             {pendingReminders.map((d) => `\n${d}`).join('')}
           </Text>
         </Card>
       )}
 
-      <Text style={[textStyle('small'), styles.count]}>{count === null ? 'Loading…' : `${count} entries`}</Text>
+      <Text style={[textStyle('small'), styles.count]}>{count === null ? t('common.loading') : t('debug.entries', { count })}</Text>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={[textStyle('small'), styles.logText]}>{preview || 'No log entries yet.'}</Text>
+        <Text style={[textStyle('small'), styles.logText]}>{preview || t('debug.noEntries')}</Text>
       </ScrollView>
     </Screen>
   );

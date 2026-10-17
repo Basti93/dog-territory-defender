@@ -14,6 +14,7 @@ import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { walkPortraitHTML } from '../web/walkPortraitHTML';
 import { TerritoryPortrait } from './TerritoryPortrait';
 import { Chip, Header, palette, radii, Screen, shadows, spacing, textStyle } from '../ui';
+import { formatDistanceKm, formatNumber, t } from '../i18n';
 
 // Walk Portrait (openspec/changes/walk-portrait) — a full-screen, tap-in-from-
 // history view of one walk's own route, animated on top of the player's
@@ -64,7 +65,7 @@ function formatDuration(ms: number): string {
   const totalMinutes = Math.max(0, Math.round(ms / 60000));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours} hr ${minutes} min` : `${minutes} min`;
+  return hours > 0 ? t('portrait.durationHm', { hours, minutes }) : t('portrait.durationM', { minutes });
 }
 
 interface WalkPortraitScreenProps {
@@ -135,8 +136,8 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
   if (!state) {
     return (
       <Screen>
-        <Header title="Walk Portrait" icon="icon-walks" onBack={onClose} />
-        <Text style={[textStyle('body'), styles.loading]}>Getting the portrait ready…</Text>
+        <Header title={t('portrait.title')} icon="icon-walks" onBack={onClose} />
+        <Text style={[textStyle('body'), styles.loading]}>{t('portrait.loading')}</Text>
       </Screen>
     );
   }
@@ -148,11 +149,11 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
       ? trailSource.locations[trailSource.locations.length - 1].timestamp - trailSource.locations[0].timestamp
       : 0;
   const dateLine = dayAndTimeOfDayPhrase(walk.startTime);
-  const titleLine = placeLabel ? `${dateLine}, around ${placeLabel}` : dateLine;
+  const titleLine = placeLabel ? t('portrait.titleWithPlace', { date: dateLine, place: placeLabel }) : dateLine;
 
   return (
     <Screen>
-      <Header title="Walk Portrait" icon="icon-walks" onBack={onClose} />
+      <Header title={t('portrait.title')} icon="icon-walks" onBack={onClose} />
 
       {/* Outer view carries the soft shadow; inner view clips the map to the rounded frame. */}
       <View style={styles.frameShadow}>
@@ -169,7 +170,7 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
           ) : rangeEmpty ? (
             <View style={styles.emptyPortrait}>
               <Text style={[textStyle('body'), styles.emptyPortraitText]}>
-                {dog} hasn't marked out any ground yet — let's find some.
+                {t('doorstep.emptyRange', { dog })}
               </Text>
             </View>
           ) : (
@@ -183,9 +184,9 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
           <>
             <Text style={textStyle('h2')}>{titleLine}</Text>
             <View style={styles.metaStats}>
-              <Chip tint="meadow" label={`Distance ${(distanceMeters / 1000).toFixed(2)} km`} />
-              <Chip tint="sky" label={`Duration ${formatDuration(durationMs)}`} />
-              {walk.treatsEarned !== undefined && <Chip tint="warm" icon="icon-treat" label={`Treats ${walk.treatsEarned}`} />}
+              <Chip tint="meadow" label={t('portrait.distance', { value: formatDistanceKm(distanceMeters / 1000) })} />
+              <Chip tint="sky" label={t('portrait.duration', { value: formatDuration(durationMs) })} />
+              {walk.treatsEarned !== undefined && <Chip tint="warm" icon="icon-treat" label={t('portrait.treats', { count: formatNumber(walk.treatsEarned) })} />}
             </View>
           </>
         ) : (
@@ -195,11 +196,11 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
                 Decision 2, accepted 2026-08-22 — a game-master line, not
                 invented here. */}
             <Text style={[textStyle('small'), { color: palette.muted }]}>
-              No trail recorded for this one. It still counts — and here's everywhere {dog} knows.
+              {t('portrait.noTrail', { dog })}
             </Text>
             {walk.treatsEarned !== undefined && (
               <View style={styles.metaStats}>
-                <Chip tint="warm" icon="icon-treat" label={`Treats ${walk.treatsEarned}`} />
+                <Chip tint="warm" icon="icon-treat" label={t('portrait.treats', { count: formatNumber(walk.treatsEarned) })} />
               </View>
             )}
           </>

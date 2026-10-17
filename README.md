@@ -61,6 +61,7 @@ React Native / Expo app, no backend yet — everything runs and persists locally
 - **src/components/buddy** — `BuddyAvatar` rig, `BuddyAppearancePicker` and the pure mood/trick logic
 - **src/components/den** — the Den yard scene (hero of the Den screen) and its building sprites
 - **src/ui** — clay UI kit (Screen, Card, Button, Chip, ListRow…), game-feel primitives and design `tokens`; see its README
+- **src/i18n** — English/German dictionaries (flat keys, `{name}` placeholders, `.one`/`.other` plurals), `t()`/`tPlural()`, locale store (`useLocale`) and `Intl` formatters; language is chosen in Settings (System/Deutsch/English), persisted by `SettingsRepository`. Glossary at the top of `de.ts`
 - **src/art** — typed registry of pre-rendered sprites (`artOr` falls back to a drawn placeholder)
 - **assets/art** — Blender-rendered PNG sprites (buildings, icons, backdrops); see its README for names
 - **assets/buddy** — Buddy's layered PNG parts per coat plus `manifest.json` of pivots

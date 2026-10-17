@@ -23,6 +23,7 @@ import { calendarDayGap } from '../utils/manualWalkLog';
 import { evaluateSomewhereWild, EvaluateSomewhereWildDeps } from './SomewhereWildCard';
 import { TerritoryPortrait } from './TerritoryPortrait';
 import { DoorstepMenu } from './DoorstepMenu';
+import { formatNumber, t, tPlural } from '../i18n';
 
 // "The Doorstep" (openspec/changes/home-dashboard) — the app's persistent
 // home/overview screen (design.md Decisions 8-13, folded in 2026-08-22 after
@@ -124,7 +125,6 @@ export interface AwayStripLine {
 // Math.random() is fine here (unlike the wild-cluster copy's variant
 // rotation, which needs determinism to avoid "does the marker jump around").
 const ANCHOR_LINE_CHANCE = 0.25;
-const ANCHOR_LINE_TEXT = "Buddy's Bakery bakes faster the more he walks.";
 
 /**
  * Resolves the away-strip's 0-3 (fresh-open) or 0-1 (same-day-reopen) lines,
@@ -142,17 +142,17 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
   }
 
   if (deps.pendingDenAchievements.length > 0) {
-    candidates.push({ text: `Earned: ${ACHIEVEMENTS[deps.pendingDenAchievements[0]].name}.`, kind: 'achievement' });
+    candidates.push({ text: t('doorstep.earned', { name: ACHIEVEMENTS[deps.pendingDenAchievements[0]].name }), kind: 'achievement' });
   }
 
   if (deps.showOverflowLine) {
-    candidates.push({ text: `The Doghouse is full — ${Math.floor(deps.treats)} treats waiting.`, kind: 'treats' });
+    candidates.push({ text: tPlural('doorstep.overflow', Math.floor(deps.treats)), kind: 'treats' });
   } else if (deps.accruedDelta > 0) {
     candidates.push({
       text:
         sessionKind === 'same-day-reopen'
-          ? `+${Math.floor(deps.accruedDelta)} in the bowl.`
-          : `The Treat Bakery baked ${Math.floor(deps.accruedDelta)} treats.`,
+          ? t('doorstep.bowl', { count: formatNumber(Math.floor(deps.accruedDelta)) })
+          : tPlural('doorstep.bakerBaked', Math.floor(deps.accruedDelta)),
       kind: 'treats',
     });
   }
@@ -165,7 +165,7 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
   // one-time event, not filler).
   if (deps.justRevealedTerritoryIncome) {
     candidates.push({
-      text: `🌍 Buddy's territories bring home ≈${Math.round(deps.territoryIncomeRate ?? 0)} treats an hour`,
+      text: t('doorstep.territoryIncomeBuddy', { rate: formatNumber(Math.round(deps.territoryIncomeRate ?? 0)) }),
       kind: 'territory-income',
     });
   }
@@ -176,21 +176,24 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
 
   const lines = candidates.slice(0, 3);
   if (lines.length === 0 && Math.random() < ANCHOR_LINE_CHANCE) {
-    lines.push({ text: ANCHOR_LINE_TEXT, kind: 'anchor' });
+    lines.push({ text: t('doorstep.anchorLine'), kind: 'anchor' });
   }
   return lines;
 }
 
 // Game-master-authored greeting copy (not invented here) — the exact lines
-// provided for this pass. "{dog}" substitutes dogDisplayName(dogName),
-// matching every other templated line in this codebase.
-const FIRST_OPEN_GREETINGS = ['Morning, {dog}.', '{dog} heard the door.'];
-const LONG_ABSENCE_GREETINGS = ["{dog}'s been holding the fort."];
+// provided for this pass, now in src/i18n under `doorstep.greeting.<flavor>.<n>`.
+// "{dog}" substitutes dogDisplayName(dogName), matching every other templated
+// line in this codebase. Each flavor must have exactly this many numbered
+// keys in every dictionary (the key-parity test guards the dictionaries).
+const FIRST_OPEN_GREETING_COUNT = 2;
+const LONG_ABSENCE_GREETING_COUNT = 1;
 
 export function pickGreeting(flavor: GreetingFlavor, dogName: string | null): string {
-  const pool = flavor === 'first-open' ? FIRST_OPEN_GREETINGS : LONG_ABSENCE_GREETINGS;
-  const template = pool[Math.floor(Math.random() * pool.length)];
-  return template.replace('{dog}', dogDisplayName(dogName));
+  const count = flavor === 'first-open' ? FIRST_OPEN_GREETING_COUNT : LONG_ABSENCE_GREETING_COUNT;
+  const flavorKey = flavor === 'first-open' ? 'firstOpen' : 'longAbsence';
+  const n = Math.floor(Math.random() * count) + 1;
+  return t(`doorstep.greeting.${flavorKey}.${n}`, { dog: dogDisplayName(dogName) });
 }
 
 interface DoorstepScreenProps {
@@ -300,8 +303,8 @@ export function DoorstepScreen({
   const ready = !!denState && !!session && buddyAppearanceLoaded;
   useEffect(() => {
     if (!greetingPlaying || !ready) return;
-    const t = setTimeout(() => setGreetingPlaying(false), BUDDY_GREETING_MS);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setGreetingPlaying(false), BUDDY_GREETING_MS);
+    return () => clearTimeout(timer);
   }, [greetingPlaying, ready]);
 
   // Per-mount live fetch, deliberately (design.md Decision 10's "what stays
@@ -328,7 +331,7 @@ export function DoorstepScreen({
   if (!ready) {
     return (
       <Screen>
-        <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.gettingReady')} />
       </Screen>
     );
   }
@@ -362,7 +365,7 @@ export function DoorstepScreen({
             <PressableScale
               style={styles.menuButton}
               onPress={() => setIsMenuOpen(true)}
-              accessibilityLabel="More options"
+              accessibilityLabel={t('doorstep.moreOptions')}
               hitSlop={6}
             >
               <ArtImage art="icon-settings" size={28} />
@@ -379,7 +382,7 @@ export function DoorstepScreen({
             )
           )}
           <Text style={textStyle('h2')} numberOfLines={1}>
-            {dog} · Level {level}
+            {t('doorstep.dogLevel', { dog, level })}
             {title ? ` · ${title}` : ''}
           </Text>
         </DoorstepScene>
@@ -388,16 +391,16 @@ export function DoorstepScreen({
       <View style={styles.body}>
         <FadeSlideIn style={styles.fadeGroup}>
           {/* Soft glow only on a fresh open; stops by itself after ~10s or on first touch. */}
-          <Button label="Start Walk" icon="icon-paw" onPress={onStartWalk} pulse={session.kind === 'fresh-open'} />
+          <Button label={t('doorstep.startWalk')} icon="icon-paw" onPress={onStartWalk} pulse={session.kind === 'fresh-open'} />
           <Text style={[textStyle('small'), styles.centered]}>
-            {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
+            {t('dog.bringsHome', { dog, count: formatNumber(buddyTreatsPerWalk(state.level, state.sniffGardenLevel)) })}
           </Text>
         </FadeSlideIn>
 
         {rangeEmpty ? (
           <Card tint="meadow" style={styles.emptyPortrait}>
             <Text style={[textStyle('small'), styles.centered]}>
-              {dog} hasn't marked out any ground yet — let's find some.
+              {t('doorstep.emptyRange', { dog })}
             </Text>
           </Card>
         ) : (
@@ -424,8 +427,8 @@ export function DoorstepScreen({
               Stats & Badges only. No Den row here: the tease card below is
               already its entry point. */}
           <View>
-            <ListRow title="Past Walks" icon="icon-walks" onPress={onOpenHistory} />
-            <ListRow title="Stats & Badges" icon="icon-badge" onPress={onOpenStats} />
+            <ListRow title={t('doorstep.pastWalks')} icon="icon-walks" onPress={onOpenHistory} />
+            <ListRow title={t('doorstep.statsBadges')} icon="icon-badge" onPress={onOpenStats} />
           </View>
 
           {tease && (
@@ -435,7 +438,7 @@ export function DoorstepScreen({
                   <View style={styles.denTeaseRow}>
                     <ArtImage art="icon-den" size={40} />
                     <Text style={[textStyle('body'), styles.denTeaseText]}>
-                      {Math.floor(state.treats)} / {cap} treats · Upgrade for {tease.cost}
+                      {t('doorstep.denTease', { treats: formatNumber(Math.floor(state.treats)), cap: formatNumber(cap), cost: formatNumber(tease.cost) })}
                     </Text>
                   </View>
                 </View>
@@ -450,7 +453,7 @@ export function DoorstepScreen({
               which is only true on the one reveal-moment open). */}
           {denState.territoryIncomeRevealed && (
             <Text style={[textStyle('small'), styles.centered]}>
-              🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate ?? 0)} treats an hour
+              {t('doorstep.territoryIncome', { dog, rate: formatNumber(Math.round(territoryIncomeRate ?? 0)) })}
             </Text>
           )}
         </FadeSlideIn>

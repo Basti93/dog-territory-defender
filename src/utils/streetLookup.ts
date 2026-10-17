@@ -15,6 +15,7 @@ import { NewGroundEvent } from '../storage/HomeRangeRepository';
 import { WalkRepository } from '../storage/WalkRepository';
 import { Location as GpsLocation } from '../types';
 import { WildCluster } from './wildSpot';
+import { t } from '../i18n';
 
 /** Recent walk history is scanned at most this deep (nearest-in-time first) before giving up — design.md Decision 3 Fix 1's bound on the fallback scan's cost. */
 const MAX_FALLBACK_WALKS_SCANNED = 20;
@@ -233,7 +234,7 @@ export async function resolveTerritoryName(
   const dog = dogDisplayName(dogName);
   const place = await resolveLabelForPoint(anchorLat, anchorLon);
   if (place) {
-    return `${dog}'s ${place} Range`;
+    return t('territory.name.withPlace', { dog, place });
   }
-  return `${dog}'s New Range`;
+  return t('territory.name.fallback', { dog });
 }

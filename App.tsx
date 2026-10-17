@@ -63,6 +63,8 @@ import { resolveDoorstepOverflowLine } from './src/notifications/notificationDec
 import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from './src/notifications/scheduler';
 import { SettingsScreen } from './src/components/SettingsScreen';
 import { log } from './src/utils/log';
+import { createSqliteSettingsRepository } from './src/storage/sqliteSettingsRepository';
+import { formatDistanceKm, getDeviceLocale, LocalePreference, resolveLocale, setLocale, t, useLocale } from './src/i18n';
 
 const walkRepository = createSqliteWalkRepository();
 const homeRangeRepository = createSqliteHomeRangeRepository();
@@ -71,15 +73,37 @@ const denEconomyRepository = createSqliteDenEconomyRepository();
 const personalStatsRepository = createSqlitePersonalStatsRepository();
 const notificationRepository = createSqliteNotificationRepository();
 const buddyAppearanceRepository = createSqliteBuddyAppearanceRepository();
+const settingsRepository = createSqliteSettingsRepository();
+
+// Loads and applies the saved language as early as possible (module import
+// time). Everything that produces copy at launch (greeting, away-strip lines,
+// territory names, notifications) awaits this first, and the render gate
+// below waits for it too, so no screen ever flashes in the wrong language.
+const localePreferenceLoaded: Promise<LocalePreference> = settingsRepository
+  .getLocalePreference()
+  .catch((): LocalePreference => 'system')
+  .then((pref) => {
+    setLocale(resolveLocale(pref, getDeviceLocale()));
+    return pref;
+  });
 
 // Keep the native splash up until the fonts gate opens, so no blank frame flashes.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
   const { loaded: fontsLoaded } = useAppFonts();
+  useLocale(); // re-render every screen when the language switches
+  const [localePreference, setLocalePreference] = useState<LocalePreference>('system');
+  const [localeReady, setLocaleReady] = useState(false);
   useEffect(() => {
-    if (fontsLoaded) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded]);
+    localePreferenceLoaded.then((pref) => {
+      setLocalePreference(pref);
+      setLocaleReady(true);
+    });
+  }, []);
+  useEffect(() => {
+    if (fontsLoaded && localeReady) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, localeReady]);
   const [appState, setAppState] = useState<AppStateType>({
     walk: null,
     isTracking: false,
@@ -191,7 +215,7 @@ export default function App() {
       if (!hasPermission) {
         setAppState((prev) => ({
           ...prev,
-          error: 'Location permission denied',
+          error: t('app.locationDenied'),
         }));
       }
     })();
@@ -204,7 +228,8 @@ export default function App() {
   // their own DenEconomyState flags), safe to call on every app load. See
   // storage/homeRangeMigration.ts / storage/territoryMigration.ts.
   useEffect(() => {
-    runHomeRangeMigrationIfNeeded({ walkRepository, homeRangeRepository, denEconomyRepository })
+    localePreferenceLoaded
+      .then(() => runHomeRangeMigrationIfNeeded({ walkRepository, homeRangeRepository, denEconomyRepository }))
       .then(() =>
         runTerritoryMigrationIfNeeded({
           homeRangeRepository,
@@ -274,6 +299,7 @@ export default function App() {
   // overflow in one app-open (see src/notifications/__tests__/earnedTrigger.test.ts).
   useEffect(() => {
     (async () => {
+      await localePreferenceLoaded; // copy below (greeting, strip lines, alerts) must use the saved language
       const state = await denEconomyRepository.getState();
       const previousTick = state.lastTickAt;
       // worldMass (openspec/changes/territories/design.md Decision 6) is a
@@ -299,7 +325,7 @@ export default function App() {
         // Accepted verbatim copy shape (openspec/changes/virtual-dog-companion) —
         // distinct from the normal per-walk level-up beat, since no walk
         // earned this jump (a curve retune did). See design.md task 7.2/7.3.
-        Alert.alert(`${dogDisplayName(reconciled.dogName)} caught up — Level ${caughtUpToLevel}`);
+        Alert.alert(t('app.caughtUp', { dog: dogDisplayName(reconciled.dogName), level: caughtUpToLevel }));
       }
 
       const delta = accrued.treats - state.treats;
@@ -407,7 +433,7 @@ export default function App() {
   const startWalk = async () => {
     const initialLoc = await getInitialLocation();
     if (!initialLoc) {
-      Alert.alert('Error', 'Could not get initial location');
+      Alert.alert(t('app.errorTitle'), t('app.noInitialLocation'));
       return;
     }
 
@@ -656,14 +682,14 @@ export default function App() {
     const startTime = startTimeForMissedWalk(timing, now);
 
     if (!isWithinManualLogWindow(startTime, now)) {
-      Alert.alert('Too far back', 'Missed walks can only be logged from today or yesterday.');
+      Alert.alert(t('app.tooFarBackTitle'), t('app.tooFarBackMessage'));
       return;
     }
 
     const denStateBefore = await denEconomyRepository.getState();
     const quota = evaluateManualLogQuota(denStateBefore, now, !!refreshRouteWalkId);
     if (!quota.allowed) {
-      Alert.alert('Already logged today', "You've already logged the most missed walks we allow for one day.");
+      Alert.alert(t('app.alreadyLoggedTitle'), t('app.alreadyLoggedMessage'));
       return;
     }
 
@@ -770,10 +796,25 @@ export default function App() {
     });
   };
 
+  const changeLocalePreference = async (pref: LocalePreference) => {
+    setLocalePreference(pref);
+    setLocale(resolveLocale(pref, getDeviceLocale()));
+    try {
+      await settingsRepository.saveLocalePreference(pref);
+    } catch (err) {
+      log('SETTINGS_LOCALE_SAVE_ERROR', { error: String(err) });
+    }
+    // Re-plan so already-scheduled reminders pick up the new language.
+    await checkAndScheduleWalkReminder({ walkRepository, notificationRepository }).catch((err) =>
+      log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+    );
+  };
+
   const distance = appState.walk ? cumulativeDistance(appState.walk.locations) / 1000 : 0;
 
-  // Fonts gate: first render waits so no screen flashes the system font.
-  if (!fontsLoaded) return null;
+  // Fonts + language gate: first render waits so no screen flashes the system
+  // font or the wrong language.
+  if (!fontsLoaded || !localeReady) return null;
 
   if (needsDogName) {
     return (
@@ -1035,6 +1076,8 @@ export default function App() {
               dogName={dogName}
               buddyAppearance={buddyAppearance}
               onSaveAppearance={saveAppearance}
+              localePreference={localePreference}
+              onChangeLocalePreference={changeLocalePreference}
               onClose={() => {
                 setShowSettings(false);
                 setShowDoorstep(true);
@@ -1122,17 +1165,17 @@ export default function App() {
         />
 
         <View style={styles.stats}>
-          <Text style={[textStyle('min'), styles.statLabel]}>Distance</Text>
-          <Text style={textStyle('body')}>{distance.toFixed(2)} km</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>{t('app.distance')}</Text>
+          <Text style={textStyle('body')}>{formatDistanceKm(distance)}</Text>
 
-          <Text style={[textStyle('min'), styles.statLabel]}>Points</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>{t('app.points')}</Text>
           <Text style={textStyle('body')}>{appState.walk?.locations.length || 0}</Text>
 
-          <Text style={[textStyle('min'), styles.statLabel]}>Treats</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>{t('den.treats')}</Text>
           <Text style={textStyle('body')}>{treats !== null ? Math.floor(treats) : '…'}</Text>
 
-          <Text style={[textStyle('min'), styles.statLabel]}>Level</Text>
-          <Text style={textStyle('body')}>{level !== null ? `${dogDisplayName(dogName)} — Level ${level}` : '…'}</Text>
+          <Text style={[textStyle('min'), styles.statLabel]}>{t('stats.level')}</Text>
+          <Text style={textStyle('body')}>{level !== null ? t('den.dogLevel', { dog: dogDisplayName(dogName), level }) : '…'}</Text>
         </View>
 
         <View style={styles.buttons}>
@@ -1143,7 +1186,7 @@ export default function App() {
             // lives one tap away on the Doorstep, and the rest moved to the
             // Doorstep's direct-access row or burger menu. All that's left
             // here is a way back to the Doorstep itself.
-            <Button label="← Back to Doorstep" variant="secondary" onPress={() => setShowDoorstep(true)} />
+            <Button label={t('app.backToDoorstep')} variant="secondary" onPress={() => setShowDoorstep(true)} />
           ) : (
             <>
               {/* Two-way terminal action model (design.md's Technical Split
@@ -1154,14 +1197,14 @@ export default function App() {
                   explicit non-goal (design.md Decisions 8-13's own framing:
                   "the live map + Finish Walk/Cancel screen... is never
                   interrupted by or dismissible to the Doorstep"). */}
-              <Button label="Finish Walk" onPress={finishWalk} />
-              <Button label="Cancel" variant="secondary" labelColor={tokens.warm} onPress={resetWalk} />
+              <Button label={t('app.finishWalk')} onPress={finishWalk} />
+              <Button label={t('common.cancel')} variant="secondary" labelColor={tokens.warm} onPress={resetWalk} />
             </>
           )}
 
           {appState.walk && !appState.isTracking && appState.walk.closed && (
             <Button
-              label="New Walk"
+              label={t('app.newWalk')}
               onPress={() => {
                 resetWalk();
                 // Once the idle screen's own Start Walk button is gone

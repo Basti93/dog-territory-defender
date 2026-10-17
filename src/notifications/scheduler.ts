@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { log } from '../utils/log';
 import { TimeOfDayBucket } from './notificationDecision';
 import { reminderDayLabel } from './walkReminderDecision';
+import { t } from '../i18n';
 
 // The actual expo-notifications wiring — permission request + scheduling.
 // Deliberately kept separate from notificationDecision.ts's pure logic so
@@ -45,12 +46,12 @@ const WALK_REMINDER_ID_PREFIX = 'walk-reminder-';
 export async function ensureAndroidChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(WALK_REMINDER_CHANNEL_ID, {
-    name: 'Walk reminder',
+    name: t('notification.channel.walkReminder'),
     importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(DEN_OVERFLOW_CHANNEL_ID, {
-    name: 'Den treats',
+    name: t('notification.channel.den'),
     importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
   });

@@ -7,7 +7,7 @@ import {
   recordWalkReminderScheduled,
   hasWalkOnDay,
   planReminderDates,
-  WALK_REMINDER_BODY,
+  walkReminderBody,
 } from './walkReminderDecision';
 import { cancelScheduledWalkReminder, requestNotificationPermission, scheduleWalkReminderWindow } from './scheduler';
 
@@ -73,6 +73,6 @@ export async function checkAndScheduleWalkReminder(deps: WalkReminderDeps, now: 
     return;
   }
 
-  await scheduleWalkReminderWindow(dates, WALK_REMINDER_BODY);
+  await scheduleWalkReminderWindow(dates, walkReminderBody());
   await notificationRepository.saveState(recordWalkReminderScheduled(reconciled, dates[0].getTime()));
 }

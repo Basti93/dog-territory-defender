@@ -7,6 +7,7 @@ import { BuildingId, BuildingLevel, artOr, buildingArt } from '../../art/artAsse
 import { BuddyAvatar } from '../buddy';
 import { BuddyMood } from '../buddy/buddyMood';
 import { ArtImage, Badge, PressableScale, palette } from '../../ui';
+import { t } from '../../i18n';
 
 // The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
 // Presentation only; the parent owns all state. It is the hero of the Den, so
@@ -59,10 +60,11 @@ const PLACEMENT: Record<YardBuildingKey, { cx: number; baseTop: number }> = {
   sniffGarden: { cx: 0.8, baseTop: 0.9 },
 };
 
-const BUILDING_NAME: Record<YardBuildingKey, string> = {
-  doghouse: 'Doghouse',
-  bakery: 'Treat Bakery',
-  sniffGarden: 'Sniff Garden',
+// i18n keys (shared with DenScreen's building cards), resolved at render time.
+const BUILDING_NAME_KEY: Record<YardBuildingKey, string> = {
+  doghouse: 'den.building.doghouse.name',
+  bakery: 'den.building.bakery.name',
+  sniffGarden: 'den.building.sniffGarden.name',
 };
 
 /** yard-ground-wide.png is a 2:1 hill (2048x1024) filling everything under its horizon edge to edge; measured horizon peaks ~26% from the image top (centre), ~39% at the sides. */
@@ -267,7 +269,7 @@ function BuildingSprite({
   return (
     <View style={[styles.sprite, { left, bottom, width: size, height: size }]} pointerEvents="box-none">
       <Animated.View style={{ transform: [{ scale }] }}>
-        <PressableScale onPress={onPress} accessibilityLabel={`Show the ${BUILDING_NAME[building.key]} upgrade`}>
+        <PressableScale onPress={onPress} accessibilityLabel={t('den.showUpgrade', { name: t(BUILDING_NAME_KEY[building.key]) })}>
           <ArtImage art={buildingArt(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
         </PressableScale>
       </Animated.View>

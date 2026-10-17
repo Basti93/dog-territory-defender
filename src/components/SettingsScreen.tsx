@@ -12,6 +12,7 @@ import { WalkRepository } from '../storage/WalkRepository';
 import * as Notifications from 'expo-notifications';
 import { cancelScheduledWalkReminder, requestNotificationPermission } from '../notifications/scheduler';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
+import { formatTime, LocalePreference, t, useLocale } from '../i18n';
 
 // This app's first Settings screen (openspec/changes/walk-reminder/design.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
@@ -33,13 +34,24 @@ interface SettingsScreenProps {
   buddyAppearance: BuddyAppearance;
   /** Persists the new look and updates App state. */
   onSaveAppearance: (appearance: BuddyAppearance) => void | Promise<void>;
+  /** The player's saved language choice ('system' follows the device). */
+  localePreference: LocalePreference;
+  /** Applies the language immediately, persists it, and replans the walk reminder (App.tsx). */
+  onChangeLocalePreference: (pref: LocalePreference) => void | Promise<void>;
 }
 
-function formatTime(hour: number, minute: number): string {
-  const period = hour < 12 ? 'AM' : 'PM';
-  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${minute.toString().padStart(2, '0')} ${period}`;
+function formatReminderTime(hour: number, minute: number): string {
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return formatTime(d);
 }
+
+// Option labels are autonyms (each language names itself), so only "System" is a translated key.
+const LANGUAGE_OPTIONS: { value: LocalePreference; labelKey: string | null; label: string }[] = [
+  { value: 'system', labelKey: 'settings.language.system', label: 'System' },
+  { value: 'de', labelKey: null, label: 'Deutsch' },
+  { value: 'en', labelKey: null, label: 'English' },
+];
 
 export function SettingsScreen({
   onClose,
@@ -48,7 +60,10 @@ export function SettingsScreen({
   dogName,
   buddyAppearance,
   onSaveAppearance,
+  localePreference,
+  onChangeLocalePreference,
 }: SettingsScreenProps) {
+  useLocale(); // re-render when the language switches
   const [loaded, setLoaded] = useState(false);
   const [editingLook, setEditingLook] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -145,7 +160,7 @@ export function SettingsScreen({
   if (!loaded) {
     return (
       <Screen>
-        <BuddyLoading appearance={buddyAppearance} text="Getting things ready…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.gettingReady')} />
       </Screen>
     );
   }
@@ -154,7 +169,7 @@ export function SettingsScreen({
     return (
       <Screen padded={false}>
         <Header
-          title={`${dogDisplayName(dogName)}'s look`}
+          title={t('settings.lookTitle', { dog: dogDisplayName(dogName) })}
           icon="icon-paw"
           onBack={() => setEditingLook(false)}
           style={styles.lookHeader}
@@ -174,14 +189,14 @@ export function SettingsScreen({
 
   return (
     <Screen backdrop="sky">
-      <Header title="Settings" icon="icon-settings" onBack={onClose} />
+      <Header title={t('menu.settings')} icon="icon-settings" onBack={onClose} />
 
       <Card tint="sky" style={styles.reminderCard}>
         <View style={styles.row}>
           <View style={styles.rowText}>
-            <Text style={textStyle('h2')}>Daily walk reminder</Text>
+            <Text style={textStyle('h2')}>{t('settings.reminder.title')}</Text>
             <Text style={[textStyle('small'), styles.rowSubtitle]}>
-              A gentle nudge at a time you choose, whenever a walk hasn't happened yet that day.
+              {t('settings.reminder.subtitle')}
             </Text>
           </View>
           <Switch value={enabled} onValueChange={handleToggle} trackColor={{ true: tokens.green }} />
@@ -190,30 +205,50 @@ export function SettingsScreen({
         {permissionDenied && (
           <View style={styles.hintBox}>
             <Text style={textStyle('small')}>
-              Notifications are off for this app in Android settings. Switch them on and your reminder can say hello.
+              {t('settings.reminder.permissionOff')}
             </Text>
-            <Button label="Open settings" variant="secondary" onPress={() => Linking.openSettings()} />
+            <Button label={t('settings.openSettings')} variant="secondary" onPress={() => Linking.openSettings()} />
           </View>
         )}
 
         {enabled && hour !== null && minute !== null && (
           <PressableScale style={styles.timeRow} onPress={openPicker}>
-            <Text style={textStyle('body')}>Reminder time</Text>
-            <Text style={[textStyle('h2'), { color: palette.greenText }]}>{formatTime(hour, minute)}</Text>
+            <Text style={textStyle('body')}>{t('settings.reminder.time')}</Text>
+            <Text style={[textStyle('h2'), { color: palette.greenText }]}>{formatReminderTime(hour, minute)}</Text>
           </PressableScale>
         )}
         <Text style={[textStyle('small'), styles.rowSubtitle]}>
-          On some phones (Samsung, Xiaomi) battery optimisation can silence reminders — set the app to 'Unrestricted'.
+          {t('settings.reminder.battery')}
         </Text>
       </Card>
 
       <ListRow
         icon="icon-paw"
-        title={`Change ${dogDisplayName(dogName)}'s look`}
-        subtitle="Edit"
+        title={t('settings.changeLook', { dog: dogDisplayName(dogName) })}
+        subtitle={t('settings.edit')}
         onPress={() => setEditingLook(true)}
         style={styles.lookRow}
       />
+
+      <Card style={styles.languageCard}>
+        <Text style={textStyle('h2')}>Language / Sprache</Text>
+        <View style={styles.languageOptions}>
+          {LANGUAGE_OPTIONS.map((option) => {
+            const selected = localePreference === option.value;
+            const label = option.labelKey ? t(option.labelKey) : option.label;
+            return (
+              <PressableScale
+                key={option.value}
+                style={[styles.languageChip, selected && styles.languageChipSelected]}
+                onPress={() => onChangeLocalePreference(option.value)}
+                accessibilityLabel={label}
+              >
+                <Text style={[textStyle('small'), selected && { color: palette.greenText }]}>{label}</Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </Card>
 
 
       {Platform.OS === 'ios' && iosPickerDate && (
@@ -229,9 +264,9 @@ export function SettingsScreen({
                 }}
               />
               <View style={styles.iosPickerActions}>
-                <Button label="Cancel" variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPickerDate(null)} />
+                <Button label={t('common.cancel')} variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPickerDate(null)} />
                 <Button
-                  label="Done"
+                  label={t('common.done')}
                   style={styles.iosPickerButton}
                   onPress={() => {
                     const picked = iosPickerDate;
@@ -250,6 +285,18 @@ export function SettingsScreen({
 
 const styles = StyleSheet.create({
   lookRow: { marginTop: spacing.lg },
+  languageCard: { marginTop: spacing.lg, gap: spacing.md },
+  languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  languageChip: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.chip,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    backgroundColor: palette.background,
+  },
+  languageChipSelected: { borderColor: tokens.green, backgroundColor: palette.meadowTint },
   reminderCard: { gap: spacing.md },
   hintBox: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },

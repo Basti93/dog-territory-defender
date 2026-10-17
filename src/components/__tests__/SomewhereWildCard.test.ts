@@ -4,6 +4,10 @@ import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkReposito
 import { Location } from '../../types';
 import { CELLS_PER_STREET, cellKey } from '../../utils/grid';
 import { dayPhrase, evaluateSomewhereWild, INITIAL_WILD_CLUSTER_VARIANT_STATE } from '../SomewhereWildCard';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 // streetLookup.ts caches resolved labels in a module-level Map keyed by
 // anchor cell id / event occurredAt (by design — see its own doc comment).

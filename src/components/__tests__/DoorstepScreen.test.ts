@@ -1,6 +1,10 @@
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { AwayStripDeps, resolveAwayStripLines, resolveDoorstepSession } from '../DoorstepScreen';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const mockReverseGeocodeAsync = jest.fn();
 jest.mock('expo-location', () => ({

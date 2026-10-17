@@ -14,6 +14,10 @@ import {
   reconcileBuddyLevelCatchUp,
   upgradeBuilding,
 } from '../denEconomy';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const NOW = 1_700_000_000_000;
 const HOUR = 1000 * 60 * 60;

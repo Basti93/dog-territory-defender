@@ -12,6 +12,7 @@ import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyAvatar } from './buddy';
 import { EmptyState, Header, Screen } from '../ui';
+import { t } from '../i18n';
 
 interface TerritoriesScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -70,26 +71,26 @@ export function TerritoriesScreen({
 
   const handleRename = async (territoryId: TerritoryId, newName: string) => {
     await territoryRepository.renameTerritory(territoryId, newName);
-    setTerritories((prev) => (prev ? prev.map((t) => (t.id === territoryId ? { ...t, name: newName } : t)) : prev));
+    setTerritories((prev) => (prev ? prev.map((x) => (x.id === territoryId ? { ...x, name: newName } : x)) : prev));
   };
 
   if (!territories || !cellsByTerritory) {
     return (
       <Screen>
-        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
       </Screen>
     );
   }
 
   const titles = assignTerritoryTitles(territories, cellsByTerritory, Date.now());
 
-  const header = <Header title="Territories" icon="icon-pin" onBack={onClose} />;
+  const header = <Header title={t('territories.title')} icon="icon-pin" onBack={onClose} />;
 
   if (territories.length === 0) {
     return (
       <Screen backdrop="sky">
         {header}
-        <EmptyState title="No territories claimed yet" message="Go for a walk to start your first one.">
+        <EmptyState title={t('territories.empty.title')} message={t('territories.empty.message')}>
           <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
         </EmptyState>
       </Screen>

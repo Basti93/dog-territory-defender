@@ -39,11 +39,13 @@ import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { streetsKnown } from '../utils/grid';
+import { formatNumber, t, tPlural } from '../i18n';
 
-const BUILDING_DISPLAY: Record<BuildingKey, { name: string; sub: string; art: 'doghouse' | 'bakery' | 'garden' }> = {
-  doghouse: { name: 'Doghouse', sub: 'Treat storage', art: 'doghouse' },
-  bakery: { name: 'Treat Bakery', sub: 'Passive treats', art: 'bakery' },
-  sniffGarden: { name: 'Sniff Garden', sub: 'Helps Buddy find more on a walk', art: 'garden' },
+// nameKey/subKey are i18n keys, resolved with t() at render time.
+const BUILDING_DISPLAY: Record<BuildingKey, { nameKey: string; subKey: string; art: 'doghouse' | 'bakery' | 'garden' }> = {
+  doghouse: { nameKey: 'den.building.doghouse.name', subKey: 'den.building.doghouse.sub', art: 'doghouse' },
+  bakery: { nameKey: 'den.building.bakery.name', subKey: 'den.building.bakery.sub', art: 'bakery' },
+  sniffGarden: { nameKey: 'den.building.sniffGarden.name', subKey: 'den.building.sniffGarden.sub', art: 'garden' },
 };
 
 const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
@@ -61,17 +63,17 @@ const EXCITED_AFTER_UPGRADE_MS = 3000;
 function effectText(building: BuildingKey, level: number, state: DenEconomyState): string {
   switch (building) {
     case 'doghouse':
-      return `Storage: ${storageCap(level, state.level, state.bakeryLevel, state.sniffGardenLevel)} treats`;
+      return t('den.effect.storage', { count: formatNumber(storageCap(level, state.level, state.bakeryLevel, state.sniffGardenLevel)) });
     case 'bakery':
-      return `+${passiveTreatsPerHour(level, state.level).toFixed(1)} treats/hour`;
+      return t('den.effect.passive', { rate: formatNumber(passiveTreatsPerHour(level, state.level), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
     case 'sniffGarden': {
       const withGarden = buddyTreatsPerWalk(state.level, level);
       const withoutGarden = buddyPayout(state.level);
       const extra = withGarden - withoutGarden;
       if (extra < 1) {
-        return "Buddy's nose is just getting warmed up";
+        return t('den.effect.sniffWarmup');
       }
-      return `Buddy sniffs out ${extra} more treat${extra === 1 ? '' : 's'} a walk`;
+      return tPlural('den.effect.sniffExtra', extra);
     }
   }
 }
@@ -170,7 +172,7 @@ export function DenScreen({
   if (!state) {
     return (
       <Screen>
-        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
       </Screen>
     );
   }
@@ -199,8 +201,8 @@ export function DenScreen({
     if ('error' in result) {
       setMessage(
         result.error === 'max-level'
-          ? `${BUILDING_DISPLAY[building].name} is already at max level!`
-          : 'Not enough treats yet — keep walking!'
+          ? t('den.maxLevelMessage', { name: t(BUILDING_DISPLAY[building].nameKey) })
+          : t('den.notEnoughTreats')
       );
       return;
     }
@@ -245,13 +247,13 @@ export function DenScreen({
       <ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: spacing.xxl + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {showOverflowNotice && (
           <Card tint="warm">
-            <Text style={textStyle('body')}>Your Treat Bakery filled up while you were away! 🦴</Text>
+            <Text style={textStyle('body')}>{t('den.overflowNotice')}</Text>
           </Card>
         )}
 
         {achievementNotices.map((id, i) => (
           <Card key={`${id}-${i}`} tint="warm">
-            <Text style={textStyle('body')}>🏅 New badge: {ACHIEVEMENTS[id].copyTitle}</Text>
+            <Text style={textStyle('body')}>{t('den.newBadge', { title: ACHIEVEMENTS[id].copyTitle })}</Text>
           </Card>
         ))}
 
@@ -260,20 +262,22 @@ export function DenScreen({
             <ArtImage art="icon-treat" size={36} />
             <AnimatedNumber
               value={Math.floor(state.treats)}
-              format={(n) => `${n} / ${cap}`}
+              format={(n) => `${formatNumber(n)} / ${formatNumber(cap)}`}
               style={textStyle('h1')}
             />
             {accrualPop > 0 && <TreatPop amount={accrualPop} style={styles.accrualPop} />}
           </View>
-          <Text style={[textStyle('small'), { color: palette.muted }]}>Treats</Text>
+          <Text style={[textStyle('small'), { color: palette.muted }]}>{t('den.treats')}</Text>
         </View>
 
         {tease && (
           <Card tint="warm">
-            <Text style={[textStyle('small'), { color: palette.muted }]}>Next up in the Den</Text>
+            <Text style={[textStyle('small'), { color: palette.muted }]}>{t('den.nextUp')}</Text>
             <Text style={textStyle('h2')}>
-              {BUILDING_DISPLAY[tease.building].name} — {tease.cost} treats
-              {tease.affordable ? ' (you can afford it now!)' : ''}
+              {t(tease.affordable ? 'den.teaseAffordable' : 'den.tease', {
+                name: t(BUILDING_DISPLAY[tease.building].nameKey),
+                cost: formatNumber(tease.cost),
+              })}
             </Text>
           </Card>
         )}
@@ -299,23 +303,23 @@ export function DenScreen({
                 <View style={styles.cardRow}>
                   <ArtImage art={buildingArt(display.art, artTierForLevel(level))} size={80} />
                   <View style={styles.cardBody}>
-                    <Text style={textStyle('h2')}>{display.name}</Text>
-                    <Text style={[textStyle('small'), { color: palette.muted }]}>{display.sub}</Text>
+                    <Text style={textStyle('h2')}>{t(display.nameKey)}</Text>
+                    <Text style={[textStyle('small'), { color: palette.muted }]}>{t(display.subKey)}</Text>
                     <Text style={[textStyle('small'), styles.cardEffect]}>
-                      Level {level} — {effectText(building, level, state)}
+                      {t('den.levelEffect', { level, effect: effectText(building, level, state) })}
                     </Text>
                     {!maxed ? (
                       <Text style={[textStyle('small'), { color: palette.muted }]}>
-                        Next: {effectText(building, level + 1, state)}
+                        {t('den.nextEffect', { effect: effectText(building, level + 1, state) })}
                       </Text>
                     ) : (
-                      <Text style={[textStyle('small'), { color: palette.greenText }]}>Max level!</Text>
+                      <Text style={[textStyle('small'), { color: palette.greenText }]}>{t('den.maxLevel')}</Text>
                     )}
                   </View>
                 </View>
                 {!maxed && (
                   <Button
-                    label={`${isTease ? 'Next upgrade: ' : 'Upgrade: '}${cost} treats`}
+                    label={t(isTease ? 'den.nextUpgradeButton' : 'den.upgradeButton', { cost: formatNumber(cost ?? 0) })}
                     variant={affordable ? 'primary' : 'secondary'}
                     onPress={() => handleUpgrade(building)}
                     style={styles.cardButton}
@@ -329,11 +333,11 @@ export function DenScreen({
         <Card>
           <View style={styles.levelHeader}>
             <Text style={textStyle('h2')}>
-              {dog} — Level {state.level}
+              {t('den.dogLevel', { dog, level: state.level })}
             </Text>
             {!atMaxLevel && (
               <Text style={[textStyle('small'), { color: palette.muted }]}>
-                {Math.floor(xpIntoLevel)} / {xpForLevel} XP
+                {t('den.xp', { current: formatNumber(Math.floor(xpIntoLevel)), total: formatNumber(xpForLevel) })}
               </Text>
             )}
           </View>
@@ -347,15 +351,14 @@ export function DenScreen({
           </View>
           {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
           <Text style={[textStyle('small'), styles.levelBarRate]}>
-            {dog} brings home {buddyTreatsPerWalk(state.level, state.sniffGardenLevel)} treats a walk.
-            {!atMaxLevel ? ` Next level: ${buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)}.` : ''}
+            {t('dog.bringsHome', { dog, count: formatNumber(buddyTreatsPerWalk(state.level, state.sniffGardenLevel)) })}
+            {!atMaxLevel ? ` ${t('den.nextLevelRate', { count: formatNumber(buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)) })}` : ''}
           </Text>
           {/* "Buddy knows N streets by heart" (openspec/changes/home-range/design.md Decision 5's
               headline stat) — hidden entirely until the Home Range cell count has loaded. */}
           {rangeCellCount !== null && (
             <Text style={[textStyle('small'), styles.levelBarRate]}>
-              {dog} knows {streetsKnown(rangeCellCount)} street
-              {streetsKnown(rangeCellCount) === 1 ? '' : 's'} by heart.
+              {tPlural('den.streetsByHeart', streetsKnown(rangeCellCount), { dog })}
             </Text>
           )}
           {/* Permanent territory-income line (openspec/changes/territories/
@@ -363,7 +366,7 @@ export function DenScreen({
               convention as the streets-known line above. */}
           {state.territoryIncomeRevealed && territoryIncomeRate !== null && (
             <Text style={[textStyle('small'), styles.levelBarRate]}>
-              🌍 {dog}'s territories bring home ≈{Math.round(territoryIncomeRate)} treats an hour.
+              {t('den.territoryIncome', { dog, rate: formatNumber(Math.round(territoryIncomeRate)) })}
             </Text>
           )}
         </Card>
@@ -377,7 +380,7 @@ function HeaderOverlay({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.headerOverlay, { paddingTop: insets.top + spacing.md }]} pointerEvents="box-none">
-      <Header title="The Den" icon="icon-den" onBack={onClose} style={styles.headerRow} />
+      <Header title={t('den.title')} icon="icon-den" onBack={onClose} style={styles.headerRow} />
     </View>
   );
 }

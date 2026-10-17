@@ -10,6 +10,10 @@ import {
   shouldScheduleWalkReminderToday,
 } from '../walkReminderDecision';
 import { defaultNotificationBookkeepingState, NotificationBookkeepingState } from '../notificationDecision';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 // Local calendar days, spaced 24h apart in the same timezone the test runner
 // uses (matches manualWalkLog.ts's own local-day-boundary convention).

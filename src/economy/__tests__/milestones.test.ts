@@ -6,6 +6,10 @@ import {
   shouldFireCliffhanger,
   titleForLevel,
 } from '../milestones';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 describe('milestoneIndexForLevel / isMilestoneLevel', () => {
   it('matches design.md\'s worked milestone sequence (gap(k) = min(k, 8) starting at level 2)', () => {

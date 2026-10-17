@@ -2,6 +2,7 @@ import { BALANCE, BuildingKey } from './balanceConfig';
 import { buddyTreatsPerWalk, passiveTreatsPerHour, storageCap, upgradeCost, xpAwardForWalk, levelForXp } from './formulas';
 import { territoryMass, territoryRate as computeTerritoryRate, TERRITORY_INCOME_DISPLAY_FLOOR } from './territoryEconomy';
 import { calendarDayKey } from '../utils/manualWalkLog';
+import { t } from '../i18n';
 
 export interface DenEconomyState {
   treats: number;
@@ -72,7 +73,7 @@ export function dogDisplayName(dogName: string | null, capitalized: boolean = tr
   if (trimmed) {
     return trimmed;
   }
-  return capitalized ? 'Your dog' : 'your pup';
+  return t(capitalized ? 'dog.fallback.capitalized' : 'dog.fallback.lowercase');
 }
 
 export interface AwardWalkXpResult {

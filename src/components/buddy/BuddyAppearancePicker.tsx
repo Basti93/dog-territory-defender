@@ -17,6 +17,7 @@ import {
 } from '../../buddy/buddyAppearance';
 import { BuddyAvatar } from './BuddyAvatar';
 import { Button, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../../ui';
+import { t } from '../../i18n';
 
 export interface BuddyAppearancePickerProps {
   name: string;
@@ -31,30 +32,31 @@ export interface BuddyAppearancePickerProps {
   topInset?: number;
 }
 
-const COAT_LABEL: Record<(typeof BUDDY_COATS)[number], string> = {
-  cream: 'Cream',
-  golden: 'Golden',
-  ginger: 'Ginger',
-  chocolate: 'Chocolate',
-  charcoal: 'Charcoal',
-  grey: 'Grey',
-  white: 'White',
-  tricolour: 'Tricolour',
+// Option labels are i18n keys (`buddy.coat.*`, `buddy.ear.*`, `buddy.tail.*`, `buddy.size.*`).
+const COAT_LABEL_KEY: Record<(typeof BUDDY_COATS)[number], string> = {
+  cream: 'buddy.coat.cream',
+  golden: 'buddy.coat.golden',
+  ginger: 'buddy.coat.ginger',
+  chocolate: 'buddy.coat.chocolate',
+  charcoal: 'buddy.coat.charcoal',
+  grey: 'buddy.coat.grey',
+  white: 'buddy.coat.white',
+  tricolour: 'buddy.coat.tricolour',
 };
-const EAR_LABEL = {
-  floppy: 'Floppy',
-  pointy: 'Perky',
-  folded: 'Folded',
+const EAR_LABEL_KEY = {
+  floppy: 'buddy.ear.floppy',
+  pointy: 'buddy.ear.pointy',
+  folded: 'buddy.ear.folded',
 } as const;
-const TAIL_LABEL = {
-  curly: 'Curly',
-  straight: 'Straight',
-  stubby: 'Fluffy stub',
+const TAIL_LABEL_KEY = {
+  curly: 'buddy.tail.curly',
+  straight: 'buddy.tail.straight',
+  stubby: 'buddy.tail.stubby',
 } as const;
-const SIZE_LABEL = {
-  small: 'Pocket pup',
-  medium: 'Just right',
-  large: 'Big goof',
+const SIZE_LABEL_KEY = {
+  small: 'buddy.size.small',
+  medium: 'buddy.size.medium',
+  large: 'buddy.size.large',
 } as const;
 
 type StepKey = 'coat' | 'earStyle' | 'tailStyle' | 'size' | 'done';
@@ -63,15 +65,15 @@ const STEPS: StepKey[] = ['coat', 'earStyle', 'tailStyle', 'size', 'done'];
 function stepCaption(step: StepKey, name: string): string {
   switch (step) {
     case 'coat':
-      return `What does ${name} look like? Pick a coat.`;
+      return t('buddy.step.coat', { name });
     case 'earStyle':
-      return 'Ears: floppy, perky, or somewhere in between.';
+      return t('buddy.step.ears');
     case 'tailStyle':
-      return `How does ${name}'s tail go? Curly, fluffy, or wagging straight.`;
+      return t('buddy.step.tail', { name });
     case 'size':
-      return 'Big goof or little pocket pup? Choose a size.';
+      return t('buddy.step.size');
     case 'done':
-      return `That's ${name}! Ready to go outside?`;
+      return t('buddy.step.done', { name });
   }
 }
 
@@ -168,7 +170,7 @@ export function BuddyAppearancePicker({
               <Swatch
                 key={c}
                 coat={c}
-                label={COAT_LABEL[c]}
+                label={t(COAT_LABEL_KEY[c])}
                 selected={look.coat === c}
                 onPress={() => set('coat', c)}
               />
@@ -180,7 +182,7 @@ export function BuddyAppearancePicker({
           {BUDDY_EAR_STYLES.map((e) => (
             <OptionChip
               key={e}
-              label={EAR_LABEL[e]}
+              label={t(EAR_LABEL_KEY[e])}
               selected={look.earStyle === e}
               onPress={() => set('earStyle', e)}
             />
@@ -189,12 +191,12 @@ export function BuddyAppearancePicker({
       )}
       {step === 'tailStyle' && (
         <View style={styles.row}>
-          {BUDDY_TAIL_STYLES.map((t) => (
+          {BUDDY_TAIL_STYLES.map((tail) => (
             <OptionChip
-              key={t}
-              label={TAIL_LABEL[t]}
-              selected={look.tailStyle === t}
-              onPress={() => set('tailStyle', t)}
+              key={tail}
+              label={t(TAIL_LABEL_KEY[tail])}
+              selected={look.tailStyle === tail}
+              onPress={() => set('tailStyle', tail)}
             />
           ))}
         </View>
@@ -202,24 +204,24 @@ export function BuddyAppearancePicker({
       {step === 'size' && (
         <View style={styles.row}>
           {BUDDY_SIZES.map((s) => (
-            <OptionChip key={s} label={SIZE_LABEL[s]} selected={look.size === s} onPress={() => set('size', s)} />
+            <OptionChip key={s} label={t(SIZE_LABEL_KEY[s])} selected={look.size === s} onPress={() => set('size', s)} />
           ))}
         </View>
       )}
 
       <Button
-        label={isLast ? "Let's go!" : 'Next'}
+        label={isLast ? t('dogName.submit') : t('common.next')}
         onPress={isLast ? finish : () => setStepIndex(stepIndex + 1)}
         style={styles.primary}
       />
 
       <View style={styles.footer}>
         {stepIndex > 0 ? (
-          <Button label="Back" variant="ghost" onPress={() => setStepIndex(stepIndex - 1)} style={styles.textButton} />
+          <Button label={t('common.backButton')} variant="ghost" onPress={() => setStepIndex(stepIndex - 1)} style={styles.textButton} />
         ) : (
           <View style={styles.textButton} />
         )}
-        {onSkip && <Button label="Skip for now" variant="ghost" onPress={onSkip} style={styles.textButton} />}
+        {onSkip && <Button label={t('buddy.skip')} variant="ghost" onPress={onSkip} style={styles.textButton} />}
       </View>
     </ScrollView>
   );

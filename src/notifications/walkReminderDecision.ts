@@ -1,6 +1,7 @@
 import { Walk } from '../types';
 import { calendarDayKey, startOfLocalDay } from '../utils/manualWalkLog';
 import type { NotificationBookkeepingState } from './notificationDecision';
+import { t } from '../i18n';
 
 // Pure decision logic for the opt-in daily walk reminder
 // (openspec/changes/walk-reminder/design.md). Deliberately has no dependency
@@ -179,4 +180,6 @@ function parseCalendarDayKey(key: string): number | null {
 // Decision 11), reused verbatim — not to be rephrased. Checked against the
 // rejected-copy table: no order, no guilt mascot, no loss-framed number, no
 // invented urgency.
-export const WALK_REMINDER_BODY = "There's a little more territory out there, whenever you two are ready for it.";
+export function walkReminderBody(): string {
+  return t('notification.walkReminder.body');
+}

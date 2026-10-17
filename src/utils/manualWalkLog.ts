@@ -4,6 +4,7 @@
 // previous calendar day — not an open-ended backfill.
 
 import { StoredWalk } from '../storage/WalkRepository';
+import { formatDate, t } from '../i18n';
 
 export type MissedWalkTiming = 'today' | 'yesterday';
 
@@ -66,10 +67,10 @@ export function isWithinManualLogWindow(startTime: number, now: number = Date.no
  */
 export function dayAndTimeOfDayPhrase(timestamp: number): string {
   const date = new Date(timestamp);
-  const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
+  const weekday = formatDate(date, { weekday: 'long' });
   const hour = date.getHours();
 
-  let timeOfDay: string;
+  let timeOfDay: 'night' | 'morning' | 'afternoon' | 'evening';
   if (hour < 5) {
     timeOfDay = 'night';
   } else if (hour < 12) {
@@ -82,7 +83,9 @@ export function dayAndTimeOfDayPhrase(timestamp: number): string {
     timeOfDay = 'night';
   }
 
-  return `${weekday} ${timeOfDay}`;
+  // One key per part of day (not weekday + word) because German compounds
+  // them: "Dienstagmorgen".
+  return t(`phrase.dayAndTime.${timeOfDay}`, { weekday });
 }
 
 /**

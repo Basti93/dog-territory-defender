@@ -5,6 +5,10 @@ import {
   resolveBuddyMood,
   tapCaption,
 } from '../buddyMood';
+import { setLocale } from '../../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const base = { sessionKind: 'fresh-open' as const, greetingFlavor: 'first-open' as const, hour: 12, curious: false };
 

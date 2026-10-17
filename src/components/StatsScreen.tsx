@@ -8,6 +8,7 @@ import { PersonalStatsRepository, UnlockedAchievement } from '../storage/Persona
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
 import { ArtImage, Card, Header, palette, radii, Screen, spacing, StatTile, textStyle } from '../ui';
+import { formatDate, formatDistanceKm, formatNumber, t } from '../i18n';
 
 interface StatsScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -30,7 +31,7 @@ export function StatsScreen({ buddyAppearance, repository, denEconomyRepository,
   if (!stats || !denState || !unlocked) {
     return (
       <Screen>
-        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
       </Screen>
     );
   }
@@ -38,42 +39,42 @@ export function StatsScreen({ buddyAppearance, repository, denEconomyRepository,
   const unlockedIds = new Set(unlocked.map((a) => a.id));
   const unlockedAtById = new Map(unlocked.map((a) => [a.id, a.unlockedAt]));
   const allAchievements = Object.values(ACHIEVEMENTS);
-  const km1 = (meters: number) => `${(meters / 1000).toFixed(1)} km`;
-  const km2 = (meters: number) => `${(meters / 1000).toFixed(2)} km`;
+  const km1 = (meters: number) => formatDistanceKm(meters / 1000, 1);
+  const km2 = (meters: number) => formatDistanceKm(meters / 1000, 2);
 
   return (
     <Screen scroll backdrop="sky">
-      <Header title="Stats & Badges" icon="icon-badge" onBack={onClose} />
+      <Header title={t('doorstep.statsBadges')} icon="icon-badge" onBack={onClose} />
 
-      <Text style={[textStyle('small'), styles.sectionLabel]}>Lifetime stats</Text>
-      <Card tint="warm" title="Level" style={styles.fullCard}>
-        <Text style={textStyle('body')}>{`${dogDisplayName(denState.dogName)} — Level ${denState.level}`}</Text>
+      <Text style={[textStyle('small'), styles.sectionLabel]}>{t('stats.lifetime')}</Text>
+      <Card tint="warm" title={t('stats.level')} style={styles.fullCard}>
+        <Text style={textStyle('body')}>{t('den.dogLevel', { dog: dogDisplayName(denState.dogName), level: denState.level })}</Text>
       </Card>
       <View style={styles.statGrid}>
-        <StatTile style={styles.statTile} icon="icon-walks" label="Total walks" value={stats.totalWalksClosed} />
-        <StatTile style={styles.statTile} icon="icon-paw" label="Lifetime distance" value={stats.lifetimeDistanceMeters} format={km1} />
+        <StatTile style={styles.statTile} icon="icon-walks" label={t('stats.totalWalks')} value={stats.totalWalksClosed} />
+        <StatTile style={styles.statTile} icon="icon-paw" label={t('stats.lifetimeDistance')} value={stats.lifetimeDistanceMeters} format={km1} />
         <StatTile
           style={styles.statTile}
           icon="icon-pin"
-          label="Biggest territory"
+          label={t('stats.biggestTerritory')}
           value={stats.biggestTerritoryAreaM2}
-          format={(v) => `${v.toFixed(0)} m²`}
+          format={(v) => `${formatNumber(Math.round(v))} m²`}
         />
-        <StatTile style={styles.statTile} icon="icon-walks" label="Longest walk" value={stats.longestWalkDistanceM} format={km2} />
+        <StatTile style={styles.statTile} icon="icon-walks" label={t('stats.longestWalk')} value={stats.longestWalkDistanceM} format={km2} />
         <StatTile
           style={styles.statTile}
           icon="icon-treat"
-          label="Lifetime treats earned"
+          label={t('stats.lifetimeTreats')}
           value={Math.floor(stats.totalTreatsEarnedLifetime)}
         />
       </View>
-      <Card tint="sky" title="Den levels" style={styles.fullCard}>
+      <Card tint="sky" title={t('stats.denLevels')} style={styles.fullCard}>
         <Text style={textStyle('body')}>
-          {`Doghouse ${denState.doghouseLevel} · Bakery ${denState.bakeryLevel} · Sniff Garden ${denState.sniffGardenLevel}`}
+          {t('stats.denLevelsLine', { doghouse: denState.doghouseLevel, bakery: denState.bakeryLevel, garden: denState.sniffGardenLevel })}
         </Text>
       </Card>
 
-      <Text style={[textStyle('small'), styles.sectionLabel, { marginTop: spacing.xl }]}>Badges</Text>
+      <Text style={[textStyle('small'), styles.sectionLabel, { marginTop: spacing.xl }]}>{t('stats.badges')}</Text>
       {allAchievements.map((achievement) => {
         const isUnlocked = unlockedIds.has(achievement.id);
         if (isUnlocked) {
@@ -84,7 +85,7 @@ export function StatsScreen({ buddyAppearance, repository, denEconomyRepository,
               <View style={styles.badgeText}>
                 <Text style={textStyle('h2')}>{achievement.copyTitle}</Text>
                 <Text style={textStyle('body')}>{achievement.copyBody}</Text>
-                <Text style={[textStyle('small'), styles.muted]}>Earned {new Date(unlockedAt).toLocaleDateString()}</Text>
+                <Text style={[textStyle('small'), styles.muted]}>{t('stats.earnedOn', { date: formatDate(unlockedAt) })}</Text>
               </View>
             </Card>
           );

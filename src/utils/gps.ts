@@ -3,6 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { Location as LocationType } from '../types';
 import { log } from './log';
+import { t } from '../i18n';
 
 const LOCATION_TASK_NAME = 'dog-territory-location-task';
 
@@ -92,7 +93,7 @@ export async function startWatchingLocation(callback: (location: LocationType) =
       distanceInterval: 2,
       foregroundService: {
         notificationTitle: 'Dog Territory Defender',
-        notificationBody: 'Tracking your walk…',
+        notificationBody: t('gps.trackingBody'),
         notificationColor: '#2ECC71',
       },
     });

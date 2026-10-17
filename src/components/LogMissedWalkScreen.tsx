@@ -5,6 +5,7 @@ import { Button, Card, Header, palette, PressableScale, radii, Screen, spacing, 
 
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 import { eligibleRefreshRoutes, MissedWalkTiming } from '../utils/manualWalkLog';
+import { formatDate, t } from '../i18n';
 
 interface LogMissedWalkScreenProps {
   onLog: (timing: MissedWalkTiming, refreshRouteWalkId?: string) => void;
@@ -15,9 +16,9 @@ interface LogMissedWalkScreenProps {
   routeRefreshAvailable: boolean;
 }
 
-const OPTIONS: { timing: MissedWalkTiming; label: string }[] = [
-  { timing: 'today', label: 'Earlier today' },
-  { timing: 'yesterday', label: 'Yesterday' },
+const OPTIONS: { timing: MissedWalkTiming; labelKey: string }[] = [
+  { timing: 'today', labelKey: 'logWalk.earlierToday' },
+  { timing: 'yesterday', labelKey: 'logWalk.yesterday' },
 ];
 
 export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefreshAvailable }: LogMissedWalkScreenProps) {
@@ -32,17 +33,17 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
 
   return (
     <Screen scroll backdrop="sky">
-      <Header title="Log a walk we missed" icon="icon-walks" onBack={onClose} />
+      <Header title={t('menu.logMissedWalk')} icon="icon-walks" onBack={onClose} />
 
       <Card style={styles.form}>
         <Text style={[textStyle('body'), styles.prompt]}>
-          A walk with your dog that the app missed still counts. When did you head out?
+          {t('logWalk.prompt')}
         </Text>
 
         {OPTIONS.map((option) => (
           <OptionRow
             key={option.timing}
-            label={option.label}
+            label={t(option.labelKey)}
             selected={selected === option.timing}
             onPress={() => setSelected(option.timing)}
           />
@@ -51,14 +52,13 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
         {routeRefreshAvailable && routes.length > 0 && (
           <View style={styles.routePicker}>
             <Text style={[textStyle('body'), styles.prompt]}>
-              Which way did he go? A route he's walked before gets a fresh start — no new ground, just a familiar
-              street remembered.
+              {t('logWalk.routePrompt')}
             </Text>
-            <OptionRow label="Somewhere else this time" selected={selectedRouteId === null} onPress={() => setSelectedRouteId(null)} />
+            <OptionRow label={t('logWalk.somewhereElse')} selected={selectedRouteId === null} onPress={() => setSelectedRouteId(null)} />
             {routes.map((route) => (
               <OptionRow
                 key={route.id}
-                label={`Walked ${new Date(route.startTime).toLocaleDateString()}`}
+                label={t('logWalk.walkedOn', { date: formatDate(route.startTime) })}
                 selected={selectedRouteId === route.id}
                 onPress={() => setSelectedRouteId(route.id)}
               />
@@ -67,7 +67,7 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
         )}
 
         <Button
-          label="Log this walk 🐾"
+          label={t('logWalk.submit')}
           disabled={!selected}
           onPress={() => selected && onLog(selected, selectedRouteId ?? undefined)}
           style={styles.logButton}

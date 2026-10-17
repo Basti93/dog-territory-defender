@@ -5,6 +5,10 @@ import {
   isWithinManualLogWindow,
   startTimeForMissedWalk,
 } from '../manualWalkLog';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 

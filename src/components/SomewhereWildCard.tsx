@@ -10,6 +10,7 @@ import { calendarDayGap } from '../utils/manualWalkLog';
 import { cellCentre, cellKey, streetsKnown } from '../utils/grid';
 import { resolveNewGroundSpot, resolveWildClusterLabel } from '../utils/streetLookup';
 import { wildestCluster } from '../utils/wildSpot';
+import { formatDate, t, tPlural } from '../i18n';
 
 // The "Somewhere Wild" card — openspec/changes/somewhere-wild/proposal.md
 // and design.md. One warm sentence, tappable, never a count, never a
@@ -26,12 +27,8 @@ import { wildestCluster } from '../utils/wildSpot';
 
 const NEW_GROUND_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-const WILD_CLUSTER_VARIANTS: Array<(place: string, dog: string) => string> = [
-  (place) => `${place} is looking wild — great sniffing over there.`,
-  (place) => `${place} has gone lovely and overgrown — worth a wander.`,
-  (place) => `Something wild is happening over by ${place}.`,
-  (place, dog) => `${place} is greening up again — ${dog} would love a look.`,
-];
+// Copy lives in src/i18n as `wild.cluster.1` .. `.4` ({place}, {dog}).
+const WILD_CLUSTER_VARIANT_COUNT = 4;
 
 function hashString(input: string): number {
   let hash = 0;
@@ -41,12 +38,12 @@ function hashString(input: string): number {
   return Math.abs(hash);
 }
 
-/** `today` | `yesterday` | `on {Weekday}` — design.md's card copy section; the 48h window can reach two calendar days back. */
+/** `today` | `yesterday` | `on {Weekday}` (localised) — design.md's card copy section; the 48h window can reach two calendar days back. */
 export function dayPhrase(occurredAt: number, now: number): string {
   const daysAgo = calendarDayGap(occurredAt, now);
-  if (daysAgo <= 0) return 'today';
-  if (daysAgo === 1) return 'yesterday';
-  return `on ${new Date(occurredAt).toLocaleDateString('en-US', { weekday: 'long' })}`;
+  if (daysAgo <= 0) return t('wild.today');
+  if (daysAgo === 1) return t('wild.yesterday');
+  return t('wild.onWeekday', { weekday: formatDate(occurredAt, { weekday: 'long' }) });
 }
 
 export interface SomewhereWildSpot {
@@ -102,9 +99,11 @@ export async function evaluateSomewhereWild(
       const dog = dogDisplayName(dogName);
       const n = streetsKnown(event.cellIds.length);
       const phrase = dayPhrase(event.occurredAt, now);
-      const text = spot.label
-        ? `${dog} learned ${n} new street${n === 1 ? '' : 's'} by ${spot.label} ${phrase}.`
-        : `${dog} learned ${n} new street${n === 1 ? '' : 's'} ${phrase}.`;
+      const text = tPlural(spot.label ? 'wild.newGround.withLabel' : 'wild.newGround.noLabel', n, {
+        dog,
+        label: spot.label ?? '',
+        when: phrase,
+      });
       return {
         card: { text, spot: { latitude: spot.location.latitude, longitude: spot.location.longitude } },
         wildClusterVariantState: prevWildClusterVariantState,
@@ -140,8 +139,8 @@ export async function evaluateSomewhereWild(
           if (territory) place = territory.name;
         }
       }
-      const variantIndex = hashString(`${cluster.anchorCellId}:${nextVariantState.epoch}`) % WILD_CLUSTER_VARIANTS.length;
-      const text = WILD_CLUSTER_VARIANTS[variantIndex](place, dogDisplayName(dogName, false));
+      const variantIndex = hashString(`${cluster.anchorCellId}:${nextVariantState.epoch}`) % WILD_CLUSTER_VARIANT_COUNT;
+      const text = t(`wild.cluster.${variantIndex + 1}`, { place, dog: dogDisplayName(dogName, false) });
       const [latitude, longitude] = cellCentre(cluster.anchor.ix, cluster.anchor.iy);
       return { card: { text, spot: { latitude, longitude } }, wildClusterVariantState: nextVariantState };
     }
@@ -229,7 +228,7 @@ export function SomewhereWildCard({
   return (
     <TouchableOpacity style={styles.card} onPress={() => onTapSpot(card.spot)} activeOpacity={0.8}>
       <Text style={[textStyle('body'), styles.icon]}>🌿</Text>
-      <Text style={[textStyle('small'), styles.text]} numberOfLines={1}>
+      <Text style={[textStyle('small'), styles.text]} numberOfLines={2}>
         {card.text}
       </Text>
     </TouchableOpacity>

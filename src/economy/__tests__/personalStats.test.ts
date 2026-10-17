@@ -1,6 +1,10 @@
 import { Walk } from '../../types';
 import { defaultDenEconomyState, DenEconomyState } from '../denEconomy';
 import { defaultPersonalStatsState, recordBuildingUpgrade, recordTreatsEarned, recordWalkClosed } from '../personalStats';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 function makeWalk(overrides: Partial<Walk> = {}): Walk {
   return {

@@ -7,6 +7,13 @@ import { streetsKnown } from '../utils/grid';
 import { TerritoryTitle } from '../utils/territoryTitles';
 import { TerritoryPortrait } from './TerritoryPortrait';
 import { Badge, Card, Chip, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../ui';
+import { formatDate, formatNumber, t } from '../i18n';
+
+const TERRITORY_TITLE_KEYS: Record<TerritoryTitle, string> = {
+  Everyday: 'territories.title.everyday',
+  'Wild One': 'territories.title.wildOne',
+  'Far One': 'territories.title.farOne',
+};
 
 interface TerritoryCardProps {
   territory: Territory;
@@ -61,23 +68,23 @@ export function TerritoryCard({ territory, cells, title, incomeRevealed, display
           style={styles.editButton}
           onPress={() => (isRenaming ? submitRename() : setIsRenaming(true))}
           hitSlop={8}
-          accessibilityLabel={isRenaming ? 'Save name' : 'Rename territory'}
+          accessibilityLabel={isRenaming ? t('territories.saveName') : t('territories.rename')}
         >
           <Text style={[textStyle('h2'), { color: tokens.blue }]}>{isRenaming ? '✓' : '✎'}</Text>
         </PressableScale>
       </View>
 
-      {title && <Badge label={title} tint="meadow" />}
+      {title && <Badge label={t(TERRITORY_TITLE_KEYS[title])} tint="meadow" />}
 
       <View style={styles.statGrid}>
-        <MiniStat label="Streets known" value={`${streetsKnown(cells.length)}`} />
-        <MiniStat label="Walks here" value={`${territory.walksHere}`} />
-        <MiniStat label="Treats earned here" value={`${Math.floor(territory.treatsEarnedHere)}`} />
-        <MiniStat label="First claimed" value={new Date(territory.createdAt).toLocaleDateString()} />
+        <MiniStat label={t('territories.streetsKnown')} value={formatNumber(streetsKnown(cells.length))} />
+        <MiniStat label={t('territories.walksHere')} value={formatNumber(territory.walksHere)} />
+        <MiniStat label={t('territories.treatsHere')} value={formatNumber(Math.floor(territory.treatsEarnedHere))} />
+        <MiniStat label={t('territories.firstClaimed')} value={formatDate(territory.createdAt)} />
       </View>
 
       {incomeRevealed && (
-        <Chip tint="warm" icon="icon-treat" label={`≈${displayRate.toFixed(1)} treats/hour from this territory`} />
+        <Chip tint="warm" icon="icon-treat" label={t('territories.rateChip', { rate: formatNumber(displayRate, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })} />
       )}
     </Card>
   );

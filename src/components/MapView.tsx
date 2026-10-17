@@ -9,6 +9,7 @@ import { log } from '../utils/log';
 import { paintedCells } from '../utils/grid';
 import { palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
+import { t } from '../i18n';
 
 interface MapViewProps {
   locations: Location[];
@@ -162,7 +163,7 @@ export function MapView({
           the WebView so it never competes with the map's bottom controls. */}
       {onOpenTerritories && (
         <TouchableOpacity style={styles.territoriesButton} onPress={onOpenTerritories} activeOpacity={0.85}>
-          <Text style={[textStyle('small'), { color: tokens.text }]}>🗺️ Territories</Text>
+          <Text style={[textStyle('small'), { color: tokens.text }]}>{t('map.territories')}</Text>
         </TouchableOpacity>
       )}
     </View>

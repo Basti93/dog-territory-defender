@@ -15,6 +15,7 @@ import { BuddySkin, vectorSkin } from '../../buddy/buddySkin';
 import { imageSkinFor } from '../../buddy/imageSkin';
 import { tokens } from '../../ui/tokens';
 import { BuddyMood, BuddyTrick, nextTrickDelayMs, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
+import { t } from '../../i18n';
 
 export interface BuddyAvatarProps {
   appearance: BuddyAppearance;
@@ -451,7 +452,7 @@ export function BuddyAvatar({
     <Pressable
       onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel={name ? `${name}` : 'Your dog'}
+      accessibilityLabel={name ? `${name}` : t('dog.fallback.capitalized')}
       style={{ position: 'relative', width: size, height: size, overflow: 'visible' }}
     >
       <View style={[styles.box, flipped && { transform: [{ scaleX: -1 }] }]} pointerEvents="none">

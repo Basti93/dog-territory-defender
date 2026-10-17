@@ -8,6 +8,10 @@ import {
   resolveDoorstepOverflowLine,
   shouldFireOverflowNotification,
 } from '../notificationDecision';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const NOW = 1_700_000_000_000;
 

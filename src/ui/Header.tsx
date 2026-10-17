@@ -4,6 +4,7 @@ import { ArtKey } from '../art/artAssets';
 import { ArtImage } from './ArtImage';
 import { PressableScale } from './PressableScale';
 import { palette, shadows, spacing, textStyle } from './theme';
+import { t } from '../i18n';
 
 export interface HeaderProps {
   title: string;
@@ -22,7 +23,7 @@ export function Header({ title, icon, onBack, right, style }: HeaderProps) {
       {onBack && (
         <PressableScale
           onPress={onBack}
-          accessibilityLabel="Back"
+          accessibilityLabel={t('common.back')}
           style={styles.back}
           hitSlop={8}
         >

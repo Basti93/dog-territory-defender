@@ -7,6 +7,7 @@ import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyAvatar } from './buddy';
 import { EmptyState, Header, ListRow, palette, PressableScale, radii, Screen, shadows, spacing, textStyle, tokens } from '../ui';
+import { formatDate, formatNumber, t } from '../i18n';
 
 interface WalkHistoryScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -40,10 +41,10 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
     // its effect on the Home Range map, since it no longer does (deleting a
     // walk removes only its own record — the cells it painted stay in the
     // separately-stored Home Range grid).
-    Alert.alert('Delete walk?', "This removes it from your history. It won't undo any ground already on the map.", [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('history.deleteTitle'), t('history.deleteMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('history.delete'),
         style: 'destructive',
         onPress: async () => {
           await repository.deleteWalk(walk.id);
@@ -55,12 +56,12 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
 
   return (
     <Screen backdrop="sky">
-      <Header title="Past Walks" icon="icon-walks" onBack={onClose} />
+      <Header title={t('doorstep.pastWalks')} icon="icon-walks" onBack={onClose} />
 
       {walks === null ? (
-        <BuddyLoading appearance={buddyAppearance} text="Loading…" />
+        <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
       ) : walks.length === 0 ? (
-        <EmptyState title="No walks yet" message="Take your dog out and claim your first territory! 🌱">
+        <EmptyState title={t('history.empty.title')} message={t('history.empty.message')}>
           <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
         </EmptyState>
       ) : (
@@ -79,13 +80,13 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
               <ListRow
                 style={styles.row}
                 icon="icon-walks"
-                title={new Date(item.startTime).toLocaleString()}
-                subtitle={`${item.closed ? '✓ Rewarded' : 'Short stroll'} · ${item.locations.length} pts`}
+                title={formatDate(item.startTime, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                subtitle={`${t(item.closed ? 'history.rewarded' : 'history.shortStroll')} · ${t('history.points', { count: formatNumber(item.locations.length) })}`}
                 subtitleColor={item.closed ? palette.greenText : undefined}
                 onPress={() => onSelectWalk(item)}
               />
-              <PressableScale style={styles.deleteButton} onPress={() => handleDelete(item)} accessibilityLabel="Delete walk">
-                <Text style={[textStyle('small'), { color: tokens.warm }]}>Delete</Text>
+              <PressableScale style={styles.deleteButton} onPress={() => handleDelete(item)} accessibilityLabel={t('history.deleteWalk')}>
+                <Text style={[textStyle('small'), { color: tokens.warm }]}>{t('history.delete')}</Text>
               </PressableScale>
             </View>
           )}

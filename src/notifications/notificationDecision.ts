@@ -1,6 +1,7 @@
 import { DenEconomyState } from '../economy/denEconomy';
 import { storageCap } from '../economy/formulas';
 import { defaultWalkReminderFields } from './walkReminderDecision';
+import { tPlural } from '../i18n';
 
 // Pure decision logic for the earned-trigger notification (Den-economy
 // overflow only — see openspec/changes/walk-start-notifications/proposal.md's
@@ -153,5 +154,5 @@ export function resolveDoorstepOverflowLine(
 // change's implementation report — worth a quick confirm with the source
 // document's author if a literal "124" was actually intended.
 export function overflowNotificationBody(treatsWaiting: number): string {
-  return `Your Treat Bakery overflowed! ${Math.floor(treatsWaiting)} treats waiting.`;
+  return tPlural('notification.overflow.body', Math.floor(treatsWaiting));
 }

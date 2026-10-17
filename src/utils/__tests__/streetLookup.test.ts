@@ -4,6 +4,10 @@ import { Location } from '../../types';
 import * as grid from '../grid';
 import { resolveNewGroundSpot, resolveTerritoryName, resolveWildClusterLabel } from '../streetLookup';
 import { WildCluster } from '../wildSpot';
+import { setLocale } from '../../i18n';
+
+// These tests assert English copy; pin the locale explicitly.
+beforeAll(() => setLocale('en'));
 
 const mockReverseGeocodeAsync = jest.fn();
 jest.mock('expo-location', () => ({

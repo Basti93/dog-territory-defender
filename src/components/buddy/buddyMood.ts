@@ -1,6 +1,7 @@
 // Pure Buddy mood + trick logic (design.md Decision 4). No React, no timers:
 // the component owns timing, this file owns decisions.
 import type { GreetingFlavor, SessionKind } from '../DoorstepScreen';
+import { t } from '../../i18n';
 
 export type BuddyMood = 'idle' | 'happy' | 'excited' | 'sleepy' | 'curious';
 export type BuddyTrick = 'sit' | 'stretch' | 'shake';
@@ -68,14 +69,10 @@ export function randomDelayMs(rng: () => number, minMs: number, maxMs: number): 
   return minMs + Math.floor(r * (maxMs - minMs));
 }
 
-export const TAP_CAPTIONS = [
-  'Hi, it\'s me!',
-  'Right there, that\'s the spot.',
-  '{name} loves that.',
-  'Another wiggle for you.',
-] as const;
+// Copy lives in src/i18n as `buddy.tapCaption.1` .. `.4` ({name} is the dog's name).
+export const TAP_CAPTION_COUNT = 4;
 
 export function tapCaption(tapIndex: number, name?: string | null): string {
-  const raw = TAP_CAPTIONS[((tapIndex % TAP_CAPTIONS.length) + TAP_CAPTIONS.length) % TAP_CAPTIONS.length];
-  return raw.replace('{name}', name && name.trim() ? name.trim() : 'Buddy');
+  const n = ((tapIndex % TAP_CAPTION_COUNT) + TAP_CAPTION_COUNT) % TAP_CAPTION_COUNT;
+  return t(`buddy.tapCaption.${n + 1}`, { name: name && name.trim() ? name.trim() : 'Buddy' });
 }
