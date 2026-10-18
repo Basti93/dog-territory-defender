@@ -23,7 +23,8 @@
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "appleTeamId": "5H4WQ3PB8M"
     },
     "android": {
       "package": "com.dogtd.mobile",
