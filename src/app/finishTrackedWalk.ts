@@ -22,6 +22,8 @@ export interface WalkRewardsOutcome {
   level: number;
   celebration: WalkRewardsCelebration;
   territoryBeat: TerritoryBeat | null;
+  /** Inputs for the Den's Wild Extras (cosmetic cameos); absent for manual logs. */
+  wildExtra?: { distanceKm: number; walkIndex: number; closedAt: number };
 }
 
 export interface FinishTrackedWalkDeps {
@@ -189,12 +191,19 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
         treatsIncrement: result.celebration.treatsEarned,
       });
     }
+    let walkIndex = 0;
+    try {
+      walkIndex = (await walkRepository.getWalks()).length;
+    } catch {
+      // cosmetic input only; no mailbox extra this time
+    }
     deps.onRewards({
       walkId: walk.id,
       treats: result.denEconomyState.treats,
       level: result.denEconomyState.level,
       celebration: result.celebration,
       territoryBeat: resolvedTerritoryBeat,
+      wildExtra: { distanceKm: distanceMeters / 1000, walkIndex, closedAt: Date.now() },
     });
 
     // Second patch write (walk-portrait/design.md Decision 5): records

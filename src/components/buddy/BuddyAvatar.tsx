@@ -14,7 +14,8 @@ import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { BuddySkin, vectorSkin } from '../../buddy/buddySkin';
 import { imageSkinFor } from '../../buddy/imageSkin';
 import { tokens } from '../../ui/tokens';
-import { BuddyMood, BuddyTrick, nextTrickDelayMs, partsForMood, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
+import { BuddyMood, IdleTrick, nextTrickDelayMs, partsForMood, pickIdleTrick, randomDelayMs, tapCaption } from './buddyMood';
+import { LeafFx, SneezeFx, ThinkFx } from './BuddyTrickFx';
 import { t } from '../../i18n';
 import * as haptics from '../../feedback/haptics';
 import { playBuddy } from '../../feedback/sounds';
@@ -40,6 +41,11 @@ export interface BuddyAvatarProps {
   /** Hop-walk: play `walkHops` quick stride hops of `walkHopMs` each (the parent slides Buddy sideways). Set both, or neither. */
   walkHops?: number;
   walkHopMs?: number;
+  /**
+   * Den only: px (screen space, signed) from Buddy to the doghouse wall. When set, the rare `phase` trick may
+   * play (he fades and slides toward the doghouse, peeks, comes back). Omitted (Doorstep): that trick is left out.
+   */
+  phaseShiftPx?: number;
   /** Injectable random source for blink/flick/trick timing. */
   rng?: () => number;
   /** Art provider. Default: pre-rendered image skin (vector parts fill in for missing images). */
@@ -73,6 +79,7 @@ export function BuddyAvatar({
   replayKey,
   walkHops,
   walkHopMs,
+  phaseShiftPx,
   rng: rngProp = Math.random,
   skin: skinProp,
 }: BuddyAvatarProps) {
@@ -98,12 +105,19 @@ export function BuddyAvatar({
     shiftX: new Animated.Value(0),
     z: new Animated.Value(0),
     caption: new Animated.Value(0),
+    ghost: new Animated.Value(1), // root opacity (rare `phase` trick)
+    peek: new Animated.Value(1), // root scaleX pulse (rare `phase` trick)
+    fx: new Animated.Value(0), // 0..1 progress of the current rare-trick effect
   }));
 
   // Held in a ref so an inline `rng` prop never restarts the mood effect.
   const rngRef = useRef(rngProp);
   rngRef.current = rngProp;
   const rng = useCallback(() => rngRef.current(), []);
+  const phaseShiftRef = useRef(phaseShiftPx);
+  phaseShiftRef.current = phaseShiftPx;
+  const flippedRef = useRef(false);
+  flippedRef.current = facing !== skin.nativeFacing;
 
   // ----- state: tap override + excited settle -----
   const [tapping, setTapping] = useState(false);
@@ -111,6 +125,8 @@ export function BuddyAvatar({
   const [settled, setSettled] = useState(false);
   // Which near-leg frame shows during a hop-walk; changes only at hop boundaries (null = plain front-legs).
   const [walkFrame, setWalkFrame] = useState<'a' | 'b' | null>(null);
+  // Which rare-trick effect is mounted (changes twice per rare trick, never per frame).
+  const [rareFx, setRareFx] = useState<'sneeze' | 'leaves' | 'think' | null>(null);
   const [captionText, setCaptionText] = useState<string | null>(null);
   const tapCount = useRef(0);
   const tapTimer = useRef<Timer | null>(null);
@@ -216,6 +232,7 @@ export function BuddyAvatar({
         { scaleY: v.squash },
         { translateY: -geo.ground },
         { rotate: deg(Animated.add(v.spin, v.shake)) as unknown as string },
+        { scaleX: v.peek },
       ],
       // Lying pose: same slow breathing about the ground line, without the layered rig's curl/trick scaling.
       lying: [
@@ -282,6 +299,10 @@ export function BuddyAvatar({
     v.flickL.setValue(0);
     v.flickR.setValue(0);
     v.tail.setValue(0);
+    v.ghost.setValue(1);
+    v.peek.setValue(1);
+    v.fx.setValue(0);
+    setRareFx(null);
 
     const m = effectiveMood;
     const sleepy = m === 'sleepy';
@@ -374,15 +395,83 @@ export function BuddyAvatar({
           16000
         );
         // random tricks
-        let previous: BuddyTrick | null = null;
+        let previous: IdleTrick | null = null;
         const scheduleTrick = () =>
           later(() => {
-            const trick = pickTrick(rng, previous);
+            const trick = pickIdleTrick(rng, previous, phaseShiftRef.current !== undefined);
             previous = trick;
             if (trick === 'sit') {
               run(Animated.sequence([timing(v.trickPose, 1, 300), Animated.delay(1000), timing(v.trickPose, 0, 350)]));
             } else if (trick === 'stretch') {
               run(Animated.sequence([timing(v.trickPose, -1, 450), Animated.delay(1100), timing(v.trickPose, 0, 450)]));
+            } else if (trick === 'levitate') {
+              // Proud float: up ~1 s with a surprised head tilt, then a plop with a squash.
+              run(
+                Animated.sequence([
+                  Animated.parallel([timing(v.hopY, -size * 0.12, 350, Easing.out(Easing.quad)), timing(v.tilt, 12, 350)]),
+                  Animated.delay(1000),
+                  Animated.parallel([timing(v.hopY, 0, 160, Easing.in(Easing.quad)), timing(v.tilt, 0, 300)]),
+                  timing(v.squash, 0.86, 90, Easing.out(Easing.quad)),
+                  Animated.spring(v.squash, { toValue: 1, speed: 12, bounciness: 8, useNativeDriver: true }),
+                ])
+              );
+            } else if (trick === 'phase') {
+              // Fade and slide toward the doghouse wall, a nose "peek" (small scaleX pulse), then back.
+              const limit = size * 0.5;
+              const shift = Math.max(-limit, Math.min(limit, phaseShiftRef.current ?? 0)) * (flippedRef.current ? -1 : 1);
+              const peek = (to_: number) => timing(v.peek, to_, 140);
+              run(
+                Animated.sequence([
+                  Animated.parallel([timing(v.ghost, 0.3, 450), timing(v.shiftX, shift, 650)]),
+                  peek(1.08),
+                  peek(1),
+                  peek(1.08),
+                  peek(1),
+                  Animated.parallel([timing(v.ghost, 1, 500), timing(v.shiftX, 0, 600)]),
+                ])
+              );
+            } else if (trick === 'sneeze') {
+              setRareFx('sneeze');
+              v.fx.setValue(0);
+              run(
+                Animated.parallel([
+                  Animated.sequence([
+                    timing(v.headBob, -0.03 * size, 120),
+                    timing(v.headBob, 0.02 * size, 90),
+                    timing(v.headBob, 0, 200),
+                  ]),
+                  Animated.sequence([
+                    Animated.delay(120),
+                    timing(v.squash, 0.82, 90, Easing.out(Easing.quad)),
+                    timing(v.squash, 1.08, 70),
+                    Animated.spring(v.squash, { toValue: 1, speed: 12, bounciness: 8, useNativeDriver: true }),
+                  ]),
+                  Animated.sequence([Animated.delay(210), Animated.timing(v.fx, { toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true })]),
+                ])
+              );
+              later(() => setRareFx(null), 1100);
+            } else if (trick === 'leaf-tornado') {
+              // Tail-chase: three fast spins while five leaves circle him.
+              setRareFx('leaves');
+              v.fx.setValue(0);
+              run(
+                Animated.parallel([
+                  Animated.sequence([timing(v.spin, 1080, 1100, Easing.inOut(Easing.quad)), Animated.timing(v.spin, { toValue: 0, duration: 1, useNativeDriver: true })]),
+                  Animated.timing(v.fx, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true }),
+                ])
+              );
+              later(() => setRareFx(null), 1450);
+            } else if (trick === 'lightbulb') {
+              // Head tilt: "?" -> lightbulb -> a bone pops up over his head.
+              setRareFx('think');
+              v.fx.setValue(0);
+              run(
+                Animated.parallel([
+                  Animated.sequence([timing(v.tilt, 12, 350), Animated.delay(1700), timing(v.tilt, 0, 350)]),
+                  Animated.timing(v.fx, { toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true }),
+                ])
+              );
+              later(() => setRareFx(null), 2450);
             } else {
               const step = (to_: number) => timing(v.shake, to_, 110);
               const ear = (to_: number) => timing(v.earShake, to_, 110);
@@ -517,7 +606,7 @@ export function BuddyAvatar({
             opacity: 0.15,
           }}
         />
-        <Animated.View style={[styles.box, { transform: styles.root as never }]}>
+        <Animated.View style={[styles.box, { opacity: v.ghost, transform: styles.root as never }]}>
           {isLying ? (
             <Animated.View style={[styles.box, { transform: styles.lying as never }]}>{parts.poseLying}</Animated.View>
           ) : (
@@ -550,6 +639,9 @@ export function BuddyAvatar({
           )}
         </Animated.View>
       </View>
+      {rareFx === 'sneeze' && <SneezeFx progress={v.fx} x={(headX + (facing === 'right' ? 0.16 : -0.16)) * size} y={geo.head.y + size / 2 + 0.04 * size} dir={facing === 'right' ? 1 : -1} size={size} />}
+      {rareFx === 'leaves' && <LeafFx progress={v.fx} size={size} />}
+      {rareFx === 'think' && <ThinkFx progress={v.fx} x={headX * size} y={Math.max(0.2 * size, geo.head.y + size / 2 - 0.3 * size)} size={size} />}
       {effectiveMood === 'sleepy' && (
         <Animated.View
           pointerEvents="none"

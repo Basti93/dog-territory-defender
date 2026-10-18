@@ -60,3 +60,18 @@ Where the relevant screen exists, the system SHALL implement: paw prints appeari
 #### Scenario: Start Walk pulse
 - **WHEN** the Doorstep session is a first open of the day
 - **THEN** Start Walk MAY pulse gently, and on any other session it SHALL NOT pulse, and no number or text SHALL refer to missed walks
+
+### Requirement: Tone and Language Rules
+Copy and UI language SHALL be warm and celebratory, not transactional, and SHALL NOT use aggressive or PvP language. Use "claim," "defend," "protect" — never "conquer," "destroy," "kill," "battle." The product is spring-like with a sweet weird streak: the world is warm and joyful first, and now and then gently, harmlessly bonkers (a floating Buddy, a bone-shaped comet, a cheese moon). The weird streak SHALL be rare, cosmetic and skippable, and SHALL NEVER: use weapons or lasers (a beam only lifts, glows or delivers); harm, scare, shrink or humiliate Buddy; use sarcasm about the player; use dread, death or gore; attach rewards, timers or streaks to an extra; interrupt the walk screen or block a tap.
+
+#### Scenario: Competitive interaction copy
+- **WHEN** copy describes territory overlap or a player-vs-player interaction
+- **THEN** it SHALL use "claim / defend / protect" phrasing and SHALL NOT use "conquer / destroy / kill / battle" phrasing
+
+#### Scenario: A weird moment appears
+- **WHEN** a Wild Extra, a rare Buddy trick or a `weird.*` line appears
+- **THEN** it SHALL be warm in its first impression, give no reward, be at most once per day per extra, never play on the live walk screen, and never block input
+
+#### Scenario: Weird idea that breaks a "never" rule
+- **WHEN** a weird idea would use a weapon or laser, scare or shrink Buddy, mock the player, show dread or gore, or attach a reward, timer or streak
+- **THEN** it SHALL NOT ship

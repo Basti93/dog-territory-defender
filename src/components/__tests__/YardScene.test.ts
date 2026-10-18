@@ -1,4 +1,14 @@
-import { YARD_MIN_HEIGHT, yardLayout, yardWalkGeometry } from '../den/YardScene';
+import {
+  ART_TIER_2_FROM_LEVEL,
+  ART_TIER_3_FROM_LEVEL,
+  ART_TIER_4_FROM_LEVEL,
+  ART_TIER_5_FROM_LEVEL,
+  STAGE_SIZE,
+  YARD_MIN_HEIGHT,
+  artTierForLevel,
+  yardLayout,
+  yardWalkGeometry,
+} from '../den/YardScene';
 
 const STAGE_3 = { doghouse: 260, bakery: 260, sniffGarden: 260 };
 
@@ -86,6 +96,44 @@ describe('yardLayout (stage 3, min yard height)', () => {
       const buddyTopFromTop = YARD_MIN_HEIGHT - L.buddy.bottom - L.buddy.size;
       expect(buddyTopFromTop + 0.3 * L.buddy.size).toBeGreaterThan(doghouseBaseFromTop - 0.001);
       expect(G.spots.front).toBeCloseTo(G.baseCx, 5);
+    });
+  }
+});
+
+describe('artTierForLevel (five stages)', () => {
+  it('uses the logged thresholds 4 / 10 / 20 / 35', () => {
+    expect([ART_TIER_2_FROM_LEVEL, ART_TIER_3_FROM_LEVEL, ART_TIER_4_FROM_LEVEL, ART_TIER_5_FROM_LEVEL]).toEqual([4, 10, 20, 35]);
+  });
+
+  it('maps every level to its stage at the boundaries', () => {
+    const cases: Array<[number, number]> = [[1, 1], [3, 1], [4, 2], [9, 2], [10, 3], [19, 3], [20, 4], [34, 4], [35, 5], [100, 5]];
+    for (const [level, tier] of cases) expect(artTierForLevel(level)).toBe(tier);
+  });
+
+  it('stage sizes grow with the stage (280 and 300 for stages 4 and 5)', () => {
+    expect(STAGE_SIZE[4]).toBe(280);
+    expect(STAGE_SIZE[5]).toBe(300);
+    expect([1, 2, 3, 4, 5].map((s) => STAGE_SIZE[s as 1 | 2 | 3 | 4 | 5])).toEqual([160, 210, 260, 280, 300]);
+  });
+});
+
+describe('yardLayout (stage 5, min yard height)', () => {
+  const STAGE_5 = { doghouse: 300, bakery: 300, sniffGarden: 300 };
+  for (const width of [360, 390]) {
+    it(`keeps side buildings within the 10% edge overhang and Buddy's hit boxes clear at width ${width}`, () => {
+      const L = yardLayout(width, YARD_MIN_HEIGHT, STAGE_5);
+      for (const box of Object.values(L.sprites)) {
+        expect(box.left).toBeGreaterThanOrEqual(-0.1 * box.size - 0.001);
+        expect(box.left + box.size).toBeLessThanOrEqual(width + 0.1 * box.size + 0.001);
+      }
+      for (const hit of Object.values(L.hits)) {
+        const apart =
+          hit.left + hit.width <= L.buddy.left + 0.001 ||
+          hit.left >= L.buddy.left + L.buddy.size - 0.001 ||
+          hit.bottom + hit.height <= L.buddy.bottom + 0.001 ||
+          hit.bottom >= L.buddy.bottom + L.buddy.size - 0.001;
+        expect(apart).toBe(true);
+      }
     });
   }
 });

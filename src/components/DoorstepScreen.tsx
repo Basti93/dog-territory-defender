@@ -9,7 +9,7 @@ import { BuddyLoading } from './BuddyLoading';
 import { BuddyMood } from './buddy/buddyMood';
 import { play } from '../feedback/sounds';
 import { ArtImage, Button, DecorImage, Card, FadeSlideIn, ListRow, PressableScale, Screen, palette, radii, shadows, spacing, textStyle } from '../ui';
-import { artOr, buildingArt } from '../art/artAssets';
+import { artOr, buildingArtOrBest } from '../art/artAssets';
 import { artTierForLevel } from './den/YardScene';
 
 import { currentTitleForLevel } from '../economy/milestones';
@@ -540,7 +540,7 @@ function DoorstepScene({ appearance, mood, dog, doghouseLevel, menuButton, child
   const ground = artOr('yard-ground', null);
   const buddySize = Math.min(BUDDY_MAX, width * 0.5);
   const doghouseSize = Math.min(DOGHOUSE_MAX, width * 0.52);
-  const doghouse = buildingArt('doghouse', artTierForLevel(doghouseLevel));
+  const doghouse = buildingArtOrBest('doghouse', artTierForLevel(doghouseLevel));
   return (
     <View style={[styles.scene, { height: insets.top + SCENE_HEIGHT }]}>
       {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}

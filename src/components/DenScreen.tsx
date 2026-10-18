@@ -20,8 +20,12 @@ import {
   textStyle,
   tokens,
 } from '../ui';
-import { buildingArt } from '../art/artAssets';
-import { YARD_ORDER, YardBuildingKey, YardScene, artTierForLevel, yardHeightFor } from './den/YardScene';
+import { buildingArtOrBest } from '../art/artAssets';
+import { ART_TIER_4_FROM_LEVEL, YARD_ORDER, YardBuildingKey, YardScene, artTierForLevel, yardHeightFor } from './den/YardScene';
+import { useWildExtra } from './den/useWildExtra';
+import { weirdUpgradeLine } from './weirdCopy';
+import type { SessionKind } from './DoorstepScreen';
+import type { SettingsRepository } from '../storage/SettingsRepository';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import {
@@ -91,6 +95,10 @@ interface DenScreenProps {
   accruedSinceLastVisit?: number;
   /** Called on mount so App.tsx does not hand the same amount to later Den visits. */
   onAccrualShown?: () => void;
+  /** Wild Extras (cosmetic yard cameos) remember their last day here; omitted means none play. */
+  settingsRepository?: SettingsRepository;
+  /** This launch's session kind (duck parade needs a fresh open). Default 'fresh-open'. */
+  sessionKind?: SessionKind;
   pendingAchievements?: AchievementId[];
   onAcknowledgePendingAchievements?: () => void;
   onClose: () => void;
@@ -104,6 +112,8 @@ export function DenScreen({
   buddyAppearance,
   accruedSinceLastVisit = 0,
   onAccrualShown,
+  settingsRepository,
+  sessionKind = 'fresh-open',
   pendingAchievements = [],
   onAcknowledgePendingAchievements,
   onClose,
@@ -129,6 +139,9 @@ export function DenScreen({
   const scrollRef = useRef<ScrollView>(null);
   const cardY = useRef<Partial<Record<BuildingKey, number>>>({});
   const { height: screenHeight } = useWindowDimensions();
+  const wildExtra = useWildExtra({ settingsRepository, sessionKind });
+  // Rare sweet-weird note after a late-stage upgrade (copy: weird.upgrade.*).
+  const [weirdNote, setWeirdNote] = useState<string | null>(null);
 
   useEffect(() => {
     onAccrualShown?.();
@@ -216,6 +229,9 @@ export function DenScreen({
     if (excitedTimer.current) clearTimeout(excitedTimer.current);
     excitedTimer.current = setTimeout(() => setExcited(false), EXCITED_AFTER_UPGRADE_MS);
     setState(result);
+    const newLevel = getBuildingLevel(result, building);
+    setWeirdNote(newLevel >= ART_TIER_4_FROM_LEVEL ? weirdUpgradeLine(building, newLevel) : null);
+    wildExtra.playLevelUp();
     onTreatsChanged(result.treats);
     await repository.saveState(result);
 
@@ -244,6 +260,7 @@ export function DenScreen({
         upgrade={upgrade}
         onSelectBuilding={handleSelectBuilding}
         height={yardHeightFor(screenHeight)}
+        wildExtra={wildExtra.active ? { id: wildExtra.active, onDone: wildExtra.onDone } : null}
       >
         <HeaderOverlay onClose={onClose} />
       </YardScene>
@@ -252,6 +269,12 @@ export function DenScreen({
         {showOverflowNotice && (
           <Card tint="warm">
             <Text style={textStyle('body')}>{t('den.overflowNotice')}</Text>
+          </Card>
+        )}
+
+        {weirdNote && (
+          <Card tint="warm">
+            <Text style={textStyle('body')}>{weirdNote}</Text>
           </Card>
         )}
 
@@ -305,7 +328,7 @@ export function DenScreen({
             >
               <Card style={selected === building ? styles.cardSelected : undefined}>
                 <View style={styles.cardRow}>
-                  <ArtImage art={buildingArt(display.art, artTierForLevel(level))} size={80} />
+                  <ArtImage art={buildingArtOrBest(display.art, artTierForLevel(level))} size={80} />
                   <View style={styles.cardBody}>
                     <Text style={textStyle('h2')}>{t(display.nameKey)}</Text>
                     <Text style={[textStyle('small'), { color: palette.muted }]}>{t(display.subKey)}</Text>

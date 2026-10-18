@@ -35,4 +35,14 @@ describe('SettingsRepository contract', () => {
     expect(await repo.getOnboardingDone()).toBe(false);
     expect(await repo.getLocalePreference()).toBe('de');
   });
+
+  it('wildExtrasLastShown defaults to {}, round-trips, drops junk, and is independent of the other settings', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getWildExtrasLastShown()).toEqual({});
+    await repo.saveWildExtrasLastShown({ 'tea-time': '2026-10-18', nonsense: 'x' } as never);
+    expect(await repo.getWildExtrasLastShown()).toEqual({ 'tea-time': '2026-10-18' });
+    await repo.saveLocalePreference('de');
+    await repo.saveOnboardingDone(true);
+    expect(await repo.getWildExtrasLastShown()).toEqual({ 'tea-time': '2026-10-18' });
+  });
 });

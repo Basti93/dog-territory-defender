@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import { LocalePreference } from '../i18n/types';
+import { normalizeLastShown } from '../components/den/wildExtras';
 import { normalizeLocalePreference, SettingsRepository } from './SettingsRepository';
 
 const DEFAULT_DB_NAME = 'dog-territory-defender.db';
@@ -22,6 +23,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(app_settings)');
     if (!columns.some((c) => c.name === 'onboardingDone')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN onboardingDone INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.some((c) => c.name === 'wildExtrasLastShown')) {
+      await db.execAsync("ALTER TABLE app_settings ADD COLUMN wildExtrasLastShown TEXT NOT NULL DEFAULT '{}'");
     }
     return db;
   });
@@ -64,6 +68,29 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET onboardingDone = excluded.onboardingDone`,
         SINGLETON_ID,
         done ? 1 : 0
+      );
+    },
+
+    async getWildExtrasLastShown(): Promise<Record<string, string>> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ wildExtrasLastShown: string }>(
+        'SELECT wildExtrasLastShown FROM app_settings WHERE id = ?',
+        SINGLETON_ID
+      );
+      try {
+        return normalizeLastShown(JSON.parse(row?.wildExtrasLastShown ?? '{}'));
+      } catch {
+        return {};
+      }
+    },
+
+    async saveWildExtrasLastShown(lastShown: Record<string, string>): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, wildExtrasLastShown) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET wildExtrasLastShown = excluded.wildExtrasLastShown`,
+        SINGLETON_ID,
+        JSON.stringify(normalizeLastShown(lastShown))
       );
     },
   };

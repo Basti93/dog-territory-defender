@@ -324,6 +324,7 @@ export function YardBuddy({ appearance, name, mood, curiousFacing, replayKey, ge
           mood={avatarMood}
           name={name}
           excitedSettleMs={null}
+          phaseShiftPx={geometry.centers.doghouse - (xRef.current ?? geometry.baseCx)}
           walkHops={view.walk?.hops}
           walkHopMs={view.walk?.hopMs}
           rng={rng}

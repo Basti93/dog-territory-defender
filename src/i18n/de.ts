@@ -423,6 +423,13 @@ const de: Record<string, string> = {
   "primer.granted": "Alles bereit",
   "primer.declined": "Kein Problem, du kannst es später in den Einstellungen einschalten.",
   "primer.later": "Später",
+  // Sweet weird streak (openspec/changes/buddy-comes-alive design.md): warm first, weird second. Picked rarely (1 in 4).
+  "weird.headline.floating": "Tolle Runde! {dog} ist so stolz, dass er kurz schwebt.",
+  "weird.headline.moon": "Gemeinsam unterwegs, und der Mond kichert ein bisschen.",
+  "weird.levelUp.comet": "Level geschafft! Ein Komet in Knochenform sagt Danke.",
+  "weird.upgrade.doghouse": "Dein Hundehaus hat Besuch von den Sternen. Sie bleiben zum Tee.",
+  "weird.upgrade.garden": "Der Garten leuchtet. Die Pilze auch. Das ist normal.",
+  "weird.upgrade.bakery": "Die Bäckerei ist jetzt kosmisch. Die Knochen kreisen ganz friedlich.",
 };
 
 export default de;

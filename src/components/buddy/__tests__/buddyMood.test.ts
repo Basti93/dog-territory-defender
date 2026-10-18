@@ -1,5 +1,9 @@
 import {
   BUDDY_TRICKS,
+  RARE_TRICKS,
+  RARE_TRICK_ONE_IN,
+  IdleTrick,
+  pickIdleTrick,
   nextTrickDelayMs,
   partsForMood,
   pickTrick,
@@ -88,5 +92,47 @@ describe('partsForMood', () => {
 
   it('keeps every other mood layered', () => {
     for (const m of ['idle', 'happy', 'curious', 'excited'] as const) expect(partsForMood(m, withLying)).toBe('layered');
+  });
+});
+
+describe('idle trick pool (rare tricks)', () => {
+  const sweep = (allowPhase: boolean, previous: IdleTrick | null = null) => {
+    const counts = new Map<IdleTrick, number>();
+    const N = 6000;
+    for (let i = 0; i < N; i++) {
+      const trick = pickIdleTrick(() => i / N, previous, allowPhase);
+      counts.set(trick, (counts.get(trick) ?? 0) + 1);
+    }
+    return { counts, N };
+  };
+
+  it('has five rare tricks at ~1/6 of the weight in total', () => {
+    expect(RARE_TRICKS).toHaveLength(5);
+    const { counts, N } = sweep(true);
+    const rare = RARE_TRICKS.reduce((sum, r) => sum + (counts.get(r) ?? 0), 0);
+    expect(rare / N).toBeCloseTo(1 / RARE_TRICK_ONE_IN, 2);
+    for (const r of RARE_TRICKS) expect(counts.get(r)).toBeGreaterThan(0);
+    for (const c of BUDDY_TRICKS) expect(counts.get(c)).toBeGreaterThan(0);
+  });
+
+  it('leaves phase out where there is no doghouse wall, keeping the rare share at 1/6', () => {
+    const { counts, N } = sweep(false);
+    expect(counts.get('phase')).toBeUndefined();
+    const rare = RARE_TRICKS.reduce((sum, r) => sum + (counts.get(r) ?? 0), 0);
+    expect(rare / N).toBeCloseTo(1 / RARE_TRICK_ONE_IN, 2);
+  });
+
+  it('never repeats the previous trick, common or rare', () => {
+    for (const prev of [null, ...BUDDY_TRICKS, ...RARE_TRICKS] as Array<IdleTrick | null>) {
+      for (let i = 0; i <= 200; i++) {
+        const trick = pickIdleTrick(() => i / 200, prev, true);
+        if (prev) expect(trick).not.toBe(prev);
+      }
+    }
+  });
+
+  it('is deterministic with a seeded rng', () => {
+    expect(pickIdleTrick(() => 0, null, true)).toBe(RARE_TRICKS[0]);
+    expect(pickIdleTrick(() => 0.5, null, true)).toBe(BUDDY_TRICKS[1]);
   });
 });

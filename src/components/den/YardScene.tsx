@@ -3,17 +3,19 @@ import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from 'reac
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
-import { BuildingId, BuildingLevel, artOr, buildingArt } from '../../art/artAssets';
+import { BuildingId, BuildingLevel, artOr, buildingArtOrBest } from '../../art/artAssets';
 import { BuddyMood } from '../buddy/buddyMood';
 import { YardBuddy, YardBuddyGeometry } from './YardBuddy';
 import { YardButterflies } from './YardButterflies';
+import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from './YardExtras';
+import type { WildExtraId } from './wildExtras';
 import { SpotId, clampX } from './yardLife';
 import { ArtImage, Badge, DecorImage, palette } from '../../ui';
 import { t } from '../../i18n';
 
 // The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
 // Presentation only; the parent owns all state. It is the hero of the Den, so
-// the buildings are large (stage 1 160px, stage 2 210px, stage 3 260px).
+// the buildings are large (stage 1 160px ... stage 5 300px).
 
 export type YardBuildingKey = 'doghouse' | 'bakery' | 'sniffGarden';
 
@@ -21,19 +23,23 @@ export const YARD_ORDER: YardBuildingKey[] = ['doghouse', 'bakery', 'sniffGarden
 
 const ART_ID: Record<YardBuildingKey, BuildingId> = { doghouse: 'doghouse', bakery: 'bakery', sniffGarden: 'garden' };
 
-// Presentation-only mapping from real building level (up to 100) to the three
+// Presentation-only mapping from real building level (up to 100) to the five
 // art stages. Tuned by eye, not an economy number: change freely.
 export const ART_TIER_2_FROM_LEVEL = 4;
 export const ART_TIER_3_FROM_LEVEL = 10;
+export const ART_TIER_4_FROM_LEVEL = 20;
+export const ART_TIER_5_FROM_LEVEL = 35;
 
 export function artTierForLevel(level: number): BuildingLevel {
+  if (level >= ART_TIER_5_FROM_LEVEL) return 5;
+  if (level >= ART_TIER_4_FROM_LEVEL) return 4;
   if (level >= ART_TIER_3_FROM_LEVEL) return 3;
   if (level >= ART_TIER_2_FROM_LEVEL) return 2;
   return 1;
 }
 
 /** Sprite box edge (px) per art stage. Sprites are square with transparent margins. */
-export const STAGE_SIZE: Record<BuildingLevel, number> = { 1: 160, 2: 210, 3: 260 };
+export const STAGE_SIZE: Record<BuildingLevel, number> = { 1: 160, 2: 210, 3: 260, 4: 280, 5: 300 };
 
 /** Yard height: ~48% of the screen, never so short that a stage-3 doghouse gets squashed. */
 export const YARD_MIN_HEIGHT = 380;
@@ -222,6 +228,8 @@ interface YardSceneProps {
   /** Tap on a building (the screen scrolls to its upgrade card). */
   onSelectBuilding: (key: YardBuildingKey) => void;
   height: number;
+  /** A Wild Extra to play now (rare cosmetic cameo); the scene reports when it has finished. */
+  wildExtra?: { id: WildExtraId; onDone: () => void } | null;
   /** Overlay drawn on top of the scene (the Den header). */
   children?: React.ReactNode;
 }
@@ -235,6 +243,7 @@ export function YardScene({
   upgrade,
   onSelectBuilding,
   height,
+  wildExtra = null,
   children,
 }: YardSceneProps) {
   const { width } = useWindowDimensions();
@@ -261,6 +270,8 @@ export function YardScene({
       />
     );
   };
+  const extraEl = wildExtra ? <YardExtras id={wildExtra.id} layout={layout} width={width} height={height} onDone={wildExtra.onDone} /> : null;
+  const extraBehind = !!wildExtra && BEHIND_DOGHOUSE_EXTRAS.includes(wildExtra.id);
   const renderHit = (b: YardBuilding) => {
     const hit = layout.hits[b.key];
     return (
@@ -295,9 +306,11 @@ export function YardScene({
         butterflies={gardenStage3}
         tap={tap}
       />
+      {extraBehind && extraEl}
       {buildings.filter((b) => b.key === 'doghouse').map(renderSprite)}
       {YARD_ORDER.map((k) => buildings.find((b) => b.key === k)).filter((b): b is YardBuilding => !!b).map(renderHit)}
       {gardenStage3 && <YardButterflies garden={layout.sprites.sniffGarden} />}
+      {!extraBehind && extraEl}
       {/* Level badges sit above everything so none is ever hidden. */}
       {buildings.map((b) => {
         const box = layout.badges[b.key];
@@ -348,7 +361,7 @@ function BuildingSprite({
   return (
     <View style={[styles.sprite, { left, bottom, width: size, height: size }]} pointerEvents="none">
       <Animated.View style={{ transform: [{ scale }] }}>
-        <ArtImage art={buildingArt(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
+        <ArtImage art={buildingArtOrBest(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
       </Animated.View>
       <Animated.Text
         pointerEvents="none"

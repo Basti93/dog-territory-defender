@@ -27,6 +27,7 @@ import { formatNumber, t, tPlural } from '../i18n';
 import * as haptics from '../feedback/haptics';
 import { play } from '../feedback/sounds';
 import { MAX_COUNT_UP_MS } from '../ui/AnimatedNumber';
+import { WEIRD_HEADLINE_KEYS, pickWeirdKey, weirdLevelUpLine } from './weirdCopy';
 
 // Same keys DenScreen uses for its building cards.
 const BUILDING_NAME_KEYS: Record<BuildingKey, string> = {
@@ -69,10 +70,12 @@ interface CelebrationScreenProps {
 // `celebration.headline.1` .. `.3`. {name} is the dog's name.
 const HEADLINE_COUNT = 3;
 
-/** Same walk id always gives the same headline. */
+/** Same walk id always gives the same headline. About 1 walk in 4 gets a sweet-weird line instead (`weird.headline.*`). */
 export function pickCelebrationHeadline(walkId: string | null | undefined, dog: string): string {
   let hash = 0;
   for (const ch of walkId ?? '') hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const weird = pickWeirdKey(hash, WEIRD_HEADLINE_KEYS);
+  if (weird) return t(weird, { dog, name: dog });
   return t(`celebration.headline.${(hash % HEADLINE_COUNT) + 1}`, { name: dog });
 }
 
@@ -253,6 +256,10 @@ export function CelebrationScreen({
               newCount: formatNumber(newTreatsPerWalk),
               oldCount: formatNumber(oldTreatsPerWalk),
             })}
+            {(() => {
+              const weird = weirdLevelUpLine(walkId);
+              return weird ? `\n${weird}` : '';
+            })()}
           </Beat>
         )}
 

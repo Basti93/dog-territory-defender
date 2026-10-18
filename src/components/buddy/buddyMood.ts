@@ -8,6 +8,11 @@ export type BuddyMood = 'idle' | 'happy' | 'excited' | 'sleepy' | 'curious';
 export type BuddyTrick = 'sit' | 'stretch' | 'shake';
 
 export const BUDDY_TRICKS: readonly BuddyTrick[] = ['sit', 'stretch', 'shake'];
+/** Rare idle tricks (weird streak): together ~1 in RARE_TRICK_ONE_IN idle tricks. */
+export type RareTrick = 'levitate' | 'phase' | 'sneeze' | 'leaf-tornado' | 'lightbulb';
+export const RARE_TRICKS: readonly RareTrick[] = ['levitate', 'phase', 'sneeze', 'leaf-tornado', 'lightbulb'];
+export const RARE_TRICK_ONE_IN = 6;
+export type IdleTrick = BuddyTrick | RareTrick;
 export const TRICK_DELAY_MIN_MS = 12000;
 export const TRICK_DELAY_MAX_MS = 25000;
 export const SLEEPY_START_HOUR = 22; // inclusive
@@ -55,6 +60,23 @@ export function pickTrick(rng: () => number, previous: BuddyTrick | null): Buddy
   const options = BUDDY_TRICKS.filter((t) => t !== previous);
   const index = Math.min(options.length - 1, Math.max(0, Math.floor(rng() * options.length)));
   return options[index];
+}
+
+/**
+ * The idle trick pool: the three common tricks plus the five rare ones at ~1/6 of the weight in total.
+ * `allowPhase` is true only where a doghouse wall exists (the Den); elsewhere `phase` is left out of the
+ * rare pool, so the rare share stays 1/6 and Buddy never starts a trick he cannot finish. Never returns
+ * `previous`. One rng draw: below 1/6 picks a rare trick, the rest picks a common one.
+ */
+export function pickIdleTrick(rng: () => number, previous: IdleTrick | null, allowPhase: boolean): IdleTrick {
+  const r = Math.min(0.999999, Math.max(0, rng()));
+  const share = 1 / RARE_TRICK_ONE_IN;
+  if (r < share) {
+    const rare = RARE_TRICKS.filter((x) => x !== previous && (allowPhase || x !== 'phase'));
+    return rare[Math.floor((r / share) * rare.length)];
+  }
+  const rest = (r - share) / (1 - share);
+  return pickTrick(() => rest, previous as BuddyTrick | null);
 }
 
 /** 12000-25000 ms. */

@@ -4,7 +4,8 @@ import type { ImageSourcePropType } from 'react-native';
 // Generation checklist: assets/art/README.md.
 
 export type BuildingId = 'doghouse' | 'bakery' | 'garden';
-export type BuildingLevel = 1 | 2 | 3;
+export type BuildingLevel = 1 | 2 | 3 | 4 | 5;
+export const BUILDING_LEVELS: readonly BuildingLevel[] = [1, 2, 3, 4, 5];
 
 export type ArtKey =
   | `${BuildingId}-${BuildingLevel}`
@@ -19,10 +20,36 @@ export type ArtKey =
   | 'icon-walks'
   | 'icon-den'
   | 'doorstep-sky'
-  | 'celebration-burst';
+  | 'celebration-burst'
+  // Wild Extras props (weird streak). Registry lines land with the PNGs; until then YardExtras draws fallbacks.
+  | 'prop-ufo'
+  | 'prop-beam'
+  | 'prop-comet-bone'
+  | 'prop-duck-party'
+  | 'prop-squirrel-raincoat'
+  | 'prop-mailbox'
+  | 'prop-sock'
+  | 'prop-gnome'
+  | 'prop-cloud-tea'
+  | 'prop-moon-cheese'
+  | 'prop-firefly'
+  | 'prop-lightbulb'
+  | 'prop-question';
 
 export function buildingArt(building: BuildingId, level: BuildingLevel): ArtKey {
   return `${building}-${level}`;
+}
+
+/**
+ * The building art to actually draw: `stage`, or the highest lower stage that is registered. Stages 4 and 5
+ * ship after the code, so a high-level building shows its newest existing art instead of a grey placeholder.
+ */
+export function buildingArtOrBest(building: BuildingId, stage: BuildingLevel): ArtKey {
+  for (let s = stage; s > 1; s--) {
+    const key = buildingArt(building, s as BuildingLevel);
+    if (hasArt(key)) return key;
+  }
+  return buildingArt(building, 1);
 }
 
 // Explicitly edited map. Do NOT require() files that do not exist yet:

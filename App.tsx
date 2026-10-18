@@ -18,6 +18,7 @@ import { TerritoriesScreen } from './src/components/TerritoriesScreen';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
 import { DenScreen } from './src/components/DenScreen';
+import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
 import { DoorstepScreen } from './src/components/DoorstepScreen';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
@@ -68,6 +69,13 @@ export default function App() {
     onRewards: (outcome) => {
       setTreats(outcome.treats);
       setLevel(outcome.level);
+      // Wild Extras: remembered in memory until the Den next opens (never played over the walk or celebration).
+      queueWalkTrigger(
+        outcome.wildExtra
+          ? { distanceKm: outcome.wildExtra.distanceKm, walkIndex: outcome.wildExtra.walkIndex, isWeekend: isWeekend(outcome.wildExtra.closedAt) }
+          : null,
+        outcome.celebration.leveledUpTo !== null
+      );
       showCelebration({ walkId: outcome.walkId, rewards: outcome.celebration, territoryBeat: outcome.territoryBeat });
     },
   });
@@ -276,6 +284,8 @@ export default function App() {
             personalStatsRepository={repos.personalStatsRepository}
             homeRangeRepository={repos.homeRangeRepository}
             buddyAppearance={buddyAppearance}
+            settingsRepository={repos.settingsRepository}
+            sessionKind={launch.doorstepSession?.kind}
             accruedSinceLastVisit={denAccrualShown ? 0 : launch.accruedDelta}
             onAccrualShown={() => setDenAccrualShown(true)}
             pendingAchievements={launch.pendingDenAchievements}
