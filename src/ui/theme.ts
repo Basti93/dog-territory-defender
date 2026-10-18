@@ -31,11 +31,35 @@ export const palette = {
   shadow: mix(tokens.brown, tokens.text, 0.3), // warm, never pure black
 } as const;
 
+/**
+ * Redesign material colours (wood, linen, felt, yarn). Separate from `tokens` on purpose;
+ * rationale in docs/decisions/LOG.md. Text on paper/signs is always `ink`.
+ */
+export const material = {
+  linen: '#EFE7D6',
+  yarn: '#FFFBF0', // cream seam / paper
+  woodLight: '#E9C98E',
+  woodRim: '#B08D5E',
+  woodDark: '#7A5C3A',
+  feltUsual: '#9FD79A',
+  feltUsualDot: '#8CCB88',
+  feltFresh: '#4FBF6B',
+  feltWild: '#DCE8BE',
+  feltWildBlade: '#C6D6A0',
+  pathBrown: '#C9A06A',
+  ink: '#1A2A1A',
+  inkGreen: '#1E7A47',
+  muted: '#5F6F5F',
+  skyEvening: '#F7C9A8',
+  skyEveningLight: '#FBE3CC',
+  chalk: '#C9B48E',
+} as const;
+
 export const radii = { card: 24, pill: 999, chip: 14, button: 28, tile: 20 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;
 
-export type TypeName = 'display' | 'h1' | 'h2' | 'body' | 'small' | 'min';
+export type TypeName = 'display' | 'h1' | 'h2' | 'body' | 'small' | 'min' | 'sign' | 'signBig' | 'hand';
 
 export const MIN_FONT_SIZE = 12;
 
@@ -46,6 +70,9 @@ export const type: Record<TypeName, { fontSize: number; lineHeight: number; weig
   body: { fontSize: 16, lineHeight: 22, weight: 600, role: 'body' },
   small: { fontSize: 13, lineHeight: 18, weight: 600, role: 'body' },
   min: { fontSize: 12, lineHeight: 16, weight: 600, role: 'body' },
+  sign: { fontSize: 20, lineHeight: 24, weight: 700, role: 'sign' },
+  signBig: { fontSize: 28, lineHeight: 32, weight: 700, role: 'sign' },
+  hand: { fontSize: 22, lineHeight: 26, weight: 600, role: 'hand' },
 };
 
 /** Pure: style for a type step given a resolved family (undefined -> system font + fontWeight). */
@@ -81,4 +108,4 @@ export const shadows = {
 
 export { tokens };
 
-export const theme = { tokens, palette, radii, spacing, type, shadows };
+export const theme = { tokens, material, palette, radii, spacing, type, shadows };

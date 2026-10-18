@@ -6,7 +6,7 @@ export { fonts, resolveFont } from './fontMap';
 export type { FontRole } from './fontMap';
 
 /**
- * Loads the four Nunito files. Call once in App.tsx and either gate render on
+ * Loads the four Nunito files plus Fredoka (sign) and Caveat (hand). Call once in App.tsx and either gate render on
  * `loaded` (recommended, avoids a font flash) or ignore it: until loaded,
  * `font()` returns undefined and text renders in the system font.
  */
@@ -16,6 +16,9 @@ export function useAppFonts(): { loaded: boolean; error: Error | null } {
     'Nunito-SemiBold': require('../../assets/fonts/Nunito-SemiBold.ttf'),
     'Nunito-Bold': require('../../assets/fonts/Nunito-Bold.ttf'),
     'Nunito-ExtraBold': require('../../assets/fonts/Nunito-ExtraBold.ttf'),
+    'Fredoka-Bold': require('../../assets/fonts/Fredoka-Bold.ttf'),
+    'Fredoka-SemiBold': require('../../assets/fonts/Fredoka-SemiBold.ttf'),
+    'Caveat-SemiBold': require('../../assets/fonts/Caveat-SemiBold.ttf'),
   });
   // On error we still report loaded so the app is never stuck on a splash.
   return { loaded: loaded || error !== null, error };

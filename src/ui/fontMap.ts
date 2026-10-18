@@ -4,6 +4,10 @@ export const fonts = {
   heading: 'Nunito-Bold',
   body: 'Nunito-SemiBold',
   text: 'Nunito-Regular',
+  // Redesign: signboards, numbers on signs, handwriting for postcard phrases.
+  sign: 'Fredoka-Bold',
+  signLight: 'Fredoka-SemiBold',
+  hand: 'Caveat-SemiBold',
 } as const;
 
 export type FontRole = keyof typeof fonts;
