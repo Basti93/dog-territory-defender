@@ -63,13 +63,13 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       );
     `);
     // Migration for rows created before territories existed
-    // (openspec/changes/territories) — both nullable; territoryId starts
+    // (docs/decisions/territories) — both nullable; territoryId starts
     // NULL until the one-time territory migration backfill assigns it
     // (storage/territoryMigration.ts), and lastVisitCreditedDayKey starts
     // NULL, which correctly reads as "no visit credited yet this scheme."
     await addColumnIfMissing(db, 'home_range_cells', 'territoryId TEXT');
     await addColumnIfMissing(db, 'home_range_cells', 'lastVisitCreditedDayKey TEXT');
-    // openspec/changes/somewhere-wild/design.md Decision 4 — a single
+    // docs/decisions/somewhere-wild/design.md Decision 4 — a single
     // overwritten row (same singleton-row convention den_economy already
     // uses), not an event log. cellIds is stored as JSON since it's never
     // queried by content, only read back whole.
@@ -123,7 +123,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
           const nextLastRefreshed = Math.max(existing.lastRefreshed, refreshedAt);
           const nextLastTracked = tracked ? Math.max(existing.lastTracked, refreshedAt) : existing.lastTracked;
 
-          // Anti-farming daily visits cap (openspec/changes/territories/
+          // Anti-farming daily visits cap (docs/decisions/territories/
           // design.md Decision 6): a tracked repaint only bumps `visits`
           // once per local calendar day, completely silently. territoryId is
           // deliberately absent from this UPDATE — only reassignCellsToTerritory
@@ -211,6 +211,43 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       });
     },
 
+    async mergeCells(incoming: Cell[]): Promise<void> {
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        for (const c of incoming) {
+          const existing = await db.getFirstAsync<CellRow>(
+            'SELECT * FROM home_range_cells WHERE ix = ? AND iy = ?',
+            c.ix,
+            c.iy
+          );
+          if (!existing) {
+            await db.runAsync(
+              `INSERT INTO home_range_cells (ix, iy, lastRefreshed, lastTracked, visits, territoryId, lastVisitCreditedDayKey) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              c.ix,
+              c.iy,
+              c.lastRefreshed,
+              c.lastTracked,
+              c.visits,
+              c.territoryId,
+              c.lastTracked > 0 ? calendarDayKey(c.lastTracked) : null
+            );
+            continue;
+          }
+          const lastTracked = Math.max(existing.lastTracked, c.lastTracked);
+          await db.runAsync(
+            `UPDATE home_range_cells SET lastRefreshed = ?, lastTracked = ?, visits = ?, territoryId = ?, lastVisitCreditedDayKey = ? WHERE ix = ? AND iy = ?`,
+            Math.max(existing.lastRefreshed, c.lastRefreshed),
+            lastTracked,
+            Math.max(existing.visits, c.visits),
+            c.territoryId ?? existing.territoryId,
+            lastTracked > existing.lastTracked ? calendarDayKey(lastTracked) : existing.lastVisitCreditedDayKey,
+            c.ix,
+            c.iy
+          );
+        }
+      });
+    },
+
     async replaceAll(cells: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void> {
       const db = await dbPromise;
       await db.withTransactionAsync(async () => {
@@ -245,7 +282,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       const db = await dbPromise;
       // A single ungrouped aggregate over every cell, regardless of
       // territory — see HomeRangeRepository.getWorldMass's doc comment and
-      // openspec/changes/territories/design.md Decision 6's split-invariance
+      // docs/decisions/territories/design.md Decision 6's split-invariance
       // guardrail. This query MUST NEVER gain a WHERE/GROUP BY territoryId.
       const row = await db.getFirstAsync<{ cellCount: number; visitsSum: number | null }>(
         'SELECT COUNT(*) AS cellCount, SUM(visits) AS visitsSum FROM home_range_cells'

@@ -36,6 +36,27 @@ export function createInMemoryTerritoryRepository(): TerritoryRepository {
       territories.delete(absorbedId);
     },
 
+    async upsertTerritories(incoming: Territory[]): Promise<void> {
+      for (const t of incoming) {
+        const existing = territories.get(t.id);
+        territories.set(
+          t.id,
+          existing
+            ? {
+                ...existing,
+                name: t.name,
+                walksHere: Math.max(existing.walksHere, t.walksHere),
+                treatsEarnedHere: Math.max(existing.treatsEarnedHere, t.treatsEarnedHere),
+              }
+            : { ...t }
+        );
+      }
+    },
+
+    async removeTerritories(ids: TerritoryId[]): Promise<void> {
+      for (const id of ids) territories.delete(id);
+    },
+
     async replaceAll(next: Territory[]): Promise<void> {
       territories.clear();
       for (const t of next) territories.set(t.id, { ...t });

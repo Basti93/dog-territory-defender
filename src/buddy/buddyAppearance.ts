@@ -2,7 +2,7 @@
 // Lives in src/buddy (not components/) so storage can import it without
 // pulling in React. Palette hexes come from the buddy-comes-alive
 // visual-design delta ("Buddy Coat Palette") — do not add colours here
-// without an OpenSpec change.
+// without updating docs/specs/visual-design.md.
 
 export const BUDDY_COATS = ['cream', 'golden', 'ginger', 'chocolate', 'charcoal', 'grey', 'white', 'tricolour'] as const;
 export const BUDDY_MARKINGS = ['none', 'patch', 'socks', 'mask'] as const;

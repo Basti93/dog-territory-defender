@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-// Registry of pre-rendered 3D sprites (see openspec/changes/buddy-comes-alive/design.md, Decision 12).
+// Registry of pre-rendered 3D sprites (see docs/decisions/buddy-comes-alive/design.md, Decision 12).
 // Generation checklist: assets/art/README.md.
 
 export type BuildingId = 'doghouse' | 'bakery' | 'garden';

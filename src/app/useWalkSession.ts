@@ -7,9 +7,10 @@ import { getInitialLocation, requestLocationPermission, startWatchingLocation, s
 import { cellKey, MIN_CELLS_FOR_REWARD } from '../utils/grid';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { log } from '../utils/log';
+import { newClientId } from '../sync/ids';
 import { t } from '../i18n';
 import { AppRepositories } from './repositories';
-import { finishTrackedWalk, WalkRewardsOutcome } from './finishTrackedWalk';
+import { finishTrackedWalk, FinishTrackedWalkDeps, WalkRewardsOutcome } from './finishTrackedWalk';
 import { appendLocation, applyLocationToCues, createWalkCueState, startWalkCueState } from './walkSessionHelpers';
 
 export interface UseWalkSessionDeps {
@@ -19,10 +20,12 @@ export interface UseWalkSessionDeps {
   onRangeChanged: () => void;
   /** A finished walk earned rewards (treats/level changed, celebration to show). */
   onRewards: (outcome: WalkRewardsOutcome) => void;
+  /** Household sync: forwarded to finishTrackedWalk. Optional. */
+  sync?: FinishTrackedWalkDeps['sync'];
 }
 
 /** The tracked-walk lifecycle: start, GPS fixes, finish, cancel/reset. One walk in flight at a time. */
-export function useWalkSession({ repos, dogName, onRangeChanged, onRewards }: UseWalkSessionDeps) {
+export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync }: UseWalkSessionDeps) {
   const { homeRangeRepository, walkRepository, notificationRepository } = repos;
   const [appState, setAppState] = useState<AppState>({ walk: null, isTracking: false, error: null });
 
@@ -55,7 +58,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards }: Us
       }
 
       const newWalk: Walk = {
-        id: Date.now().toString(),
+        id: newClientId(), // UUID: two phones in one household must never collide (multiplayer-sync)
         startTime: Date.now(),
         locations: [initialLoc],
         closed: false,
@@ -122,6 +125,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards }: Us
       onWalkFinished: (finishedWalk) => setAppState((prev) => ({ ...prev, walk: finishedWalk, isTracking: false })),
       onRangeChanged,
       onRewards,
+      sync,
     });
   };
 

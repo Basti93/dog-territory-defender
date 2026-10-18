@@ -14,7 +14,7 @@ export const mapHTML = `
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
-    /* Toy-world look: see mapTheme.ts. Wild marker = openspec/changes/somewhere-wild's warm accent. */
+    /* Toy-world look: see mapTheme.ts. Wild marker = docs/decisions/somewhere-wild's warm accent. */
 ${MAP_THEME_CSS}
 ${MAP_MARKER_CSS}
   </style>
@@ -34,9 +34,9 @@ ${MAP_CLOUDS_JS}
     let hasCentered = false;
     // The Home Range layer group (Bloom fill + Range outline), replacing
     // the old per-walk territory polygon layers entirely — see
-    // openspec/changes/home-range/design.md Decision 6.
+    // docs/decisions/home-range/design.md Decision 6.
     let homeRangeLayerGroup = null;
-    // The "Somewhere Wild" marker (openspec/changes/somewhere-wild) — the
+    // The "Somewhere Wild" marker (docs/decisions/somewhere-wild) — the
     // single most-worth-visiting wild cluster, or a recent New Ground
     // discovery. Mirrors currentMarker's add/remove pattern; only ever one
     // at a time, matching the card's own "one spot" rule.
@@ -195,7 +195,7 @@ ${MAP_THEME_PROBE_JS}
         });
       }
 
-      // openspec/changes/somewhere-wild — mirrors SHOW_HOME_RANGE's own
+      // docs/decisions/somewhere-wild — mirrors SHOW_HOME_RANGE's own
       // shape: a small, typed bridge message, not a new mechanism. payload
       // is { latitude, longitude } or null to clear (neither the wild
       // cluster nor a recent New Ground discovery currently qualifies).
@@ -212,7 +212,7 @@ ${MAP_THEME_PROBE_JS}
         reportToRN('SHOW_WILD_SPOT_APPLIED', { hasSpot: !!payload });
       }
 
-      // openspec/changes/somewhere-wild — pans/zooms to a specific spot on
+      // docs/decisions/somewhere-wild — pans/zooms to a specific spot on
       // "Somewhere Wild" card tap (tasks.md task 5.2). Distinct from
       // SHOW_WILD_SPOT (which only places/clears the marker) so the card can
       // re-pan to an already-shown marker without re-sending it.

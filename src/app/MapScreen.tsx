@@ -55,7 +55,7 @@ export function MapScreen(p: MapScreenProps) {
 
       {/* Bottom controls */}
       <View style={styles.controls}>
-        {/* "Somewhere Wild" (openspec/changes/somewhere-wild) — the map screen
+        {/* "Somewhere Wild" (docs/decisions/somewhere-wild) — the map screen
             only, never the Den screen and never a push notification. Renders
             nothing most of the time (see SomewhereWildCard.tsx). */}
         <SomewhereWildCard

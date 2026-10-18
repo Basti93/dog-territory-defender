@@ -91,7 +91,7 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
       );
     `);
     // Migration for rows created before the walk-reminder columns existed
-    // (openspec/changes/walk-reminder) — this project's first schema
+    // (docs/decisions/walk-reminder) — this project's first schema
     // migration on this already-existing table. Every new column's default
     // here matches defaultWalkReminderFields()'s "never used yet" state,
     // which is exactly correct for a pre-existing install: the reminder was

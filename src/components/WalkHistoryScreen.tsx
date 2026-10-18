@@ -14,7 +14,7 @@ interface WalkHistoryScreenProps {
   repository: WalkRepository;
   /**
    * Forwarded one level, unused by this screen's own rendering — the Walk
-   * Portrait (openspec/changes/walk-portrait) that `onSelectWalk` opens is
+   * Portrait (docs/decisions/walk-portrait) that `onSelectWalk` opens is
    * rendered by App.tsx as its own top-level screen (design.md Decision 8),
    * not nested here. Threaded through this props interface anyway per
    * design.md Decision 8's explicit "no prop drilled further than one
@@ -23,7 +23,7 @@ interface WalkHistoryScreenProps {
    */
   homeRangeRepository: HomeRangeRepository;
   onClose: () => void;
-  /** Opens that walk's Walk Portrait (openspec/changes/walk-portrait) — every row, regardless of startSource or reward-qualifying status, is tappable to this. */
+  /** Opens that walk's Walk Portrait (docs/decisions/walk-portrait) — every row, regardless of startSource or reward-qualifying status, is tappable to this. */
   onSelectWalk: (walk: StoredWalk) => void;
 }
 
@@ -36,7 +36,7 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
 
   const handleDelete = (walk: StoredWalk) => {
     // PLACEHOLDER COPY — a game-master question, not settled here (see
-    // openspec/changes/home-range/tasks.md task 2.5.1). Functional
+    // docs/decisions/home-range/tasks.md task 2.5.1). Functional
     // requirement only: this must not claim deleting the walk record undoes
     // its effect on the Home Range map, since it no longer does (deleting a
     // walk removes only its own record — the cells it painted stay in the
@@ -70,12 +70,12 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            // The row itself is the Walk Portrait tap target (openspec/changes/
+            // The row itself is the Walk Portrait tap target (docs/decisions/
             // walk-portrait) — Delete stays its own separate tap target beside it.
             <View style={styles.rowWrap}>
               {/* item.closed means "covered enough ground to qualify for a reward" (the
                   25-painted-cell floor), not "formed a closed loop" — see
-                  openspec/changes/home-range/specs/walk-lifecycle/spec.md. "Short stroll"
+                  docs/decisions/home-range/specs/walk-lifecycle/spec.md. "Short stroll"
                   per walk-portrait's resolved Open Question 3 — warm, not deficit-framed. */}
               <ListRow
                 style={styles.row}

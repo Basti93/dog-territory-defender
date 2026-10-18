@@ -39,6 +39,10 @@ export interface LaunchEffectsDeps {
   openDoorstep: () => void;
   /** Bumps the idle map's Home Range render key. */
   onRangeChanged: () => void;
+  /** Household sync at app open, bounded so a slow server never holds the Doorstep up. Optional: omitted = no sync. */
+  syncOnLaunch?: () => Promise<void>;
+  /** Worded household news for the Doorstep away strip (multiplayer-sync Decision 10). */
+  loadHouseholdLines?: (dogName: string | null) => Promise<string[]>;
 }
 
 /**
@@ -54,7 +58,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
   // Passed down to DoorstepScreen as already-computed values — re-deriving
   // either after the launch routine has already advanced lastTickAt/consumed
   // the achievement queue would silently produce ~0 or an empty queue (see
-  // openspec/changes/home-dashboard/design.md Decision 7).
+  // docs/decisions/home-dashboard/design.md Decision 7).
   const [accruedDelta, setAccruedDelta] = useState(0);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   // The Doorstep's session state, greeting copy, and away-strip lines —
@@ -183,6 +187,8 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
 
       // Resolve the Doorstep's session state, greeting, and away-strip lines
       // exactly once, as the last step, once every input is final.
+      await deps.syncOnLaunch?.().catch((err) => log('SYNC_LAUNCH_ERROR', { error: String(err) }));
+      const householdLines = (await deps.loadHouseholdLines?.(reconciled.dogName).catch(() => [] as string[])) ?? [];
       const doorstepNow = Date.now();
       const resolvedSession = resolveDoorstepSession(previousTick, doorstepNow);
       const resolvedGreeting = resolvedSession.greetingFlavor
@@ -199,6 +205,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
           },
           pendingDenAchievements: pendingAchievementsForDoorstep,
           accruedDelta: delta,
+          householdLines,
           showOverflowLine: showLine,
           treats: reconciled.treats,
           justRevealedTerritoryIncome: justRevealedTerritoryIncomeNow,

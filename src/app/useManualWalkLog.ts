@@ -16,7 +16,7 @@ import { WalkRewardsOutcome } from './finishTrackedWalk';
  * "Log a walk we missed" — a standalone, one-step, direct-reward action. No
  * live GPS trail, no polygon, no notification tied to it. Reuses the exact
  * same reward path a tracked walk gets, via awardWalkRewards. See
- * openspec/changes/home-range/design.md Decision 4 and denEconomy.ts's
+ * docs/decisions/home-range/design.md Decision 4 and denEconomy.ts's
  * evaluateManualLogQuota/recordManualLogUsage for the cap rules.
  */
 export function useManualWalkLog(

@@ -1,0 +1,321 @@
+// Walk ingest: the one place a tracked walk becomes cells + territories + reward on the server.
+// Mirrors src/app/finishTrackedWalk.ts using the shared pure functions (design Decisions 1, 3, 6).
+import { and, between, eq, isNull, sql } from 'drizzle-orm';
+import { MIN_CELLS_FOR_REWARD, newGroundCells, paintedCells, parseCellKey } from '@game/utils/grid';
+import { cumulativeDistance } from '@game/utils/geometry';
+import { bloomMultiplier } from '@game/economy/formulas';
+import { resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '@game/utils/territoryCluster';
+import { generateTerritoryId } from '@game/storage/TerritoryRepository';
+import type { Cell } from '@game/storage/HomeRangeRepository';
+import type {
+  ApiCell,
+  ApiWalkFull,
+  WalkRejectedReason,
+  WalkReward,
+  WalkUploadRequest,
+  WalkUploadResponse,
+} from '@game/sync/apiContract';
+import { API_LIMITS } from '@game/sync/apiContract';
+import type { Config } from '../config';
+import type { Db } from '../db/client';
+import { cells, households, territories, walks } from '../db/schema';
+import { applyPassiveAccrual, awardWalkTreats, awardWalkXp, dailyRewardMultiplier } from '../economy/denTransitions';
+import { dayKeyInZone, sameLocalDay } from '../lib/time';
+import { appendEvent, currentSeq, type EventBus } from './events';
+import { cellFromRow, denFromRow, lockDen, saveDen, stripRev, territoryFromRow, walkMetaFromRow } from './state';
+
+export interface AuthCtx {
+  householdId: string;
+  playerId: string;
+  deviceId: string;
+}
+
+export type WalkResult =
+  | { kind: 'ok'; response: WalkUploadResponse }
+  | { kind: 'rejected'; reason: WalkRejectedReason }
+  | { kind: 'capped' };
+
+const DEFAULT_TERRITORY_NAME = 'A new corner';
+
+function cleanName(raw: string | undefined): string {
+  const trimmed = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return trimmed.length > 0 ? trimmed : DEFAULT_TERRITORY_NAME;
+}
+
+export async function ingestWalk(
+  db: Db,
+  bus: EventBus,
+  config: Config,
+  auth: AuthCtx,
+  req: WalkUploadRequest,
+  now: number
+): Promise<WalkResult> {
+  const result = await db.transaction(async (tx): Promise<WalkResult> => {
+    const dbx = tx as unknown as Db;
+    const hid = auth.householdId;
+    const denRow = await lockDen(dbx, hid); // serialises this household
+
+    const [existing] = await dbx.select().from(walks).where(and(eq(walks.householdId, hid), eq(walks.id, req.id)));
+    if (existing) {
+      return {
+        kind: 'ok',
+        response: {
+          walkId: existing.id,
+          duplicate: true,
+          reward: existing.reward as WalkReward,
+          den: denFromRow(denRow),
+          serverTime: now,
+          seq: await currentSeq(dbx, hid),
+        },
+      };
+    }
+
+    if (req.startSource !== 'button') return { kind: 'rejected', reason: 'unsupported-source' };
+    if (req.locations.length === 0) return { kind: 'rejected', reason: 'no-locations' };
+    if (req.startTime > now + API_LIMITS.maxWalkFutureSkewMs) return { kind: 'rejected', reason: 'start-in-future' };
+    if (req.startTime < now - API_LIMITS.maxWalkAgeMs) return { kind: 'rejected', reason: 'too-old' };
+
+    const [household] = await dbx.select().from(households).where(eq(households.id, hid));
+    const tz = household.timezone;
+
+    // Daily cap counts the household-local calendar day (same day key as the reward multiplier).
+    const [{ recent }] = await dbx
+      .select({ recent: sql<number>`count(*)::int` })
+      .from(walks)
+      .where(and(eq(walks.householdId, hid), sameLocalDay(walks.createdAt, tz, now)));
+    if (recent >= config.limits.walksPerDayPerHousehold) return { kind: 'capped' };
+
+    // ---- compute from the route and the server's own cell state
+    const painted = paintedCells(req.locations);
+    const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
+    const distanceMeters = cumulativeDistance(req.locations);
+    const rangeRows = await dbx.select().from(cells).where(eq(cells.householdId, hid));
+    const rangeBefore: Cell[] = rangeRows.map((r) => ({
+      ix: r.ix,
+      iy: r.iy,
+      lastRefreshed: r.lastRefreshed,
+      lastTracked: r.lastTracked,
+      visits: r.visits,
+      territoryId: r.territoryId,
+    }));
+    const rangeSet = new Set(rangeRows.map((r) => `${r.ix},${r.iy}`));
+    const lastRefreshed = new Map(rangeRows.map((r) => [`${r.ix},${r.iy}`, r.lastRefreshed] as const));
+    const newGround = newGroundCells(painted, rangeSet);
+    const bloom = bloomMultiplier(painted, lastRefreshed, now);
+
+    // Cell timestamps come from the walk itself, never the receive time: keeps the merge order-independent.
+    let walkEnd = req.startTime;
+    for (const l of req.locations) if (l.timestamp > walkEnd) walkEnd = l.timestamp;
+    walkEnd = Math.min(walkEnd, now + API_LIMITS.maxWalkFutureSkewMs);
+    const day = dayKeyInZone(req.startTime, tz);
+
+    const sameDayCandidates = await dbx
+      .select({ startTime: walks.startTime })
+      .from(walks)
+      .where(
+        and(
+          eq(walks.householdId, hid),
+          eq(walks.closed, true),
+          isNull(walks.deletedAt),
+          between(walks.startTime, req.startTime - 36 * 3600 * 1000, req.startTime + 36 * 3600 * 1000)
+        )
+      );
+    const walkOrderToday = sameDayCandidates.filter((w) => dayKeyInZone(w.startTime, tz) === day).length + 1;
+    const dailyMultiplier = dailyRewardMultiplier(walkOrderToday);
+
+    // ---- territories (server-authoritative; the client only supplies a name hint)
+    const existingTerritories = await dbx.select().from(territories).where(eq(territories.householdId, hid));
+    const territoryNames = new Map(existingTerritories.map((t) => [t.id, t.name] as const));
+    let creditedTerritoryId: string | null = null;
+    let newTerritoryName: string | null = null;
+    let mergedTerritoryNames: [string, string] | null = null;
+    const assignment = new Map<string, string>();
+    const reassigned: Array<{ from: string; to: string }> = [];
+    const touchedTerritoryIds = new Set<string>();
+    const removedTerritoryIds: string[] = [];
+    let merges: Array<{ survivorId: string; loserId: string }> = [];
+
+    if (painted.size > 0) {
+      const plan = resolveTerritoryChanges(
+        rangeBefore,
+        painted,
+        now,
+        new Map(existingTerritories.map((t) => [t.id, t.createdAt] as const))
+      );
+      const provisionalToReal = new Map<string, string>();
+      const birthNames = new Map<string, string>();
+      let first = true;
+      for (const birth of plan.births) {
+        const realId = generateTerritoryId(now);
+        const name = first ? cleanName(req.territoryNameHint) : DEFAULT_TERRITORY_NAME;
+        first = false;
+        provisionalToReal.set(birth.provisionalId, realId);
+        birthNames.set(birth.provisionalId, name);
+        territoryNames.set(realId, name);
+        await dbx.insert(territories).values({ householdId: hid, id: realId, name, createdAt: now });
+        touchedTerritoryIds.add(realId);
+      }
+      const real = (id: string) => provisionalToReal.get(id) ?? id;
+      for (const [cellId, id] of plan.newCellAssignments) assignment.set(cellId, real(id));
+      creditedTerritoryId = real(plan.creditedTerritoryId);
+      const beat = resolveCelebrationTerritoryBeat(plan, birthNames, territoryNames);
+      newTerritoryName = beat.newTerritoryName;
+      mergedTerritoryNames = beat.mergedTerritoryNames;
+      merges = plan.merges;
+    }
+
+    // ---- paint cells: day-set union, then visits = baseline + distinct days (design Decision 3)
+    let touchedCells: ApiCell[] = [];
+    if (painted.size > 0) {
+      const cellsJson = JSON.stringify(
+        Array.from(painted).map((id) => {
+          const { ix, iy } = parseCellKey(id);
+          return [ix, iy, assignment.get(id) ?? null];
+        })
+      );
+      await dbx.execute(sql`
+        insert into cell_days (household_id, ix, iy, day)
+        select ${hid}::uuid, (e->>0)::int, (e->>1)::int, ${day}::text
+        from jsonb_array_elements(${cellsJson}::jsonb) e
+        on conflict do nothing`);
+      await dbx.execute(sql`
+        insert into cells (household_id, ix, iy, last_refreshed, last_tracked, baseline_visits, visits, territory_id)
+        select ${hid}::uuid, (e->>0)::int, (e->>1)::int, ${walkEnd}::bigint, ${walkEnd}::bigint, 0, 0, e->>2
+        from jsonb_array_elements(${cellsJson}::jsonb) e
+        on conflict (household_id, ix, iy) do update set
+          last_refreshed = greatest(cells.last_refreshed, excluded.last_refreshed),
+          last_tracked = greatest(cells.last_tracked, excluded.last_tracked)`);
+      await dbx.execute(sql`
+        update cells c set visits = c.baseline_visits + (
+          select count(*) from cell_days d where d.household_id = c.household_id and d.ix = c.ix and d.iy = c.iy)
+        from jsonb_array_elements(${cellsJson}::jsonb) e
+        where c.household_id = ${hid}::uuid and c.ix = (e->>0)::int and c.iy = (e->>1)::int`);
+
+      // merges run after the new cells exist, as in finishTrackedWalk
+      for (const merge of merges) {
+        await dbx.execute(sql`
+          update cells set territory_id = ${merge.survivorId}
+          where household_id = ${hid}::uuid and territory_id = ${merge.loserId}`);
+        const [loser] = await dbx
+          .select()
+          .from(territories)
+          .where(and(eq(territories.householdId, hid), eq(territories.id, merge.loserId)));
+        if (loser) {
+          await dbx
+            .update(territories)
+            .set({
+              walksHere: sql`${territories.walksHere} + ${loser.walksHere}`,
+              treatsEarnedHere: sql`${territories.treatsEarnedHere} + ${loser.treatsEarnedHere}`,
+            })
+            .where(and(eq(territories.householdId, hid), eq(territories.id, merge.survivorId)));
+          await dbx.delete(territories).where(and(eq(territories.householdId, hid), eq(territories.id, merge.loserId)));
+        }
+        reassigned.push({ from: merge.loserId, to: merge.survivorId });
+        touchedTerritoryIds.add(merge.survivorId);
+        removedTerritoryIds.push(merge.loserId);
+        touchedTerritoryIds.delete(merge.loserId);
+        if (creditedTerritoryId === merge.loserId) creditedTerritoryId = merge.survivorId;
+      }
+
+      touchedCells = (
+        await dbx
+          .select()
+          .from(cells)
+          .where(
+            and(
+              eq(cells.householdId, hid),
+              sql`(${cells.ix}, ${cells.iy}) in (select (e->>0)::int, (e->>1)::int from jsonb_array_elements(${cellsJson}::jsonb) e)`
+            )
+          )
+      ).map(cellFromRow);
+    }
+
+    // ---- Den reward (same sequence as awardWalkRewards: treats first, then XP)
+    let denApi = denFromRow(denRow);
+    let treatsEarned = 0;
+    let xpEarned = 0;
+    let leveledUpTo: number | null = null;
+    if (qualifies) {
+      // accrual uses the world mass from BEFORE this walk's paint
+      const mass = { cellCount: rangeRows.length, visitsSum: rangeRows.reduce((s, r) => s + r.visits, 0) };
+      const accrued = applyPassiveAccrual(stripRev(denApi), now, mass);
+      const treats = awardWalkTreats(accrued, dailyMultiplier, bloom);
+      treatsEarned = treats.treatsAwarded;
+      const xp = awardWalkXp(treats.state, distanceMeters, painted.size, dailyMultiplier);
+      xpEarned = xp.xpGained;
+      leveledUpTo = xp.leveledUp ? xp.state.level : null;
+      denApi = await saveDen(dbx, hid, denRow.rev, xp.state, now);
+    }
+
+    if (creditedTerritoryId) {
+      await dbx
+        .update(territories)
+        .set({
+          walksHere: sql`${territories.walksHere} + 1`,
+          treatsEarnedHere: sql`${territories.treatsEarnedHere} + ${treatsEarned}`,
+        })
+        .where(and(eq(territories.householdId, hid), eq(territories.id, creditedTerritoryId)));
+      touchedTerritoryIds.add(creditedTerritoryId);
+    }
+
+    const reward: WalkReward = {
+      qualifies,
+      cellsPainted: painted.size,
+      newGroundCellCount: newGround.size,
+      bloomMultiplier: bloom,
+      walkOrderToday,
+      dailyMultiplier,
+      treatsEarned,
+      xpEarned,
+      leveledUpTo,
+      territoryId: creditedTerritoryId,
+      newTerritoryName,
+      mergedTerritoryNames,
+    };
+
+    const [stored] = await dbx
+      .insert(walks)
+      .values({
+        householdId: hid,
+        id: req.id,
+        playerId: auth.playerId,
+        startTime: req.startTime,
+        startSource: req.startSource,
+        route: req.locations,
+        closed: qualifies,
+        newGroundCellIds: Array.from(newGround),
+        treatsEarned: qualifies ? treatsEarned : null,
+        reward,
+      })
+      .returning();
+
+    // ---- change feed
+    const { route: _route, ...meta } = stored;
+    await appendEvent(dbx, hid, 'walk.added', auth.playerId, { walk: walkMetaFromRow(meta), cellsPainted: painted.size });
+    if (touchedCells.length > 0 || reassigned.length > 0) {
+      await appendEvent(dbx, hid, 'cells.changed', auth.playerId, { cells: touchedCells, reassigned });
+    }
+    if (touchedTerritoryIds.size > 0 || removedTerritoryIds.length > 0) {
+      const upserted = (await dbx.select().from(territories).where(eq(territories.householdId, hid)))
+        .filter((t) => touchedTerritoryIds.has(t.id))
+        .map(territoryFromRow);
+      await appendEvent(dbx, hid, 'territory.changed', auth.playerId, { upserted, removedIds: removedTerritoryIds });
+    }
+    if (qualifies) await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den: denApi });
+
+    return {
+      kind: 'ok',
+      response: { walkId: req.id, duplicate: false, reward, den: denApi, serverTime: now, seq: await currentSeq(dbx, hid) },
+    };
+  });
+
+  if (result.kind === 'ok' && !result.response.duplicate) bus.notify(auth.householdId);
+  return result;
+}
+
+export async function getWalk(db: Db, householdId: string, walkId: string): Promise<ApiWalkFull | null> {
+  const [row] = await db.select().from(walks).where(and(eq(walks.householdId, householdId), eq(walks.id, walkId)));
+  if (!row) return null;
+  const { route, ...meta } = row;
+  return { ...walkMetaFromRow(meta), locations: route as ApiWalkFull['locations'] };
+}

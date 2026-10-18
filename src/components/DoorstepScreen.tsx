@@ -26,7 +26,7 @@ import { TerritoryPortrait } from './TerritoryPortrait';
 import { DoorstepMenu } from './DoorstepMenu';
 import { formatNumber, t, tPlural } from '../i18n';
 
-// "The Doorstep" (openspec/changes/home-dashboard) — the app's persistent
+// "The Doorstep" (docs/decisions/home-dashboard) — the app's persistent
 // home/overview screen (design.md Decisions 8-13, folded in 2026-08-22 after
 // an on-device finding that the original "shown once, never reappears"
 // behavior read as a navigation bug): shown at cold start, right after the
@@ -94,13 +94,15 @@ export interface AwayStripDeps {
   /** From App.tsx, not re-derived here — see design.md Decision 7 (re-running the accrual/unlock check a second time would see lastTickAt already advanced and silently compute a near-zero delta). */
   pendingDenAchievements: AchievementId[];
   accruedDelta: number;
+  /** Household news (multiplayer-sync Decision 10), already worded; resolved upstream by App's launch routine. Optional so existing callers/tests are unchanged. */
+  householdLines?: string[];
   /** Already resolved (and, if true, already claimed via NotificationRepository) by App.tsx's merged mount effect — design.md Decision 6. This function must not re-derive it. */
   showOverflowLine: boolean;
   treats: number;
   /**
    * True only on the one app-open where App.tsx's own applyPassiveAccrual
    * call flipped DenEconomyState.territoryIncomeRevealed from false to true
-   * this session (openspec/changes/territories/design.md Decision 6's
+   * this session (docs/decisions/territories/design.md Decision 6's
    * one-off discovery beat) — never re-derived here, same "already resolved
    * upstream" convention as showOverflowLine. False on every other open,
    * including every one after the reveal (the permanent line lives
@@ -115,7 +117,7 @@ export interface AwayStripDeps {
 // applies to the treats-economy line — Somewhere Wild and achievement lines
 // aren't a "collect a resource" moment and render as plain static text
 // (see AwayStripLineView below).
-export type AwayStripLineKind = 'somewhere-wild' | 'achievement' | 'treats' | 'territory-income' | 'anchor';
+export type AwayStripLineKind = 'somewhere-wild' | 'achievement' | 'household' | 'treats' | 'territory-income' | 'anchor';
 
 export interface AwayStripLine {
   text: string;
@@ -146,6 +148,10 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
     candidates.push({ text: t('doorstep.earned', { name: ACHIEVEMENTS[deps.pendingDenAchievements[0]].name }), kind: 'achievement' });
   }
 
+  for (const text of deps.householdLines ?? []) {
+    candidates.push({ text, kind: 'household' });
+  }
+
   if (deps.showOverflowLine) {
     candidates.push({ text: tPlural('doorstep.overflow', Math.floor(deps.treats)), kind: 'treats' });
   } else if (deps.accruedDelta > 0) {
@@ -158,7 +164,7 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
     });
   }
 
-  // openspec/changes/territories/design.md Decision 6 — the one-off
+  // docs/decisions/territories/design.md Decision 6 — the one-off
   // territory-income discovery beat, reusing this exact away-strip
   // mechanism as its lowest-priority-but-still-real-fact source (lower than
   // Somewhere Wild/achievements/treats, but always shown over the
@@ -229,7 +235,7 @@ interface DoorstepScreenProps {
   /** True only for the first Doorstep mount of a long-absence launch; App clears it via onBuddyGreetingStarted. */
   playGreeting?: boolean;
   onBuddyGreetingStarted?: () => void;
-  /** Optional so existing callers/tests keep working unchanged — when supplied, the wild-cluster away-strip line can name its Territory (openspec/changes/territories) and the territory-income reveal/permanent line below can render. */
+  /** Optional so existing callers/tests keep working unchanged — when supplied, the wild-cluster away-strip line can name its Territory (docs/decisions/territories) and the territory-income reveal/permanent line below can render. */
   territoryRepository?: TerritoryRepository;
   /** The current global territoryRate, treats/hour — from App.tsx's own applyPassiveAccrual call, not re-derived here. Read whenever `territoryIncomeRevealed` is true (from this screen's own denState fetch), for the permanent footer line. */
   territoryIncomeRate?: number;
@@ -243,7 +249,7 @@ interface DoorstepScreenProps {
   /** Burger-menu-only actions (design.md Decision 13) — infrequent/secondary, not daily-loop actions. */
   onOpenDebugLog: () => void;
   onOpenLogMissedWalk: () => void;
-  /** Settings (openspec/changes/walk-reminder/design.md Decision 1) — third burger-menu row, same infrequent-action tier as the two above. */
+  /** Settings (docs/decisions/walk-reminder/design.md Decision 1) — third burger-menu row, same infrequent-action tier as the two above. */
   onOpenSettings: () => void;
 }
 
@@ -458,7 +464,7 @@ export function DoorstepScreen({
             </PressableScale>
           )}
 
-          {/* Permanent territory-income line (openspec/changes/territories/
+          {/* Permanent territory-income line (docs/decisions/territories/
               design.md Decision 6) — "once true, always shown," mirroring
               getUpgradeTease's own convention. Gated on denState's own
               territoryIncomeRevealed (not App.tsx's justRevealedTerritoryIncome,

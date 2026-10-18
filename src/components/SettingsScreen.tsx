@@ -15,8 +15,12 @@ import { isAnyReminderEnabled, REMINDER_SLOT_IDS, ReminderSlot, ReminderSlotId }
 import { updateReminderSlot } from '../notifications/walkReminder';
 import { pickAndImportBackup, shareBackup } from '../storage/backupIO';
 import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n';
+import { HouseholdCard } from './HouseholdCard';
+import { isRestoreAllowed } from '../sync/restoreGuard';
+import type { SyncEngine } from '../sync/syncEngine';
+import { useSyncStatus } from '../sync/useSyncStatus';
 
-// This app's first Settings screen (openspec/changes/walk-reminder/design.md
+// This app's first Settings screen (docs/decisions/walk-reminder/design.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
 // reminder. Not a general-purpose preferences screen; don't bolt unrelated
 // settings onto this without revisiting that decision first.
@@ -35,6 +39,8 @@ interface SettingsScreenProps {
   localePreference: LocalePreference;
   /** Applies the language immediately, persists it, and replans the walk reminder (App.tsx). */
   onChangeLocalePreference: (pref: LocalePreference) => void | Promise<void>;
+  /** Household sync (multiplayer-sync). Omitted = no Household card and Restore stays as before. */
+  syncEngine?: SyncEngine;
 }
 
 function formatReminderTime(hour: number, minute: number): string {
@@ -63,8 +69,13 @@ export function SettingsScreen({
   onSaveAppearance,
   localePreference,
   onChangeLocalePreference,
+  syncEngine,
 }: SettingsScreenProps) {
   useLocale(); // re-render when the language switches
+  const syncStatus = useSyncStatus(syncEngine);
+  // Restoring an old file over live synced state would fork the household's history.
+  // Until the status has loaded, an engine-equipped screen keeps Restore off rather than flash it on.
+  const restoreAllowed = !syncEngine || (syncStatus !== null && isRestoreAllowed(syncStatus.joined));
   const [loaded, setLoaded] = useState(false);
   const [editingLook, setEditingLook] = useState(false);
   const [slots, setSlots] = useState<ReminderSlot[]>([]);
@@ -167,6 +178,7 @@ export function SettingsScreen({
   };
 
   const runRestore = async () => {
+    if (!restoreAllowed) return;
     setBackupBusy(true);
     try {
       const result = await pickAndImportBackup();
@@ -309,13 +321,23 @@ export function SettingsScreen({
         </View>
       </Card>
 
+      {syncEngine && (
+        <HouseholdCard
+          engine={syncEngine}
+          status={syncStatus}
+          onShareBackup={handleShareBackup}
+          deviceLabel={Platform.OS === 'ios' ? 'iPhone' : 'Android'}
+        />
+      )}
+
       <Card style={styles.languageCard}>
         <View style={styles.rowText}>
           <Text style={textStyle('h2')}>{t('settings.backup.title')}</Text>
           <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.subtitle')}</Text>
         </View>
         <Button label={t('settings.backup.share')} variant="secondary" onPress={handleShareBackup} disabled={backupBusy || walkActive} />
-        <Button label={t('settings.backup.restore')} variant="ghost" onPress={handleRestoreBackup} disabled={backupBusy || walkActive} />
+        <Button label={t('settings.backup.restore')} variant="ghost" onPress={handleRestoreBackup} disabled={backupBusy || walkActive || !restoreAllowed} />
+        {syncStatus?.joined && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('household.restoreOff')}</Text>}
         {walkActive && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.walkActive')}</Text>}
       </Card>
 

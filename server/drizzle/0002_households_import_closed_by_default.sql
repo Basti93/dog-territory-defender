@@ -1,0 +1,1 @@
+ALTER TABLE "households" ALTER COLUMN "founded_import_done" SET DEFAULT true;

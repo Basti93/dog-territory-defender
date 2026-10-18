@@ -1,5 +1,5 @@
 // The Home Range grid — pure functions, no I/O. See
-// openspec/changes/home-range/design.md (Decisions 1, 2, 5) and its
+// docs/decisions/home-range/design.md (Decisions 1, 2, 5) and its
 // home-range-prototype.mjs, which validated every formula below against
 // simulated GPS data before this file existed. Do not re-derive these
 // numbers from first principles; they're anchored to that script's real
@@ -52,7 +52,7 @@ export const MIN_CELLS_FOR_REWARD = 25;
 
 /**
  * Divisor used to turn a raw Range cell count into the "Buddy knows N
- * streets" headline stat. Also reused by openspec/changes/somewhere-wild's
+ * streets" headline stat. Also reused by docs/decisions/somewhere-wild's
  * `src/utils/wildSpot.ts` as its minimum wild-cluster size (a cluster
  * smaller than one street's worth of cells isn't worth surfacing) — hence
  * the export, so that module imports this number rather than re-declaring
@@ -95,7 +95,7 @@ export function cellForLocation(lat: number, lon: number): CellCoord {
 
 /**
  * A cell's centre point, `[lat, lon]`. Exported for
- * openspec/changes/somewhere-wild's `src/utils/streetLookup.ts`, which
+ * docs/decisions/somewhere-wild's `src/utils/streetLookup.ts`, which
  * reverse-geocodes a wild cluster's anchor cell centre — the same
  * per-row-longitude convention `cellForLocation` uses, so this is the exact
  * inverse of that function, not a separate approximation.
@@ -208,7 +208,7 @@ export interface TrailRun {
 
 /**
  * Splits an ordered trail into contiguous same-color runs for the Walk
- * Portrait's two-color trail (openspec/changes/walk-portrait/design.md
+ * Portrait's two-color trail (docs/decisions/walk-portrait/design.md
  * Decision 4) — each point is mapped to its cell via cellForLocation and
  * colored 'new-ground' if that cell is in newGroundCellIds, 'base'
  * otherwise. A missing or empty newGroundCellIds produces exactly one

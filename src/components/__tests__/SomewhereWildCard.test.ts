@@ -29,7 +29,7 @@ const WILD_DAYS_AGO = NOW - 10 * MS_PER_DAY;
  * repainting each cell `visitMultiplier` times so its `visits` count is a
  * real, comparable ranking signal (paintCells has no "set visits directly"
  * escape hatch — see storage/HomeRangeRepository.ts). Each repeat visit
- * lands on its own distinct calendar day (openspec/changes/territories'
+ * lands on its own distinct calendar day (docs/decisions/territories'
  * daily visits cap would otherwise collapse same-day repaints to a single
  * credited visit) while the LAST visit still lands exactly on `refreshedAt`,
  * so lastRefreshed/wildness stay exactly what callers already expect.
@@ -130,7 +130,7 @@ describe('evaluateSomewhereWild — full path', () => {
     ]).toContain(result.card!.text);
   });
 
-  // openspec/changes/territories/design.md's "Somewhere Wild becomes
+  // docs/decisions/territories/design.md's "Somewhere Wild becomes
   // territory-aware" requirement.
   it('a wild cluster inside a named Territory uses the Territory name instead of the raw street label', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();

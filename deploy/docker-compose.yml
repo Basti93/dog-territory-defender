@@ -1,0 +1,113 @@
+# Dog Territory Defender: Heimserver-Deployment (Regeln: ~/SERVER.md auf dem Server).
+# Dienste: api (Fastify), db (Postgres 16), tailscale (eigener Knoten, Funnel auf 443).
+# Aufruf immer aus diesem Ordner (siehe Makefile). Kein sudo, kein Zugriff auf Host-Tailscale.
+#
+# Konfiguration: Variablen kommen per Compose-Interpolation aus ./.env (chmod 600).
+# Bewusst KEIN `env_file` fuer api: sonst saehe der oeffentlich erreichbare Prozess
+# auch TS_AUTHKEY und POSTGRES_PASSWORD. api bekommt nur, was es braucht.
+name: dog-territory
+
+# Log-Rotation fuer alle Dienste (sonst waechst json-file unbegrenzt): 3 x 10 MB.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  api:
+    # Wird mit `make build` aus ../server/Dockerfile gebaut (Kontext: Repo-Wurzel).
+    image: dog-territory-api:local
+    restart: unless-stopped
+    logging: *default-logging
+    stop_grace_period: 30s   # SIGTERM weckt offene Long-Polls (<= 25 s), danach sauberer Shutdown
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      # Frische DB: Migrationen laufen beim Start, der erste `up -d` crasht nicht ohne Tabellen.
+      # `make migrate` bleibt als expliziter Schritt (laeuft vor `up -d`, siehe README).
+      MIGRATE_ON_START: "true"
+      PORT: "7000"        # oeffentlicher Listener; Ziel von serve.json
+      READY_PORT: "7100"  # interner /readyz-Listener, kein Host-Port, nicht ueber serve.json
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL in .env setzen}
+      LOG_LEVEL: ${API_LOG_LEVEL:-info}
+      HOUSEHOLD_MAX_PLAYERS: ${HOUSEHOLD_MAX_PLAYERS:-4}
+      # Nur das Netz des Tailscale-Sidecars gilt als Proxy (X-Forwarded-For). Wert nach erstem Start pruefen.
+      TRUST_PROXY_CIDR: ${TRUST_PROXY_CIDR:-172.16.0.0/12}
+      LOG_FORWARDED_HEADERS: ${LOG_FORWARDED_HEADERS:-false}   # true: erste 50 Requests mit req.ip + X-Forwarded-For loggen
+      NEIGHBOURS_ENABLED: ${NEIGHBOURS_ENABLED:-false}
+      OVERPASS_URL: ${OVERPASS_URL:-}
+    ports:
+      - "127.0.0.1:7000:7000"
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:7100/readyz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: dtd
+      POSTGRES_DB: dtd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}
+    command: ["postgres", "-c", "shared_buffers=128MB", "-c", "max_connections=20"]
+    ports:
+      - "127.0.0.1:7001:5432"   # nur fuer psql per ssh-Tunnel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtd -d dtd"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tailscale:
+    # Eigener Tailscale-Knoten (SERVER.md Regel 3a). Beruehrt den Host-Knoten nicht.
+    # Userspace-Modus: kein /dev/net/tun, keine Capabilities. Kein Port auf dem Host.
+    # Version gepinnt (kein :stable); bewusst und mit Blick auf die Release Notes anheben.
+    image: tailscale/tailscale:v1.76.1
+    restart: unless-stopped
+    logging: *default-logging
+    hostname: dog-territory
+    environment:
+      TS_HOSTNAME: dog-territory
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_AUTHKEY: ${TS_AUTHKEY:-}   # nur beim ersten Start noetig; Zustand liegt danach im Volume
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tsstate:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    depends_on:
+      - api
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale --socket=/tmp/tailscaled.sock status >/dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  pgdata:
+    name: dog-territory_pgdata
+  tsstate:
+    name: dog-territory_tsstate

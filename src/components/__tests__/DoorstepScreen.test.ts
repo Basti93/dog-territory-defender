@@ -133,7 +133,7 @@ describe('resolveAwayStripLines — priority order (fresh-open)', () => {
   });
 });
 
-// openspec/changes/territories/design.md Decision 6 — the one-off
+// docs/decisions/territories/design.md Decision 6 — the one-off
 // territory-income discovery beat reuses this away-strip mechanism.
 describe('resolveAwayStripLines — territory-income reveal', () => {
   it('shows the reveal line when justRevealedTerritoryIncome is true', async () => {

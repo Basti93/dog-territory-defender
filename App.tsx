@@ -1,9 +1,13 @@
 import './src/app/devWarnings';
 import React, { useState } from 'react';
+import { Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import { t } from './src/i18n';
 
 
 import { repos } from './src/app/repositories';
+import { loadHouseholdLines, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
+import { useSync } from './src/sync/useSync';
 import { screenKey, useNavigation } from './src/app/navigation';
 import { useWalkSession } from './src/app/useWalkSession';
 import { useCelebration } from './src/app/useCelebration';
@@ -62,8 +66,24 @@ export default function App() {
   // the first-launch flow needs the walk session's error setter.
   const [dogName, setDogName] = useState<string | null>(null);
 
+  // Household sync (multiplayer-sync): server Den state / Range changes flow back into React state.
+  useSync(syncEngine, {
+    onDenChanged: (state) => {
+      setTreats(state.treats);
+      setLevel(state.level);
+      if (state.dogName) setDogName(state.dogName);
+    },
+    onRangeChanged: bumpRangeRefresh,
+    onCommandRejected: (error) => {
+      // Gentle, never an error tone (Buddy anti-guilt rule); the Den already shows the server's balance.
+      if (error === 'insufficient-treats') Alert.alert(t('household.notEnoughTreats'));
+      else if (error === 'max-level') Alert.alert(t('household.alreadyUpgraded'));
+    },
+  });
+
   const walkSession = useWalkSession({
     repos,
+    sync: syncEngine,
     dogName,
     onRangeChanged: bumpRangeRefresh,
     onRewards: (outcome) => {
@@ -108,6 +128,8 @@ export default function App() {
     openDen: () => nav.goTo('den'),
     openDoorstep: nav.goDoorstep,
     onRangeChanged: bumpRangeRefresh,
+    syncOnLaunch,
+    loadHouseholdLines,
   });
 
   // Fonts + language gate: first render waits so no screen flashes the system
@@ -292,6 +314,7 @@ export default function App() {
             onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
             onClose={nav.close}
             onTreatsChanged={setTreats}
+            onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
           />
         </ScreenFrame>
       );
@@ -310,6 +333,7 @@ export default function App() {
             dogName={dogName}
             buddyAppearance={buddyAppearance}
             walkActive={walkSession.isTracking}
+            syncEngine={syncEngine}
             onSaveAppearance={saveAppearance}
             localePreference={localePreference}
             onChangeLocalePreference={changeLocalePreference}

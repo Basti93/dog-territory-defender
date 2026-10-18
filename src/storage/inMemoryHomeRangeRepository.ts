@@ -7,7 +7,7 @@ function cellKey(ix: number, iy: number): string {
   return `${ix},${iy}`;
 }
 
-/** Internal-only per-cell bookkeeping not part of the public Cell shape — see sqliteHomeRangeRepository.ts's identical lastVisitCreditedDayKey column for why this exists (openspec/changes/territories/design.md's anti-farming visits cap). */
+/** Internal-only per-cell bookkeeping not part of the public Cell shape — see sqliteHomeRangeRepository.ts's identical lastVisitCreditedDayKey column for why this exists (docs/decisions/territories/design.md's anti-farming visits cap). */
 interface InternalCell extends Cell {
   lastVisitCreditedDayKey: string | null;
 }
@@ -48,14 +48,14 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
             lastTracked: tracked ? refreshedAt : 0,
             visits: tracked ? 1 : 0,
             // Territory membership is set once, only on insert — see
-            // openspec/changes/territories/design.md Decision 1.
+            // docs/decisions/territories/design.md Decision 1.
             territoryId: territoryId ?? null,
             lastVisitCreditedDayKey: tracked ? todayKey : null,
           });
           continue;
         }
 
-        // Anti-farming daily visits cap (openspec/changes/territories/
+        // Anti-farming daily visits cap (docs/decisions/territories/
         // design.md Decision 6): a tracked repaint only bumps `visits` once
         // per local calendar day, completely silently — every other field
         // (lastRefreshed, lastTracked, and every stat outside this file)
@@ -111,6 +111,27 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
       }
     },
 
+    async mergeCells(incoming: Cell[]): Promise<void> {
+      for (const c of incoming) {
+        const key = cellKey(c.ix, c.iy);
+        const existing = cells.get(key);
+        if (!existing) {
+          cells.set(key, { ...c, lastVisitCreditedDayKey: c.lastTracked > 0 ? calendarDayKey(c.lastTracked) : null });
+          continue;
+        }
+        const lastTracked = Math.max(existing.lastTracked, c.lastTracked);
+        cells.set(key, {
+          ...existing,
+          lastRefreshed: Math.max(existing.lastRefreshed, c.lastRefreshed),
+          lastTracked,
+          visits: Math.max(existing.visits, c.visits),
+          territoryId: c.territoryId ?? existing.territoryId,
+          lastVisitCreditedDayKey:
+            lastTracked > existing.lastTracked ? calendarDayKey(lastTracked) : existing.lastVisitCreditedDayKey,
+        });
+      }
+    },
+
     async replaceAll(next: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void> {
       cells.clear();
       for (const c of next) {
@@ -125,7 +146,7 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
     async getWorldMass(): Promise<{ cellCount: number; visitsSum: number }> {
       // A single ungrouped aggregate over every cell, regardless of
       // territory — see HomeRangeRepository.getWorldMass's doc comment and
-      // openspec/changes/territories/design.md Decision 6. Never filter or
+      // docs/decisions/territories/design.md Decision 6. Never filter or
       // group this by territoryId.
       let cellCount = 0;
       let visitsSum = 0;

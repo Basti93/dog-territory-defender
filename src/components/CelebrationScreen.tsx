@@ -54,9 +54,9 @@ interface CelebrationScreenProps {
   newGroundCellCount?: number;
   /** The Home Range's Fresh Ground payout multiplier actually applied to this walk's treats (see economy/formulas.ts's bloomMultiplier). The Fresh Ground beat below is suppressed entirely below BALANCE.freshGround.displayThresholdMultiplier — design.md Decision 3's UI rule, not a display nicety (closes the fixed-loop-walker dead zone, FLAG 1). */
   bloomMultiplier?: number;
-  /** The name of a Territory this walk just created, or `null` — openspec/changes/territories/design.md Decision 3/tasks.md task 6. Only ever set when the player already had at least one Territory before this walk (the very first-ever Territory is silent — "a second home" only reads as a discovery once there's a first to contrast it with). Never rendered alongside a rename control (renaming only ever happens from the Territory's own card, never here). */
+  /** The name of a Territory this walk just created, or `null` — docs/decisions/territories/design.md Decision 3/tasks.md task 6. Only ever set when the player already had at least one Territory before this walk (the very first-ever Territory is silent — "a second home" only reads as a discovery once there's a first to contrast it with). Never rendered alongside a rename control (renaming only ever happens from the Territory's own card, never here). */
   newTerritoryName?: string | null;
-  /** The [survivor, absorbed] Territory names when this walk caused a merge, or `null` — openspec/changes/territories/design.md Decision 3. Framed as a positive event ("Buddy connected his two worlds!"), never a loss for the absorbed Territory. */
+  /** The [survivor, absorbed] Territory names when this walk caused a merge, or `null` — docs/decisions/territories/design.md Decision 3. Framed as a positive event ("Buddy connected his two worlds!"), never a loss for the absorbed Territory. */
   mergedTerritoryNames?: [string, string] | null;
   dogName?: string | null;
   /** Buddy's look (buddy-comes-alive). */
@@ -175,7 +175,7 @@ export function CelebrationScreen({
         {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier
             (design.md Decision 3's UI rule): a routine walk shows the treats total above with
             no multiplier line at all, not "×1.00," nothing. See
-            openspec/changes/home-range-rewards/tasks.md task 3.2. */}
+            docs/decisions/home-range-rewards/tasks.md task 3.2. */}
         {bloomMultiplier >= BALANCE.freshGround.displayThresholdMultiplier && (
           <Beat label={t('celebration.freshGround.label')}>
             {t('celebration.freshGround.body', { dog })}
@@ -184,7 +184,7 @@ export function CelebrationScreen({
 
         {/* New Ground beat — fires once this walk's New Ground cell count clears the
             dilated-set-difference threshold (design.md Decision 5). See
-            openspec/changes/home-range-rewards/tasks.md task 3.1. */}
+            docs/decisions/home-range-rewards/tasks.md task 3.1. */}
         {newGroundCellCount >= NEW_GROUND_MIN_CELLS && (
           <Beat label={t('celebration.newGround.label')}>
             {tPlural('celebration.newGround.body', streetsKnown(newGroundCellCount), { dog })}
@@ -195,7 +195,7 @@ export function CelebrationScreen({
             an ADDITIONAL territory beyond the player's first (the caller
             gates on hadExistingTerritoryBefore; the very first-ever
             territory is silent). Never offers a rename control here — see
-            openspec/changes/territories/design.md's "renameable anytime via
+            docs/decisions/territories/design.md's "renameable anytime via
             the territory's own card, never on this screen" rule.
             TODO(game-master copy pass): tasks.md's given copy doesn't yet
             interpolate the new territory's own name (newTerritoryName) —
@@ -249,7 +249,7 @@ export function CelebrationScreen({
 
         {leveledUpTo !== null && oldTreatsPerWalk !== null && newTreatsPerWalk !== null && (
           <Beat label={t('celebration.levelUp.label', { level: leveledUpTo })}>
-            {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in. */}
+            {/* Accepted verbatim copy shape (docs/decisions/virtual-dog-companion), numbers filled in. */}
             {t('celebration.levelUp.body', {
               dog,
               level: leveledUpTo,
@@ -264,7 +264,7 @@ export function CelebrationScreen({
         )}
 
         {cliffhangerTitle !== null && (
-          // Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), title filled in.
+          // Accepted verbatim copy shape (docs/decisions/virtual-dog-companion), title filled in.
           <Beat label={t('celebration.cliffhanger.label')}>{t('celebration.cliffhanger.body', { title: cliffhangerTitle })}</Beat>
         )}
 

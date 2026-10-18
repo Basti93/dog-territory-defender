@@ -1,0 +1,1 @@
+ALTER TABLE "households" ADD COLUMN "import_id" text;

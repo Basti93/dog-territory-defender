@@ -1,4 +1,4 @@
-// Wild Extras: rare, cosmetic yard cameos (weird streak, openspec/changes/buddy-comes-alive design.md).
+// Wild Extras: rare, cosmetic yard cameos (weird streak, docs/decisions/buddy-comes-alive design.md).
 // Pure decisions only; YardExtras.tsx animates them. No rewards, no timers, no streaks: an extra never
 // gives anything and never counts anything. Rules: at most one extra now, at most once per day per extra,
 // never the same extra twice in one session, random pick among the eligible.

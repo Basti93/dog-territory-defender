@@ -1,4 +1,4 @@
-// Full-path coverage for the territories change (openspec/changes/territories
+// Full-path coverage for the territories change (docs/decisions/territories
 // tasks.md task 13.2), mirroring this codebase's existing precedent
 // (somewhere-wild/home-dashboard's own full-path tests): a synthetic
 // multi-walk history run through the real repositories end-to-end, not just

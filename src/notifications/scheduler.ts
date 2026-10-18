@@ -62,7 +62,7 @@ export async function ensureAndroidChannels(): Promise<void> {
   });
 }
 
-// Generalized from the original hour-only version (openspec/changes/
+// Generalized from the original hour-only version (docs/decisions/
 // walk-reminder/tasks.md task 3.1) to also support the player's own
 // minute-precision reminder time — scheduleOverflowNotification below still
 // passes 0 minutes, so its own behavior is unchanged.
@@ -184,7 +184,7 @@ export async function getReminderDiagnostics(): Promise<ReminderDiagnostics> {
 
 /**
  * Cancels this feature's own pending scheduled notification only
- * (openspec/changes/walk-reminder/design.md Decision 5) — deliberately never
+ * (docs/decisions/walk-reminder/design.md Decision 5) — deliberately never
  * `cancelAllScheduledNotificationsAsync()`, which would also cancel a still-
  * pending Den-overflow notification sharing the same OS scheduling queue.
  */

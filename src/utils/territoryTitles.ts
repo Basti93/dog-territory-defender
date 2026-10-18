@@ -1,5 +1,5 @@
 // Territory character titles — pure functions, no I/O. See
-// openspec/changes/territories/design.md Decision 4. Computed live on every
+// docs/decisions/territories/design.md Decision 4. Computed live on every
 // render, never persisted (the "Wild One" title is explicitly allowed to
 // read a live wildness() value, unlike a persisted decaying score).
 

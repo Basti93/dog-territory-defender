@@ -1,5 +1,5 @@
 // Pure helpers for the "Log a walk we missed" manual entry point.
-// See openspec/changes/walk-start-notifications/design.md's look-back-window
+// See docs/decisions/walk-start-notifications/design.md's look-back-window
 // decision: a manually-logged walk must have started within the current or
 // previous calendar day — not an open-ended backfill.
 
@@ -32,7 +32,7 @@ export function startOfLocalDay(ms: number): number {
  * Whole local-calendar-day gap between two timestamps (0 = same calendar
  * day, 1 = yesterday vs. today, etc.) — extracted from
  * SomewhereWildCard.tsx's own private day-diff helper
- * (openspec/changes/home-dashboard/design.md Decision 3) since this file is
+ * (docs/decisions/home-dashboard/design.md Decision 3) since this file is
  * already the de facto calendar-utilities module in this codebase (see
  * calendarDayKey's own doc comment). Used by SomewhereWildCard's dayPhrase
  * and DoorstepScreen.tsx's session-state resolution — the two places this
@@ -58,7 +58,7 @@ export function isWithinManualLogWindow(startTime: number, now: number = Date.no
 
 /**
  * "Tuesday morning" / "yesterday evening" style phrase for the Walk
- * Portrait's metadata row (openspec/changes/walk-portrait/design.md Decision
+ * Portrait's metadata row (docs/decisions/walk-portrait/design.md Decision
  * 7) — this file is already the de facto calendar-utilities module (see
  * calendarDayKey's own doc comment), so this joins calendarDayKey/
  * startOfLocalDay/calendarDayGap here rather than starting a fifth home for
@@ -90,7 +90,7 @@ export function dayAndTimeOfDayPhrase(timestamp: number): string {
 
 /**
  * Walks eligible to be picked as a manual-log route refresh target (see
- * openspec/changes/home-range/design.md Decision 4, rule 1: "the cell set
+ * docs/decisions/home-range/design.md Decision 4, rule 1: "the cell set
  * of a previously-completed tracked walk, chosen from walk history"). A
  * manual log itself has `locations: []`, so filtering on a non-empty trail
  * is sufficient to exclude prior manual logs without needing to also check

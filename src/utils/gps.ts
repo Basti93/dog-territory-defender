@@ -9,7 +9,7 @@ const LOCATION_TASK_NAME = 'dog-territory-location-task';
 
 // Fixes worse than this are dropped before they ever reach the app — they'd
 // otherwise corrupt the trail, closure check, and territory area. See
-// openspec/changes/gps-accuracy-aware-closure/design.md for why 30m.
+// docs/decisions/gps-accuracy-aware-closure/design.md for why 30m.
 const MAX_ACCEPTABLE_ACCURACY_M = 30;
 
 let currentSubscriber: ((location: LocationType) => void) | null = null;

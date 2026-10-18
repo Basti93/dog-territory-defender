@@ -17,7 +17,7 @@ const TERRITORY_TITLE_KEYS: Record<TerritoryTitle, string> = {
 
 interface TerritoryCardProps {
   territory: Territory;
-  /** This Territory's own cells only — never any other Territory's (openspec/changes/territories/design.md's "never compared" rule). */
+  /** This Territory's own cells only — never any other Territory's (docs/decisions/territories/design.md's "never compared" rule). */
   cells: Cell[];
   /** This Territory's character title, or `null` when it holds none this render (design.md Decision 4). */
   title: TerritoryTitle | null;
@@ -32,7 +32,7 @@ interface TerritoryCardProps {
 /**
  * One Territory's own card — exactly four monotonic stats (streets known,
  * walks here, lifetime treats earned here, first claimed), never a ranked
- * comparison to another Territory (openspec/changes/territories/design.md's
+ * comparison to another Territory (docs/decisions/territories/design.md's
  * hard "never build" list). Mirrors StatsScreen.tsx's plain stat-card shape.
  */
 export function TerritoryCard({ territory, cells, title, incomeRevealed, displayRate, onRename, onOpenMap }: TerritoryCardProps) {

@@ -19,12 +19,12 @@ interface MapViewProps {
   isTracking?: boolean;
   /** Bump to force a re-fetch of the persisted Home Range (e.g. after Finish Walk paints new cells, or after returning from Walk History). */
   homeRangeRefreshKey?: number;
-  /** The "Somewhere Wild" marker location (openspec/changes/somewhere-wild), or `null`/`undefined` to show none — see SomewhereWildCard.tsx's `onSpotChange`. The marker and the card must always agree on the same spot, so this is the single source both are driven from. */
+  /** The "Somewhere Wild" marker location (docs/decisions/somewhere-wild), or `null`/`undefined` to show none — see SomewhereWildCard.tsx's `onSpotChange`. The marker and the card must always agree on the same spot, so this is the single source both are driven from. */
   wildSpot?: { latitude: number; longitude: number } | null;
   /** Set to a new object (even with the same coordinates) whenever the caller wants to pan/zoom to a spot right now — e.g. a "Somewhere Wild" card tap (tasks.md task 5.2). Consumed once per change; doesn't affect the marker itself (see `wildSpot` for that). */
   panToSpot?: { latitude: number; longitude: number } | null;
   /**
-   * The Territories list screen's entry point (openspec/changes/territories,
+   * The Territories list screen's entry point (docs/decisions/territories,
    * design.md Decision 8 — resolved by the user 2026-08-22 to live on the map
    * screen's own chrome, not the Doorstep, not folded into Stats). Omitted
    * means the button doesn't render (e.g. a caller that doesn't yet wire
@@ -123,7 +123,7 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, isTracking, locations]);
 
-  // openspec/changes/somewhere-wild task 6.2: sends SHOW_WILD_SPOT whenever
+  // docs/decisions/somewhere-wild task 6.2: sends SHOW_WILD_SPOT whenever
   // the winning cluster/New-Ground location changes, and clears it (posts
   // `null`) when neither state applies — mirrors SHOW_HOME_RANGE's own
   // "one bridge message, current truth" pattern.
@@ -158,7 +158,7 @@ export function MapView({
       />
       </View>
       </View>
-      {/* Territories list screen entry point (openspec/changes/territories,
+      {/* Territories list screen entry point (docs/decisions/territories,
           design.md Decision 8) — the map screen's own chrome, floating over
           the WebView so it never competes with the map's bottom controls. */}
       {onOpenTerritories && (

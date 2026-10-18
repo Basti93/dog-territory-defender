@@ -16,19 +16,19 @@ export interface DenEconomyState {
   dogName: string | null;
   /** The next-level target the one-away cliffhanger ("One more walk and he's a...") has already been shown for, so it fires at most once per approaching milestone level. Null until the first cliffhanger fires. See economy/walkRewards.ts. */
   cliffhangerShownForLevel: number | null;
-  /** One-time guard for the Home Range migration backfill (openspec/changes/home-range/design.md's "Technical Split Addendum" migration section) — every previously saved tracked walk is replayed into the Home Range grid exactly once, on first load after this feature ships. False until that replay has run. See storage/homeRangeMigration.ts. */
+  /** One-time guard for the Home Range migration backfill (docs/decisions/home-range/design.md's "Technical Split Addendum" migration section) — every previously saved tracked walk is replayed into the Home Range grid exactly once, on first load after this feature ships. False until that replay has run. See storage/homeRangeMigration.ts. */
   homeRangeBackfillComplete: boolean;
-  /** Local calendar-day key (see utils/manualWalkLog.ts's calendarDayKey) of the most recent manual log, paired with manualLogCountToday — enforces walk-lifecycle's "at most 2 manual logs per calendar day" cap (openspec/changes/home-range/design.md Decision 4). Null until the first manual log ever logged. See evaluateManualLogQuota below. */
+  /** Local calendar-day key (see utils/manualWalkLog.ts's calendarDayKey) of the most recent manual log, paired with manualLogCountToday — enforces walk-lifecycle's "at most 2 manual logs per calendar day" cap (docs/decisions/home-range/design.md Decision 4). Null until the first manual log ever logged. See evaluateManualLogQuota below. */
   manualLogDayKey: string | null;
   /** How many manual logs have been recorded on manualLogDayKey. Meaningless (stale) once the current calendar day no longer matches manualLogDayKey — evaluateManualLogQuota always re-derives the real count-for-today from this pair, never reads it in isolation. */
   manualLogCountToday: number;
   /** Local calendar-day key of the most recent manual-log route refresh — enforces "at most 1 route refresh per calendar day" (design.md Decision 4). Null until the first refresh ever performed. */
   routeRefreshDayKey: string | null;
-  /** One-time guard for the Territory migration backfill (openspec/changes/territories/design.md Decision 9) — every already-painted Home Range cell is partitioned into Territories exactly once, on first load after this feature ships. False until that replay has run. See storage/territoryMigration.ts. Must only ever be set true after homeRangeBackfillComplete is also true (there must be a populated Range to cluster). */
+  /** One-time guard for the Territory migration backfill (docs/decisions/territories/design.md Decision 9) — every already-painted Home Range cell is partitioned into Territories exactly once, on first load after this feature ships. False until that replay has run. See storage/territoryMigration.ts. Must only ever be set true after homeRangeBackfillComplete is also true (there must be a populated Range to cluster). */
   territoriesBackfillComplete: boolean;
   /**
    * Guarded one-time reveal flag for the Territory passive-income line
-   * (openspec/changes/territories/design.md Decision 6's display-gating
+   * (docs/decisions/territories/design.md Decision 6's display-gating
    * rule) — flips to true the first time `territoryRate` crosses 1
    * treat/hour, checked at read time, never re-evaluated backward (safe
    * because worldMass is monotonically non-decreasing forever — see
@@ -88,7 +88,7 @@ export interface AwardWalkXpResult {
  *
  * No longer touches treats: a level-up used to credit a flat one-time bonus
  * (BALANCE.leveling.treatsPerLevelUp), but per
- * openspec/changes/virtual-dog-companion/design.md's "Drop
+ * docs/decisions/virtual-dog-companion/design.md's "Drop
  * treatsPerLevelUp" decision, leveling up now pays out permanently as a
  * rate (buddyPayout, consumed by awardWalkTreats below) instead of a
  * one-off flat amount — one event, one reward.
@@ -112,7 +112,7 @@ export function awardWalkXp(
 
 /**
  * `worldMass` — the single global, ungrouped `HomeRangeRepository.getWorldMass()`
- * aggregate (openspec/changes/territories/design.md Decision 6's
+ * aggregate (docs/decisions/territories/design.md Decision 6's
  * split-invariance guardrail). Defaults to 0 (no territory-income
  * contribution) so every existing caller that hasn't been updated to fetch
  * it yet keeps working unchanged — 0 mass correctly yields a 0 territoryRate.
@@ -148,11 +148,11 @@ export interface AwardWalkTreatsResult {
 /**
  * multiplier is the per-day diminishing-returns multiplier — see
  * economy/walkRewards.ts. bloomMultiplier is the Home Range's Fresh Ground
- * payout (openspec/changes/home-range/design.md Decision 3) — a second,
+ * payout (docs/decisions/home-range/design.md Decision 3) — a second,
  * independent multiplicative factor, never XP (see formulas.ts's
  * bloomMultiplier doc comment). Both factors are applied together in a
  * single Math.round, not compounded through two separate roundings (see
- * openspec/changes/home-range-rewards/tasks.md task 5.1). Uses state.level
+ * docs/decisions/home-range-rewards/tasks.md task 5.1). Uses state.level
  * (Buddy's level *before* this walk's own awardWalkXp call, since
  * walkRewards.ts always awards treats before XP) and state.sniffGardenLevel
  * via buddyTreatsPerWalk, so a level-up earned on this very walk changes the
@@ -266,7 +266,7 @@ export interface ManualLogEligibility {
 }
 
 /**
- * Pure eligibility check for "Log a walk we missed" — openspec/changes/
+ * Pure eligibility check for "Log a walk we missed" — docs/decisions/
  * home-range/design.md Decision 4's exact caps: at most
  * BALANCE.freshGround.maxManualLogsPerDay manual logs per local calendar
  * day, of which at most BALANCE.freshGround.maxRouteRefreshesPerDay may

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ListRow, mix, palette, radii, shadows, spacing, tokens } from '../ui';
 import { t } from '../i18n';
 
-// The Doorstep's burger menu (openspec/changes/home-dashboard, design.md
+// The Doorstep's burger menu (docs/decisions/home-dashboard, design.md
 // Decision 13) — a small transient overlay for the "not so important"
 // actions the founder asked to be tucked away: Debug Log, Log a Walk We
 // Missed and Settings. Not a full-screen destination itself (that's why its
@@ -16,7 +16,7 @@ interface DoorstepMenuProps {
   onClose: () => void;
   onOpenDebugLog: () => void;
   onOpenLogMissedWalk: () => void;
-  /** Settings (openspec/changes/walk-reminder/design.md Decision 1) — this app's first Settings screen, tucked away here alongside the other two infrequent/secondary actions. */
+  /** Settings (docs/decisions/walk-reminder/design.md Decision 1) — this app's first Settings screen, tucked away here alongside the other two infrequent/secondary actions. */
   onOpenSettings: () => void;
 }
 

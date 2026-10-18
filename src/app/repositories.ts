@@ -6,6 +6,7 @@ import { createSqlitePersonalStatsRepository } from '../storage/sqlitePersonalSt
 import { createSqliteNotificationRepository } from '../storage/sqliteNotificationRepository';
 import { createSqliteBuddyAppearanceRepository } from '../storage/sqliteBuddyAppearanceRepository';
 import { createSqliteSettingsRepository } from '../storage/sqliteSettingsRepository';
+import { createSqliteSyncRepository } from '../storage/sqliteSyncRepository';
 import { runHomeRangeMigrationIfNeeded } from '../storage/homeRangeMigration';
 import { runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
 import { loadFeedbackPrefsAtStartup } from '../feedback/feedbackRepository';
@@ -21,6 +22,7 @@ export interface AppRepositories {
   notificationRepository: ReturnType<typeof createSqliteNotificationRepository>;
   buddyAppearanceRepository: ReturnType<typeof createSqliteBuddyAppearanceRepository>;
   settingsRepository: ReturnType<typeof createSqliteSettingsRepository>;
+  syncRepository: ReturnType<typeof createSqliteSyncRepository>;
 }
 
 export function createAppRepositories(): AppRepositories {
@@ -33,6 +35,7 @@ export function createAppRepositories(): AppRepositories {
     notificationRepository: createSqliteNotificationRepository(),
     buddyAppearanceRepository: createSqliteBuddyAppearanceRepository(),
     settingsRepository: createSqliteSettingsRepository(),
+    syncRepository: createSqliteSyncRepository(),
   };
 }
 
@@ -57,7 +60,7 @@ export const localePreferenceLoaded: Promise<LocalePreference> = repos.settingsR
 /**
  * One-time backfill of every previously saved tracked walk into the Home
  * Range grid, then (only once that's done, since it needs a populated Range to
- * cluster, openspec/changes/territories/tasks.md task 3.3) the one-time
+ * cluster, docs/decisions/territories/tasks.md task 3.3) the one-time
  * Territory partition backfill. Both are idempotent (guarded by their own
  * DenEconomyState flags), safe to call on every app load.
  */

@@ -2,7 +2,7 @@ import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { MAP_THEME_CSS, MAP_TILE_LAYER_JS } from './mapTheme';
 
 // The Walk Portrait's live, animated, non-interactive WebView host
-// (openspec/changes/walk-portrait/design.md Decision 1). Modeled directly on
+// (docs/decisions/walk-portrait/design.md Decision 1). Modeled directly on
 // mapHTML.ts's already-shipped tile layer, trail polyline, and dual
 // window/document message-listener convention — but, unlike mapHTML.ts, this
 // map IS visible on screen and never becomes interactive: every Leaflet

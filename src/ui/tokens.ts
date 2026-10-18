@@ -1,4 +1,4 @@
-// Spec design tokens (openspec/specs/visual-design/spec.md). No module held these
+// Spec design tokens (docs/specs/visual-design.md). No module held these
 // before; screens still keep local COLORS copies. New code imports from here.
 // Do not add colours without updating the spec.
 export const tokens = {

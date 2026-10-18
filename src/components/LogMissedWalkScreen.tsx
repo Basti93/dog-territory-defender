@@ -12,7 +12,7 @@ interface LogMissedWalkScreenProps {
   onClose: () => void;
   /** Fetches the player's own previously-tracked walks to offer as route-refresh candidates (see utils/manualWalkLog.ts's eligibleRefreshRoutes). */
   walkRepository: WalkRepository;
-  /** Whether "Log a walk we missed" may currently offer a route refresh at all (openspec/changes/home-range/design.md Decision 4's "at most 1 route refresh per calendar day" cap) — when false, the picker section is hidden entirely rather than offered and then rejected at submit time. */
+  /** Whether "Log a walk we missed" may currently offer a route refresh at all (docs/decisions/home-range/design.md Decision 4's "at most 1 route refresh per calendar day" cap) — when false, the picker section is hidden entirely rather than offered and then rejected at submit time. */
   routeRefreshAvailable: boolean;
 }
 

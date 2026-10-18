@@ -1,7 +1,7 @@
 // Owns Territory metadata only — id, name, createdAt, and the two monotonic
 // counters (walksHere, treatsEarnedHere). Never touches the Home Range cells
 // table; HomeRangeRepository remains the sole owner of cell-level territory
-// membership. See openspec/changes/territories/design.md Decision 1.
+// membership. See docs/decisions/territories/design.md Decision 1.
 
 /** Stable identifier for a Territory. Encodes its createdAt as a sortable,
  * zero-padded decimal prefix (`t<15-digit-ms-epoch>-<random>`) so pure,
@@ -13,7 +13,7 @@
 export type TerritoryId = string;
 
 /** One Territory — a named, auto-discovered sub-region of the single Home
- * Range grid. See openspec/changes/territories/design.md Decision 1. */
+ * Range grid. See docs/decisions/territories/design.md Decision 1. */
 export interface Territory {
   id: TerritoryId;
   name: string;
@@ -51,6 +51,14 @@ export interface TerritoryRepository {
   /** Sums `walksHere`/`treatsEarnedHere` from `absorbedId` into `survivorId`, then deletes the absorbed row. Never touches the cells table — the caller is responsible for HomeRangeRepository.reassignCellsToTerritory separately. */
   mergeTerritoryStats(survivorId: TerritoryId, absorbedId: TerritoryId): Promise<void>;
   incrementTerritoryStats(id: TerritoryId, input: IncrementTerritoryStatsInput): Promise<void>;
+  /**
+   * Household sync only: inserts server territories (ids preserved, cells
+   * reference them) or updates existing ones: name = server's, counters =
+   * max(local, server) so the local optimistic increments are never lost.
+   */
+  upsertTerritories(territories: Territory[]): Promise<void>;
+  /** Household sync only: drops territories the server merged away (their cells were reassigned separately). */
+  removeTerritories(ids: TerritoryId[]): Promise<void>;
   /** Backup & Restore only: wipes every Territory, then writes exactly the given ones (ids preserved, since cells reference them). */
   replaceAll(territories: Territory[]): Promise<void>;
 }

@@ -4,7 +4,7 @@ import { checkAndScheduleWalkReminder, updateReminderSlot } from '../walkReminde
 import { defaultReminderSlots, ReminderSlotId } from '../walkReminderDecision';
 
 // Mirrors earnedTrigger.test.ts's own expo-notifications mock shape — this
-// feature reuses the exact same scheduling wiring (openspec/changes/
+// feature reuses the exact same scheduling wiring (docs/decisions/
 // walk-reminder/design.md Decision 4), not a second scheduling mechanism.
 const mockGetPermissionsAsync = jest.fn();
 const mockRequestPermissionsAsync = jest.fn();

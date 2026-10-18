@@ -4,12 +4,12 @@ import { defaultWalkReminderFields, ReminderSlot } from './walkReminderDecision'
 import { tPlural } from '../i18n';
 
 // Pure decision logic for the earned-trigger notification (Den-economy
-// overflow only — see openspec/changes/walk-start-notifications/proposal.md's
+// overflow only — see docs/decisions/walk-start-notifications/proposal.md's
 // scope cut). Deliberately has no dependency on `expo-notifications` so it
 // stays unit-testable without a native/dev-client build.
 //
 // NotificationBookkeepingState below is also home to the opt-in daily walk
-// reminder's own fields (openspec/changes/walk-reminder) — see
+// reminder's own fields (docs/decisions/walk-reminder) — see
 // walkReminderDecision.ts for that feature's own pure decision logic, kept in
 // a separate file even though the two share this one repository row.
 
@@ -21,7 +21,7 @@ export interface NotificationBookkeepingState {
   /** Most recently learned coarse delivery-time bucket, cached so scheduling doesn't need to rescan WalkRepository every check. */
   learnedTimeOfDayBucket: TimeOfDayBucket | null;
 
-  // The opt-in daily walk reminder (openspec/changes/walk-reminder/design.md
+  // The opt-in daily walk reminder (docs/decisions/walk-reminder/design.md
   // Decision 3) — flat, `walkReminder`-prefixed fields on this same
   // repository row rather than a second repository, since these are
   // conceptually the same kind of thing this repository already exists for
@@ -30,7 +30,7 @@ export interface NotificationBookkeepingState {
   reminderSlots: ReminderSlot[];
   /** calendarDayKey of the last day a reminder was actually scheduled and not yet reconciled against that day's walk history. Null once resolved. */
   walkReminderPendingDate: string | null;
-  /** Durable measurement counter (openspec/changes/walk-reminder/design.md Decision 10) — total reminders actually scheduled, for the 4-week kill-condition review. */
+  /** Durable measurement counter (docs/decisions/walk-reminder/design.md Decision 10) — total reminders actually scheduled, for the 4-week kill-condition review. */
   walkReminderFiredCount: number;
   /** Durable measurement counter — of those fired, how many were followed by a walk that same day. */
   walkReminderFollowedCount: number;
@@ -117,7 +117,7 @@ export interface DoorstepOverflowLineResolution {
 
 /**
  * The Doorstep's own overflow-line resolution
- * (openspec/changes/home-dashboard/design.md Decision 6) — reuses the exact
+ * (docs/decisions/home-dashboard/design.md Decision 6) — reuses the exact
  * same `overflowSurfaced` bookkeeping the earned-trigger push notification
  * uses (`shouldFireOverflowNotification`/`resetSurfacedFlagIfOverflowCleared`
  * above), rather than a second, parallel "have we shown this" flag. Callers
@@ -138,7 +138,7 @@ export function resolveDoorstepOverflowLine(
 }
 
 // Accepted copy, reused verbatim from
-// openspec/changes/walk-start-experience/proposal.md's "Notification Timing
+// docs/decisions/walk-start-experience/proposal.md's "Notification Timing
 // (resolved)" section: "Your Treat Bakery overflowed! 124 treats waiting."
 // "124" there is that document's illustrative example number, not a literal
 // constant — a fixed number would misreport the player's real treats total,

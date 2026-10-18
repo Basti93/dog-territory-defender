@@ -16,7 +16,7 @@ import { TerritoryPortrait } from './TerritoryPortrait';
 import { Chip, Header, palette, radii, Screen, shadows, spacing, textStyle } from '../ui';
 import { formatDistanceKm, formatNumber, t } from '../i18n';
 
-// Walk Portrait (openspec/changes/walk-portrait) — a full-screen, tap-in-from-
+// Walk Portrait (docs/decisions/walk-portrait) — a full-screen, tap-in-from-
 // history view of one walk's own route, animated on top of the player's
 // muted aggregate Home Range (design.md Decision 1/2). A pure presentation
 // layer: every figure shown here already comes from an already-shipped,

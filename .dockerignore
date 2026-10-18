@@ -1,0 +1,28 @@
+# Build context for `docker build -f server/Dockerfile .` (repo root). The image needs only
+# server/ and src/ (server imports ../src/economy etc.). Keep the context small: the legacy
+# builder ignores server/Dockerfile.dockerignore, only this file counts there.
+**/node_modules
+**/dist
+**/.vitest
+**/.env
+.git
+.claude
+.expo
+android
+ios
+assets
+testing
+handover
+prototype
+docs
+openspec
+deploy
+scripts
+__mocks__
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.mp4
+**/*.glb
+**/*.blend

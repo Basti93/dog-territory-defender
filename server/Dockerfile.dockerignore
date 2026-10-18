@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.vitest
+**/.env
+.git
+assets
+android
+ios
+prototype
+docs
+openspec
+testing
+scripts
+.expo

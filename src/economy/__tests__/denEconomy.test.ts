@@ -64,7 +64,7 @@ describe('applyPassiveAccrual', () => {
     expect(after.treats).toBe(cap);
   });
 
-  // openspec/changes/territories/design.md Decision 6 — territoryRate is an
+  // docs/decisions/territories/design.md Decision 6 — territoryRate is an
   // additive term on top of the existing Treat Bakery passive rate.
   it('adds territoryRate on top of the existing passive rate when worldMass is supplied', () => {
     const state = { ...defaultDenEconomyState(NOW), bakeryLevel: 1, doghouseLevel: 100 }; // huge storage cap so this test isn't cap-bound
@@ -82,7 +82,7 @@ describe('applyPassiveAccrual', () => {
     expect(after.treats).toBe(state.treats + 3);
   });
 
-  // openspec/changes/territories/design.md Decision 6 — the one-off reveal
+  // docs/decisions/territories/design.md Decision 6 — the one-off reveal
   // flag flips permanently once territoryRate first crosses the display
   // floor, and never re-checks backward.
   it('flips territoryIncomeRevealed once territoryRate crosses the display floor, and never resets', () => {
@@ -131,7 +131,7 @@ describe('awardWalkTreats', () => {
     expect(after.treats).toBe(cap);
   });
 
-  // openspec/changes/home-range-rewards/tasks.md task 1.2/5.1 — bloomMultiplier
+  // docs/decisions/home-range-rewards/tasks.md task 1.2/5.1 — bloomMultiplier
   // composes multiplicatively with the daily multiplier in a single Math.round.
   it('bloomMultiplier defaults to 1 (no effect) when omitted', () => {
     const state = defaultDenEconomyState(NOW);
@@ -286,7 +286,7 @@ describe('getUpgradeTease', () => {
   });
 });
 
-// openspec/changes/home-range-rewards/tasks.md task 2.5 — manual-log/route-refresh caps.
+// docs/decisions/home-range-rewards/tasks.md task 2.5 — manual-log/route-refresh caps.
 // design.md Decision 4: at most BALANCE.freshGround.maxManualLogsPerDay manual logs per
 // calendar day, of which at most BALANCE.freshGround.maxRouteRefreshesPerDay may refresh a route.
 describe('evaluateManualLogQuota / recordManualLogUsage', () => {

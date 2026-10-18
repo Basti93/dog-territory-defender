@@ -1,5 +1,5 @@
 // Wild-cluster selection — pure functions, no I/O. See
-// openspec/changes/somewhere-wild/design.md Decision 3. Finds the single
+// docs/decisions/somewhere-wild/design.md Decision 3. Finds the single
 // most-worth-visiting wild patch of the player's Home Range (not one per
 // patch), so the marker/card can point at exactly one spot.
 

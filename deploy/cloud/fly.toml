@@ -1,0 +1,40 @@
+# SKIZZE fuer einen spaeteren Umzug zu Fly.io (nicht getestet, nichts davon ist heute noetig).
+# Gleiches Image wie daheim; Konfiguration nur ueber Env/Secrets (design.md Decision 13).
+#   fly apps create dog-territory-api
+#   fly postgres create --name dog-territory-db        # oder anderes verwaltetes Postgres 16
+#   fly postgres attach dog-territory-db               # setzt DATABASE_URL als Secret
+#   fly deploy --dockerfile server/Dockerfile          # aus der Repo-Wurzel
+# Daten: ./backup.sh-Dump per `fly proxy` + psql einspielen, dann in der App die Server-URL aendern.
+app = "dog-territory-api"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../server/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "7000"
+  READY_PORT = "7100"
+  LOG_LEVEL = "info"
+  TRUST_PROXY_CIDR = "0.0.0.0/0"   # hinter Fly-Proxy; auf Fly-Netz einschraenken, sobald geprueft
+
+[deploy]
+  release_command = "node dist/ops/migrate.js"
+
+[http_service]
+  internal_port = 7000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

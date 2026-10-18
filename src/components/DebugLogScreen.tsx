@@ -11,7 +11,7 @@ import { formatDate, t } from '../i18n';
 
 interface DebugLogScreenProps {
   onClose: () => void;
-  /** For the walk-reminder 4-week measurement summary below (openspec/changes/walk-reminder/design.md Decision 10) — read directly, not derived from the general-purpose log text below, so a "Clear Log" tap can never destroy this experiment's own record. */
+  /** For the walk-reminder 4-week measurement summary below (docs/decisions/walk-reminder/design.md Decision 10) — read directly, not derived from the general-purpose log text below, so a "Clear Log" tap can never destroy this experiment's own record. */
   notificationRepository: NotificationRepository;
 }
 
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.sm },
   actionButton: { flex: 1 },
   count: { color: palette.muted, textAlign: 'center', marginTop: spacing.sm },
-  // The 4-week measurement summary (openspec/changes/walk-reminder/design.md
+  // The 4-week measurement summary (docs/decisions/walk-reminder/design.md
   // Decision 10) — a small fixed block above the scrollable log preview,
   // reading durable counters directly off NotificationRepository rather than
   // this screen's own clearable log text.

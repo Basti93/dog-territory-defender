@@ -22,6 +22,11 @@ export function createInMemoryWalkRepository(): WalkRepository {
       walks.delete(id);
     },
 
+    async markSynced(id: string, at: number): Promise<void> {
+      const existing = walks.get(id);
+      if (existing) walks.set(id, { ...existing, syncedAt: at });
+    },
+
     async replaceAll(next: Walk[]): Promise<void> {
       walks.clear();
       for (const walk of next) walks.set(walk.id, { ...walk, syncedAt: null });

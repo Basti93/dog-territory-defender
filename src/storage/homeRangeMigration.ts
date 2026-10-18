@@ -1,6 +1,6 @@
 // One-time backfill: replay every previously saved tracked walk's real GPS
 // trail into the Home Range grid, exactly once, on first app load after this
-// feature ships. See openspec/changes/home-range/design.md's "Technical
+// feature ships. See docs/decisions/home-range/design.md's "Technical
 // Split Addendum > Migration" section.
 //
 // Each cell is seeded with its own walk's startTime (not the replay time),

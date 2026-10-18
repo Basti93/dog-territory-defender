@@ -1,19 +1,19 @@
 // The WebView-side Home Range renderer — Gaussian blur, marching-squares
 // contour extraction, Lab colour interpolation, and canvas drawing. See
-// openspec/changes/home-range/design.md Decision 6.
+// docs/decisions/home-range/design.md Decision 6.
 //
 // This is plain vanilla JS, not TypeScript: it runs inside the WebView's own
 // script tag, which has no bundler and no access to anything under src/ at
 // runtime. Exported as a raw source string so both mapHTML.ts (the real app)
-// and openspec/changes/home-range/rendering-spike.html (the standalone
+// and docs/decisions/home-range/rendering-spike.html (the standalone
 // dev-only go/no-go spike, tasks.md task 5.1) inject the exact same
 // renderer — one canonical copy, not two hand-kept-in-sync ones.
 //
 // VERIFIED ON A REAL DEVICE: `home-range`'s task 5.1 on-device go/no-go
 // spike confirmed this renderer produces soft edges and a plausible fill
-// with no grid blockiness (see openspec/changes/archive/2026-08-21-home-range's
+// with no grid blockiness (see docs/decisions/2026-08-21-home-range's
 // tasks.md). The wild-ground second contour added by
-// openspec/changes/somewhere-wild is a second pass of the same already-verified
+// docs/decisions/somewhere-wild is a second pass of the same already-verified
 // hrMarchingSquaresSegments function over the same already-verified
 // wildBlurred field, at a different threshold — no new rendering technique.
 
@@ -22,7 +22,7 @@ import { BALANCE } from '../economy/balanceConfig';
 /**
  * The wild-threshold bonus must be WILD_MARGIN times the bonus at the Fresh
  * Ground display-suppression floor — not just one rounding step past it.
- * See openspec/changes/somewhere-wild/design.md Decision 2's "Second
+ * See docs/decisions/somewhere-wild/design.md Decision 2's "Second
  * correction": a bare break-even derivation (no margin) gave a threshold of
  * 0.45 at today's K, a much lower and much less rare bar than intended.
  * Must match src/utils/wildSpot.ts's WILD_MARGIN exactly (same reasoning,
@@ -33,7 +33,7 @@ const WILD_MARGIN = 1.8;
 
 /**
  * The wild-ground contour threshold — see
- * openspec/changes/somewhere-wild/design.md Decision 2. Derived from
+ * docs/decisions/somewhere-wild/design.md Decision 2. Derived from
  * home-range-rewards' own BALANCE constants (never hardcoded), rounded UP
  * to the nearest 0.05 so there's a WILD_MARGIN-sized margin above the Fresh
  * Ground display-suppression floor, not an exact boundary match, then
@@ -63,7 +63,7 @@ var HR_CELL_M = 20;
 var HR_D_LAT_DEG = HR_CELL_M / 111320;
 var HR_BLUR_SIGMA_CELLS = 1;
 var HR_CONTOUR_THRESHOLD = 0.5;
-// See openspec/changes/somewhere-wild/design.md Decision 2 — derived from
+// See docs/decisions/somewhere-wild/design.md Decision 2 — derived from
 // BALANCE.freshGround.k/displayThresholdMultiplier at build time (this file's
 // own WILD_CONTOUR_THRESHOLD constant above), not hardcoded.
 var HR_WILD_CONTOUR_THRESHOLD = ${WILD_CONTOUR_THRESHOLD};
@@ -101,7 +101,7 @@ var HR_WILD_HEX = '#DCE8BE';
 // contour stroke colour, distinct from the Range outline's HR_FRESH_HEX.
 var HR_WILD_CONTOUR_HEX = '#F39C12';
 // Muted grey design token (visual-design/spec.md, formalized by
-// openspec/changes/walk-portrait/design.md Decision 3) — the Walk Portrait's
+// docs/decisions/walk-portrait/design.md Decision 3) — the Walk Portrait's
 // muted Home Range background context layer's fill and outline colour. No
 // wildness gradient, no LUT — a single flat tone.
 var HR_MUTED_HEX = '#8A9A8A';
@@ -584,7 +584,7 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
     L.polyline([a, b], { color: HR_FRESH_HEX, weight: HR_OUTLINE_WEIGHT, opacity: HR_OUTLINE_OPACITY, interactive: false }).addTo(layerGroup);
   }
 
-  // ---- Wild-ground contour (openspec/changes/somewhere-wild): a second
+  // ---- Wild-ground contour (docs/decisions/somewhere-wild): a second
   // marching-squares pass over the same wildBlurred field the fill already
   // decodes, at HR_WILD_CONTOUR_THRESHOLD — a warm, dashed line distinct
   // from the Range outline above, circling ground that will visibly pay
@@ -608,7 +608,7 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
 
 /**
  * The Walk Portrait's muted Home Range background context layer
- * (openspec/changes/walk-portrait/design.md Decisions 2/3) — a third
+ * (docs/decisions/walk-portrait/design.md Decisions 2/3) — a third
  * sibling to renderHomeRangeToMap above, same signature and layer-group-
  * return convention, reusing the identical blur -> marching-squares
  * pipeline. Deliberately flat: a single muted tone fill (no wildness-driven
@@ -694,7 +694,7 @@ function renderHomeRangeMuted(map, payload, previousLayerGroup) {
 }
 
 /**
- * The Doorstep's territory portrait (openspec/changes/home-dashboard,
+ * The Doorstep's territory portrait (docs/decisions/home-dashboard,
  * design.md Decision 2) — the same blur -> color-LUT -> fill-pixel loop and
  * the same HR_CONTOUR_THRESHOLD marching-squares pass as
  * renderHomeRangeToMap above, but drawn straight onto the given canvas's 2D

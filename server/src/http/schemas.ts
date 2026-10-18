@@ -1,0 +1,161 @@
+// Request validation (TypeBox -> JSON Schema for Fastify/ajv). Unknown properties are rejected
+// (additionalProperties:false + ajv removeAdditional off, see app.ts). Each schema is checked at
+// compile time against the shared contract in src/sync/apiContract.ts: if they drift, tsc fails.
+import { Type, type Static } from '@sinclair/typebox';
+import { API_LIMITS } from '@game/sync/apiContract';
+import type { CommandRequest, ImportRequest, JoinRequest, WalkUploadRequest } from '@game/sync/apiContract';
+
+const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
+const Id = Type.String({ minLength: 8, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' });
+
+export const JoinSchema = Type.Object(
+  {
+    code: Str(8, 16),
+    playerName: Str(1, API_LIMITS.maxDisplayNameLength),
+    deviceLabel: Str(1, 60),
+    consent: Type.Literal(true),
+    timezone: Type.Optional(Str(1, 64)),
+  },
+  { additionalProperties: false }
+);
+
+const LocationSchema = Type.Object(
+  {
+    latitude: Type.Number({ minimum: -90, maximum: 90 }),
+    longitude: Type.Number({ minimum: -180, maximum: 180 }),
+    timestamp: Type.Number({ minimum: 0 }),
+    accuracy: Type.Number({ minimum: 0, maximum: 100000 }),
+  },
+  { additionalProperties: false }
+);
+
+export const WalkUploadSchema = Type.Object(
+  {
+    id: Id,
+    startTime: Type.Number({ minimum: 0 }),
+    startSource: Type.Literal('button'),
+    locations: Type.Array(LocationSchema, { maxItems: API_LIMITS.maxLocationsPerWalk }),
+    territoryNameHint: Type.Optional(Str(0, 80)),
+  },
+  { additionalProperties: false }
+);
+
+const Building = Type.Union([Type.Literal('doghouse'), Type.Literal('bakery'), Type.Literal('sniffGarden')]);
+
+export const CommandSchema = Type.Object(
+  {
+    clientId: Id,
+    command: Type.Union([
+      Type.Object({ kind: Type.Literal('den.upgrade'), building: Building }, { additionalProperties: false }),
+      Type.Object({ kind: Type.Literal('den.claim') }, { additionalProperties: false }),
+      Type.Object(
+        {
+          kind: Type.Literal('dog.update'),
+          name: Type.Optional(Type.Union([Str(1, API_LIMITS.maxDogNameLength), Type.Null()])),
+          appearance: Type.Optional(Type.Record(Type.String({ maxLength: 40 }), Type.Unknown())),
+        },
+        { additionalProperties: false }
+      ),
+      Type.Object({ kind: Type.Literal('walk.delete'), walkId: Id }, { additionalProperties: false }),
+    ]),
+  },
+  { additionalProperties: false }
+);
+
+export const EventsQuerySchema = Type.Object(
+  {
+    after: Type.Integer({ minimum: 0, default: 0 }),
+    wait: Type.Integer({ minimum: 0, maximum: API_LIMITS.maxEventWaitSeconds, default: 0 }),
+    limit: Type.Integer({ minimum: 1, maximum: API_LIMITS.maxEventsPerPull, default: 50 }),
+  },
+  { additionalProperties: false }
+);
+
+export const NearbyQuerySchema = Type.Object(
+  {
+    radiusM: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
+    include: Type.Optional(Type.Literal('cells')),
+  },
+  { additionalProperties: false }
+);
+
+export const WalkParamsSchema = Type.Object({ id: Id }, { additionalProperties: false });
+
+const Int = (min = -1_000_000_000, max = 1_000_000_000) => Type.Integer({ minimum: min, maximum: max });
+const Level = Type.Integer({ minimum: 1, maximum: 100 });
+
+export const ImportSchema = Type.Object(
+  {
+    importId: Id,
+    walks: Type.Array(
+      Type.Object(
+        {
+          id: Id,
+          startTime: Type.Number({ minimum: 0 }),
+          startSource: Type.Union([Type.Literal('button'), Type.Literal('manual-log')]),
+          closed: Type.Boolean(),
+          locations: Type.Array(LocationSchema, { maxItems: API_LIMITS.maxLocationsPerWalk }),
+          newGroundCellIds: Type.Optional(Type.Array(Type.String({ maxLength: 24 }), { maxItems: 20000 })),
+          treatsEarned: Type.Optional(Type.Integer({ minimum: 0, maximum: 1_000_000 })),
+        },
+        { additionalProperties: false }
+      ),
+      { maxItems: API_LIMITS.maxImportWalks }
+    ),
+    cells: Type.Array(
+      Type.Object(
+        {
+          ix: Int(),
+          iy: Int(),
+          lastRefreshed: Type.Number({ minimum: 0 }),
+          lastTracked: Type.Number({ minimum: 0 }),
+          visits: Type.Integer({ minimum: 0, maximum: 100000 }),
+          territoryId: Type.Union([Str(1, 40), Type.Null()]),
+        },
+        { additionalProperties: false }
+      ),
+      { maxItems: API_LIMITS.maxImportCells }
+    ),
+    territories: Type.Array(
+      Type.Object(
+        {
+          id: Str(1, 40),
+          name: Str(1, 80),
+          createdAt: Type.Number({ minimum: 0 }),
+          walksHere: Type.Integer({ minimum: 0, maximum: 1_000_000 }),
+          treatsEarnedHere: Type.Integer({ minimum: 0, maximum: 1_000_000_000 }),
+        },
+        { additionalProperties: false }
+      ),
+      { maxItems: API_LIMITS.maxImportTerritories }
+    ),
+    den: Type.Object(
+      {
+        treats: Type.Number({ minimum: 0, maximum: 1e12 }),
+        doghouseLevel: Level,
+        bakeryLevel: Level,
+        sniffGardenLevel: Level,
+        lastTickAt: Type.Number({ minimum: 0 }),
+        xp: Type.Number({ minimum: 0, maximum: 1e12 }),
+        level: Level,
+      },
+      { additionalProperties: false }
+    ),
+    dog: Type.Object(
+      {
+        name: Type.Union([Str(1, API_LIMITS.maxDogNameLength), Type.Null()]),
+        appearance: Type.Record(Type.String({ maxLength: 40 }), Type.Unknown()),
+      },
+      { additionalProperties: false }
+    ),
+  },
+  { additionalProperties: false }
+);
+
+// ---- compile-time drift checks (assignable both ways)
+type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _join: Same<Static<typeof JoinSchema>, JoinRequest> = true;
+const _walk: Same<Static<typeof WalkUploadSchema>, WalkUploadRequest> = true;
+const _cmd: Same<Static<typeof CommandSchema>, CommandRequest> = true;
+const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
+void [_join, _walk, _cmd, _import];

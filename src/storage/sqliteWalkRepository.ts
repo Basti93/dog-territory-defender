@@ -67,6 +67,11 @@ export function createSqliteWalkRepository(dbName: string = DEFAULT_DB_NAME): Wa
       await db.runAsync('DELETE FROM walks WHERE id = ?', id);
     },
 
+    async markSynced(id: string, at: number): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync('UPDATE walks SET syncedAt = ? WHERE id = ?', at, id);
+    },
+
     async replaceAll(walks: Walk[]): Promise<void> {
       const db = await dbPromise;
       await db.withTransactionAsync(async () => {

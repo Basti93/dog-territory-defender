@@ -90,3 +90,47 @@ describe('SettingsScreen', () => {
     await unmountAndExpectNoTimers(view);
   });
 });
+
+describe('SettingsScreen with a household', () => {
+  async function setupWithEngine(joined: boolean) {
+    const { makeEngine, makeRepos, IDENTITY } = require('../../test/syncHelpers');
+    const repos = makeRepos();
+    if (joined) await repos.settings.saveSyncIdentity(IDENTITY);
+    const engine = makeEngine(repos, {});
+    const view = await renderScreen(
+      <SettingsScreen
+        onClose={() => {}}
+        notificationRepository={createInMemoryNotificationRepository()}
+        walkRepository={createInMemoryWalkRepository()}
+        dogName="Rex"
+        buddyAppearance={defaultBuddyAppearance()}
+        walkActive={false}
+        onSaveAppearance={jest.fn()}
+        localePreference="en"
+        onChangeLocalePreference={jest.fn()}
+        syncEngine={engine}
+      />
+    );
+    await screen.findByText(t('settings.reminder.title'));
+    await flush();
+    return view;
+  }
+
+  it('disables Restore (with a hint) while joined, keeps Share backup, and shows the status line', async () => {
+    const view = await setupWithEngine(true);
+    expect(screen.getByRole('button', { name: t('settings.backup.restore') })).toBeDisabled();
+    expect(screen.getByRole('button', { name: t('settings.backup.share') })).toBeEnabled();
+    expect(screen.getByText(t('household.restoreOff'))).toBeOnTheScreen();
+    expect(screen.getByText(t('household.status.connected', { player: 'Sam' }))).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: t('household.leave.button') })).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('keeps Restore enabled and offers the join form when not joined', async () => {
+    const view = await setupWithEngine(false);
+    expect(screen.getByRole('button', { name: t('settings.backup.restore') })).toBeEnabled();
+    expect(screen.queryByText(t('household.restoreOff'))).toBeNull();
+    expect(screen.getByRole('button', { name: t('household.join.button') })).toBeDisabled(); // needs name + code
+    await unmountAndExpectNoTimers(view);
+  });
+});

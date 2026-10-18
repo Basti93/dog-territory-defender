@@ -1,12 +1,19 @@
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
-import { normalizeLocalePreference, SettingsRepository } from './SettingsRepository';
+import { normalizeLocalePreference, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
 
 export function createInMemorySettingsRepository(): SettingsRepository {
   let localePreference: LocalePreference = 'system';
   let onboardingDone = false;
   let wildExtrasLastShown: Record<string, string> = {};
+  let syncIdentity: SyncIdentity | null = null;
   return {
+    async getSyncIdentity() {
+      return syncIdentity ? { ...syncIdentity } : null;
+    },
+    async saveSyncIdentity(identity) {
+      syncIdentity = normalizeSyncIdentity(identity);
+    },
     async getLocalePreference() {
       return localePreference;
     },

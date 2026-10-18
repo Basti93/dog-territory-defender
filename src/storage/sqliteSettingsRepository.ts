@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
-import { normalizeLocalePreference, SettingsRepository } from './SettingsRepository';
+import { normalizeLocalePreference, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
 
 const DEFAULT_DB_NAME = 'dog-territory-defender.db';
 const SINGLETON_ID = 'singleton';
@@ -27,10 +27,37 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'wildExtrasLastShown')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN wildExtrasLastShown TEXT NOT NULL DEFAULT '{}'");
     }
+    if (!columns.some((c) => c.name === 'syncIdentity')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN syncIdentity TEXT');
+    }
     return db;
   });
 
   return {
+    async getSyncIdentity(): Promise<SyncIdentity | null> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ syncIdentity: string | null }>(
+        'SELECT syncIdentity FROM app_settings WHERE id = ?',
+        SINGLETON_ID
+      );
+      try {
+        return normalizeSyncIdentity(row?.syncIdentity ? JSON.parse(row.syncIdentity) : null);
+      } catch {
+        return null;
+      }
+    },
+
+    async saveSyncIdentity(identity: SyncIdentity | null): Promise<void> {
+      const db = await dbPromise;
+      const normalized = normalizeSyncIdentity(identity);
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, syncIdentity) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET syncIdentity = excluded.syncIdentity`,
+        SINGLETON_ID,
+        normalized ? JSON.stringify(normalized) : null
+      );
+    },
+
     async getLocalePreference(): Promise<LocalePreference> {
       const db = await dbPromise;
       const row = await db.getFirstAsync<{ localePreference: string }>(

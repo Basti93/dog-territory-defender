@@ -64,7 +64,7 @@ const EXCITED_AFTER_UPGRADE_MS = 3000;
  * level, or level+1 for the "Next:" preview) — `state` supplies the other
  * context (Buddy's level, the other buildings' levels) needed now that
  * storage/passive/Sniff-Garden all read Buddy's Level too (see
- * openspec/changes/virtual-dog-companion/design.md).
+ * docs/decisions/virtual-dog-companion/design.md).
  */
 function effectText(building: BuildingKey, level: number, state: DenEconomyState): string {
   switch (building) {
@@ -103,6 +103,8 @@ interface DenScreenProps {
   onAcknowledgePendingAchievements?: () => void;
   onClose: () => void;
   onTreatsChanged: (treats: number) => void;
+  /** Household sync: called after an upgrade was saved locally, so App can queue the server command. */
+  onUpgraded?: (building: BuildingKey) => void;
 }
 
 export function DenScreen({
@@ -118,6 +120,7 @@ export function DenScreen({
   onAcknowledgePendingAchievements,
   onClose,
   onTreatsChanged,
+  onUpgraded,
 }: DenScreenProps) {
   const insets = useSafeAreaInsets();
   const [state, setState] = useState<DenEconomyState | null>(null);
@@ -125,7 +128,7 @@ export function DenScreen({
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
   const [achievementNotices, setAchievementNotices] = useState<AchievementId[]>([]);
   const [rangeCellCount, setRangeCellCount] = useState<number | null>(null);
-  // openspec/changes/territories/design.md Decision 6's permanent footer
+  // docs/decisions/territories/design.md Decision 6's permanent footer
   // line — this screen's own fetch, independent of whatever App.tsx last
   // computed at the mount effect (the Den can be opened long after that).
   const [territoryIncomeRate, setTerritoryIncomeRate] = useState<number | null>(null);
@@ -234,6 +237,7 @@ export function DenScreen({
     wildExtra.playLevelUp();
     onTreatsChanged(result.treats);
     await repository.saveState(result);
+    onUpgraded?.(building);
 
     const personalStats = await personalStatsRepository.getState();
     const { newlyUnlocked } = recordBuildingUpgrade(personalStats, state, result);
@@ -377,19 +381,19 @@ export function DenScreen({
               ]}
             />
           </View>
-          {/* Accepted verbatim copy shape (openspec/changes/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
+          {/* Accepted verbatim copy shape (docs/decisions/virtual-dog-companion), numbers filled in — tasks.md task 4.1. */}
           <Text style={[textStyle('small'), styles.levelBarRate]}>
             {t('dog.bringsHome', { dog, count: formatNumber(buddyTreatsPerWalk(state.level, state.sniffGardenLevel)) })}
             {!atMaxLevel ? ` ${t('den.nextLevelRate', { count: formatNumber(buddyTreatsPerWalk(state.level + 1, state.sniffGardenLevel)) })}` : ''}
           </Text>
-          {/* "Buddy knows N streets by heart" (openspec/changes/home-range/design.md Decision 5's
+          {/* "Buddy knows N streets by heart" (docs/decisions/home-range/design.md Decision 5's
               headline stat) — hidden entirely until the Home Range cell count has loaded. */}
           {rangeCellCount !== null && (
             <Text style={[textStyle('small'), styles.levelBarRate]}>
               {tPlural('den.streetsByHeart', streetsKnown(rangeCellCount), { dog })}
             </Text>
           )}
-          {/* Permanent territory-income line (openspec/changes/territories/
+          {/* Permanent territory-income line (docs/decisions/territories/
               design.md Decision 6) — "once true, always shown," same
               convention as the streets-known line above. */}
           {state.territoryIncomeRevealed && territoryIncomeRate !== null && (

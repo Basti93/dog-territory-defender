@@ -81,6 +81,32 @@ export function createSqliteTerritoryRepository(dbName: string = DEFAULT_DB_NAME
       });
     },
 
+    async upsertTerritories(incoming: Territory[]): Promise<void> {
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        for (const t of incoming) {
+          await db.runAsync(
+            `INSERT INTO territories (id, name, createdAt, walksHere, treatsEarnedHere) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name,
+               walksHere = MAX(walksHere, excluded.walksHere),
+               treatsEarnedHere = MAX(treatsEarnedHere, excluded.treatsEarnedHere)`,
+            t.id,
+            t.name,
+            t.createdAt,
+            t.walksHere,
+            t.treatsEarnedHere
+          );
+        }
+      });
+    },
+
+    async removeTerritories(ids: TerritoryId[]): Promise<void> {
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        for (const id of ids) await db.runAsync('DELETE FROM territories WHERE id = ?', id);
+      });
+    },
+
     async replaceAll(territories: Territory[]): Promise<void> {
       const db = await dbPromise;
       await db.withTransactionAsync(async () => {

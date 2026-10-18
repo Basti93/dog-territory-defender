@@ -14,7 +14,7 @@ interface TerritoryPortraitProps {
   homeRangeRepository?: HomeRangeRepository;
   /**
    * A pre-fetched, already-scoped cell list — used by the per-territory
-   * card (openspec/changes/territories/tasks.md task 10.1) to render just
+   * card (docs/decisions/territories/tasks.md task 10.1) to render just
    * one Territory's own cells via this exact same rendering path
    * (buildHomeRangeRasterPayload + portraitHTML), with no new rendering
    * code (design.md Decision 8). When supplied, the internal
@@ -30,7 +30,7 @@ interface TerritoryPortraitProps {
 }
 
 /**
- * The Doorstep's still Home Range portrait (openspec/changes/home-dashboard,
+ * The Doorstep's still Home Range portrait (docs/decisions/home-dashboard,
  * design.md Decision 2) — a hidden WebView (src/web/portraitHTML.ts) draws
  * the Range outline + Bloom fill over OSM tiles and captures the result to a
  * data URL; this component only ever shows the composited `<Image>`, tappable

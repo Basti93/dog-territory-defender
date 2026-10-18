@@ -125,7 +125,7 @@ describe('awardWalkRewards', () => {
     expect(result.celebration.unlockedAchievements).toContain('first-steps');
   });
 
-  // openspec/changes/home-range/tasks.md task 6.1: New Ground detection must
+  // docs/decisions/home-range/tasks.md task 6.1: New Ground detection must
   // exist and be tested here, even though the celebration beat/copy for it
   // is deferred to the sibling change home-range-rewards.
   it('carries newGroundCellCount through to the celebration when the caller supplies it', async () => {
@@ -143,7 +143,7 @@ describe('awardWalkRewards', () => {
   });
 });
 
-// Exploit mitigation: openspec/changes/virtual-dog-companion/design.md's
+// Exploit mitigation: docs/decisions/virtual-dog-companion/design.md's
 // "Exploits" table + "Degenerate-exploit mitigations" decision.
 describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
   it.each([0, 1, 2])('pays full treats and full XP base when there are %i prior walks today (i.e. this is walk 1, 2, or 3 of the day)', async (priorCount) => {
@@ -204,7 +204,7 @@ describe('awardWalkRewards — per-day diminishing-returns multiplier', () => {
   });
 });
 
-// openspec/changes/virtual-dog-companion/design.md's level-up beat and
+// docs/decisions/virtual-dog-companion/design.md's level-up beat and
 // one-away cliffhanger decisions.
 describe('awardWalkRewards — level-up celebration fields', () => {
   it('leaves oldTreatsPerWalk/newTreatsPerWalk/leveledUpTo null when no level-up occurs', async () => {
@@ -258,7 +258,7 @@ describe('awardWalkRewards — level-up celebration fields', () => {
   });
 });
 
-// openspec/changes/home-range-rewards/tasks.md section 1 + task 5.1 — the
+// docs/decisions/home-range-rewards/tasks.md section 1 + task 5.1 — the
 // Home Range's Fresh Ground payout (bloomMultiplier), wired through the full
 // walk-close reward path.
 describe('awardWalkRewards — Fresh Ground bloomMultiplier', () => {
@@ -309,8 +309,8 @@ describe('awardWalkRewards — Fresh Ground bloomMultiplier', () => {
   });
 });
 
-// openspec/changes/home-range-rewards/tasks.md task 5.2 — automates
-// openspec/changes/home-range/design.md Decision 7's "0.000000 pp" proof:
+// docs/decisions/home-range-rewards/tasks.md task 5.2 — automates
+// docs/decisions/home-range/design.md Decision 7's "0.000000 pp" proof:
 // bloomMultiplier has no level/building/treat-balance term, so on an
 // equivalent walk (same painted-cell wildness) it's the same factor on both
 // sides of the Level-100-vs-Level-1 ratio and cancels out identically.

@@ -19,7 +19,7 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
   };
 }
 
-describe('resolveWalkPortraitState (openspec/changes/walk-portrait/design.md Decision 2, tasks.md task 4.1)', () => {
+describe('resolveWalkPortraitState (docs/decisions/walk-portrait/design.md Decision 2, tasks.md task 4.1)', () => {
   it('(a) a walk with its own recorded trail resolves to the trail state using its own record', async () => {
     const walkRepository = createInMemoryWalkRepository();
     const walk = makeWalk({ id: 'tracked' });

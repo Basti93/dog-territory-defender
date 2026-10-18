@@ -18,7 +18,7 @@ export const BALANCE = {
   // The Sniff Garden's actual mechanical effect (percent bonus applied to a
   // walk's treats payout) — reuses softCap's curveRate=25 shape but is a
   // separate config block because it's renormalized to its own 8pp
-  // anti-snowball budget (see openspec/changes/virtual-dog-companion/design.md's
+  // anti-snowball budget (see docs/decisions/virtual-dog-companion/design.md's
   // "sniffGardenPct" decision), not softCap's 50pp. softCap/softCapBonusPercent
   // above stays display-only dead code (nothing consumes it) — see formulas.ts.
   sniffGarden: {
@@ -30,7 +30,7 @@ export const BALANCE = {
     perWalkBase: 20,
     perKm: 15,
     per1000m2: 5,
-    // Unchanged in magnitude by openspec/changes/home-range, but the input
+    // Unchanged in magnitude by docs/decisions/home-range, but the input
     // it caps changed: it now caps cellsPainted*400 (the walk's real Home
     // Range footprint, see formulas.ts's xpAwardForWalk) rather than a
     // shoelace polygon's enclosed area. 20000 / 400 = 50, so the cap now
@@ -44,8 +44,8 @@ export const BALANCE = {
     areaCapM2: 20000,
   },
   // The Home Range's Fresh Ground payout — bloomMultiplier = 1 + k*B, treats
-  // only, never XP. See openspec/changes/home-range/design.md's Decision 3
-  // and openspec/changes/home-range-rewards/tasks.md sections 1-2.
+  // only, never XP. See docs/decisions/home-range/design.md's Decision 3
+  // and docs/decisions/home-range-rewards/tasks.md sections 1-2.
   freshGround: {
     // K in `bloomMultiplier = 1 + K·B`. Confirmed by game-master against the
     // sweep in design.md's "K = 0.6 — confirmed by game-master" section —
@@ -65,7 +65,7 @@ export const BALANCE = {
   leveling: {
     xpBase: 100,
     // 1.10, not the originally-shipped 1.13 — retuned in
-    // openspec/changes/virtual-dog-companion so the gap between level-ups
+    // docs/decisions/virtual-dog-companion so the gap between level-ups
     // (now a real reward cadence, not just a progress-bar speed) never
     // stretches into a multi-month dead zone. See design.md's "xpGrowth
     // should come down to 1.10" decision.

@@ -192,7 +192,7 @@ export function getAchievementProgress(
  * `cellsPainted` is this walk's real Home Range footprint (see
  * utils/grid.ts's paintedCells), 0 for a manual log — replaces the deleted
  * `walk.territory?.area` polygon reading. See
- * openspec/changes/home-range/design.md's "Consequence that must be
+ * docs/decisions/home-range/design.md's "Consequence that must be
  * resolved" section (written about the XP formula, applied here for the
  * same reason: there is no polygon area left to read).
  *

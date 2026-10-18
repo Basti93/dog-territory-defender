@@ -1,5 +1,5 @@
 // Territory clustering/merge algorithm — pure functions, no I/O. See
-// openspec/changes/territories/design.md Decisions 1-3. Runs once per
+// docs/decisions/territories/design.md Decisions 1-3. Runs once per
 // finished tracked walk (App.tsx's finishWalk) and once per cell during the
 // one-time migration backfill (storage/territoryMigration.ts) — there is
 // exactly one implementation of the algorithm, reused by both callers.
