@@ -47,6 +47,7 @@ export const API_PATHS = {
   coopWeek: '/v1/coop/week',
   import: '/v1/households/import',
   logs: '/v1/logs', // POST only: device diagnostics; read via the operator CLI, never over HTTP
+  presence: '/v1/presence', // POST heartbeat of a walk in progress; GET the other household members' walks in progress (long-poll)
 } as const;
 
 export const giftOpenPath = (giftId: string) => `/v1/gifts/${encodeURIComponent(giftId)}/open`;
@@ -74,6 +75,10 @@ export const API_LIMITS = {
   maxLogEntriesPerBatch: 200,
   maxLogEntryBytes: 2048,
   maxLogRowsPerDayPerDevice: 2000,
+  /** Live presence: points kept per walk (the server simplifies down to this), points in one heartbeat, minimum gap between heartbeats per device. */
+  maxPresencePoints: 400,
+  maxPresencePointsPerBeat: 400,
+  presenceMinIntervalMs: 10_000,
 } as const;
 
 // ------------------------------------------------------------------ errors
@@ -290,6 +295,52 @@ export interface LogUploadRequest {
 export interface LogUploadResponse {
   /** Rows newly stored (duplicates and oversized entries are not counted). */
   stored: number;
+}
+
+// ------------------------------------------------------------------ live presence (M4 "Alex im Hof")
+// Additive inside API level 2. Ephemeral: never part of the events feed, purged hours after the walk. Visible only to
+// the OTHER members of the same household, with the full route (no start fuzz inside a household).
+
+export interface PresencePoint {
+  lat: number;
+  lon: number;
+  /** ms since epoch of the GPS fix. */
+  t: number;
+}
+
+/** `points` = only the fixes since the last accepted heartbeat (the server dedups by `t`). `ended: true` closes the walk's presence. */
+export interface PresenceUpdateRequest {
+  walkId: string;
+  startedAt: number;
+  points: PresencePoint[];
+  ended?: boolean;
+}
+
+export interface PresenceUpdateResponse {
+  ok: true;
+}
+
+/** One other member's walk in progress. */
+export interface PresenceEntry {
+  playerId: string;
+  name: string;
+  walkId: string;
+  startedAt: number;
+  /** Simplified to at most API_LIMITS.maxPresencePoints. */
+  points: PresencePoint[];
+  /** Server time of the last heartbeat. */
+  updatedAt: number;
+}
+
+/**
+ * `GET /v1/presence?after=<rev>&wait=<0..25>`. `rev` changes whenever anything about the others' presence changes
+ * (a heartbeat, a walk ending). With `after` equal to the current rev and `wait > 0` the call parks until it changes
+ * or the wait is over, then answers either way. Without `after` it answers at once.
+ */
+export interface PresenceResponse {
+  rev: number;
+  presence: PresenceEntry[];
+  serverTime: number;
 }
 
 export type WalkGetResponse = ApiWalkFull;

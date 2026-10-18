@@ -12,6 +12,9 @@ import type {
   CoopWeekResponse,
   GiftsResponse,
   NearbyResponse,
+  PresenceResponse,
+  PresenceUpdateRequest,
+  PresenceUpdateResponse,
   SnapshotResponse,
   WalkUploadRequest,
 } from '@game/sync/apiContract';
@@ -28,6 +31,7 @@ import { EventBus, pullEventsLongPoll } from '../services/events';
 import { buildSnapshot, joinHousehold } from '../services/households';
 import { ingestLogs } from '../services/deviceLogs';
 import { importHousehold } from '../services/importSeed';
+import { pullPresenceLongPoll, recordPresence } from '../services/presence';
 import { getWalk, ingestWalk, type AuthCtx } from '../services/walks';
 import { DeviceTokenAuthenticator, type Authenticator } from './auth';
 import { IpBanList } from './ipBan';
@@ -40,6 +44,8 @@ import {
   JoinSchema,
   LogUploadSchema,
   NearbyQuerySchema,
+  PresenceQuerySchema,
+  PresenceSchema,
   WalkParamsSchema,
   WalkUploadSchema,
 } from './schemas';
@@ -82,7 +88,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
         : {
             level: config.logLevel,
             redact: {
-              paths: ['req.headers.authorization', 'headers.authorization', '*.token', '*.code', '*.locations', '*.route'],
+              paths: ['req.headers.authorization', 'headers.authorization', '*.token', '*.code', '*.locations', '*.route', '*.points'],
               censor: '[redacted]',
             },
           },
@@ -96,6 +102,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
   const deviceLimiter = new FixedWindowLimiter(config.limits.devicePerMin, 60_000);
   // Log shipping: 30 requests / 10 min per device (the daily row cap lives in ingestLogs).
   const logLimiter = new FixedWindowLimiter(30, 10 * 60_000);
+  // Live presence heartbeats: 1 request / 10 s per device (the closing `ended` heartbeat is exempt, see the route).
+  const presenceLimiter = new FixedWindowLimiter(1, API_LIMITS.presenceMinIntervalMs);
   const joinDayLimiter = new FixedWindowLimiter(config.limits.joinPerDayPerIp, 24 * 3600_000);
   const joinHourGlobal = new FixedWindowLimiter(config.limits.joinPerHourGlobal, 3600_000);
 
@@ -271,6 +279,34 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     const result = await ingestLogs(db, req.auth!, req.body as LogUploadRequest, t);
     if (result.kind === 'capped') return reply.code(429).send({ error: 'daily_cap' } satisfies ApiError);
     return { stored: result.stored };
+  });
+
+  // Live presence (M4): ephemeral, household-private, not counted against the daily command cap.
+  app.post(API_PATHS.presence, { schema: { body: PresenceSchema }, bodyLimit: 32 * 1024 }, async (req, reply): Promise<PresenceUpdateResponse> => {
+    const t = now();
+    const body = req.body as PresenceUpdateRequest;
+    if (!body.ended && !presenceLimiter.hit(req.auth!.deviceId, t)) {
+      reply.header('Retry-After', String(presenceLimiter.retryAfterSeconds(req.auth!.deviceId, t)));
+      return reply.code(429).send({ error: 'rate_limited' } satisfies ApiError) as never;
+    }
+    await recordPresence(db, bus, req.auth!, body, t);
+    return { ok: true };
+  });
+
+  app.get(API_PATHS.presence, { schema: { querystring: PresenceQuerySchema } }, async (req): Promise<PresenceResponse> => {
+    const q = req.query as { after?: number; wait: number };
+    const abort = new AbortController();
+    req.raw.on('close', () => abort.abort());
+    return pullPresenceLongPoll(
+      db,
+      bus,
+      req.auth!,
+      q.after,
+      Math.min(q.wait, API_LIMITS.maxEventWaitSeconds),
+      config.limits.maxLongPollWaitersPerHousehold,
+      now,
+      abort.signal
+    );
   });
 
   app.get(API_PATHS.walks + '/:id', { schema: { params: WalkParamsSchema } }, async (req, reply) => {

@@ -52,3 +52,47 @@ describe('apiClient', () => {
     expect(slow.kind).toBe('timeout');
   });
 });
+
+describe('apiClient presence', () => {
+  it('posts a heartbeat and builds the long-poll URL, with a timeout that outlives the server wait', async () => {
+    const fetchImpl = jest.fn(async () => jsonResponse(200, { ok: true }));
+    const c = client(fetchImpl);
+    await c.sendPresence({ walkId: 'w1', startedAt: 1, points: [{ lat: 1, lon: 2, t: 3 }] });
+    const [postUrl, postInit] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(postUrl).toBe('https://x.test/v1/presence');
+    expect(postInit.method).toBe('POST');
+    expect(JSON.parse(postInit.body as string)).toEqual({ walkId: 'w1', startedAt: 1, points: [{ lat: 1, lon: 2, t: 3 }] });
+
+    fetchImpl.mockImplementation(async () => jsonResponse(200, { rev: 3, presence: [], serverTime: 1 }));
+    await c.presence();
+    await c.presence({ after: 3, waitSeconds: 25 });
+    expect((fetchImpl.mock.calls[1] as unknown as [string])[0]).toBe('https://x.test/v1/presence');
+    expect((fetchImpl.mock.calls[2] as unknown as [string])[0]).toBe('https://x.test/v1/presence?after=3&wait=25');
+  });
+
+  it('a long-poll is not cut off at the normal request timeout', async () => {
+    const fetchImpl = jest.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+          setTimeout(() => resolve(jsonResponse(200, { rev: 1, presence: [], serverTime: 1 })), 120);
+        })
+    );
+    // the plain timeout is 50 ms; the long-poll gets wait + grace
+    await expect(client(fetchImpl as unknown).presence({ after: 1, waitSeconds: 25 })).resolves.toMatchObject({ rev: 1 });
+    await expect(client(fetchImpl as unknown).snapshot()).rejects.toMatchObject({ kind: 'timeout' });
+  });
+
+  it('an abort from outside (app went to the background) ends the call as a network error', async () => {
+    const controller = new AbortController();
+    const fetchImpl = jest.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        })
+    );
+    const pending = client(fetchImpl as unknown).presence({ after: 1, waitSeconds: 25, signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ kind: 'network' });
+  });
+});

@@ -23,6 +23,7 @@ export function useSync(engine: SyncEngine, callbacks: SyncCallbacks) {
       onDenChanged: (s) => latest.current.onDenChanged?.(s),
       onRangeChanged: () => latest.current.onRangeChanged?.(),
       onHouseholdNews: () => latest.current.onHouseholdNews?.(),
+      onPartnerWalks: (walks) => latest.current.onPartnerWalks?.(walks),
     });
     let lastRun = Date.now();
     const subscription = AppState.addEventListener('change', (state) => {

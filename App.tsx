@@ -6,8 +6,10 @@ import { t } from './src/i18n';
 
 
 import { repos } from './src/app/repositories';
-import { loadHouseholdLines, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
+import { loadHouseholdLines, partnerHomecoming, presenceSender, presenceViewer, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
 import { useSync } from './src/sync/useSync';
+import { usePresenceViewer } from './src/sync/usePresenceViewer';
+import { usePartnerHomecoming } from './src/sync/usePartnerHomecoming';
 import { screenKey, useNavigation } from './src/app/navigation';
 import { useWalkSession } from './src/app/useWalkSession';
 import { useCelebration } from './src/app/useCelebration';
@@ -24,7 +26,7 @@ import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
 import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
 import { WorldScene } from './src/components/world/WorldScene';
-import type { HomecomingWalk } from './src/components/world/homecomingPlan';
+import { partnerHomecomingWalk, type HomecomingWalk } from './src/components/world/homecomingPlan';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
 import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
@@ -73,6 +75,7 @@ export default function App() {
       if (state.dogName) setDogName(state.dogName);
     },
     onRangeChanged: bumpRangeRefresh,
+    onPartnerWalks: partnerHomecoming.noteWalksAdded,
     onCommandRejected: (error) => {
       // Gentle, never an error tone (Buddy anti-guilt rule); the Den already shows the server's balance.
       if (error === 'insufficient-treats') Alert.alert(t('household.notEnoughTreats'));
@@ -80,9 +83,13 @@ export default function App() {
     },
   });
 
+  // Live presence: watch the household's walks while the app is in front (long-poll, stops in the background).
+  usePresenceViewer(presenceViewer, syncEngine);
+
   const walkSession = useWalkSession({
     repos,
     sync: syncEngine,
+    presence: presenceSender,
     dogName,
     onRangeChanged: bumpRangeRefresh,
     onRewards: (outcome) => {
@@ -138,6 +145,13 @@ export default function App() {
     syncOnLaunch,
     loadHouseholdLines,
   });
+
+  // The mini homecoming of a household partner ("Alex und Buddy sind zurück"): waits until nothing else is going on
+  // (no walk in progress, no own celebration, the world scene in front), then plays once.
+  const partnerReturn = usePartnerHomecoming(
+    partnerHomecoming,
+    firstLaunch.step === 'done' && !celebration && !walkSession.isTracking && screen === 'doorstep'
+  );
 
   // Fonts + language gate: first render waits so no screen flashes the system
   // font or the wrong language.
@@ -267,7 +281,7 @@ export default function App() {
       // scene with the next-upgrade panel open (notification taps), then settles back to 'doorstep'.
       return (
         <ScreenFrame fadeKey={fadeKey}>
-          {worldScene(null)}
+          {worldScene(partnerReturn.request ? { walk: partnerHomecomingWalk(partnerReturn.request), onDone: partnerReturn.done } : null)}
         </ScreenFrame>
       );
     case 'territories':

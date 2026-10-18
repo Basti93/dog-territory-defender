@@ -233,6 +233,30 @@ export const deviceLogs = pgTable(
   ]
 );
 
+/**
+ * Live presence of a walk in progress (M4 "Alex im Hof"). Ephemeral on purpose: not part of the events feed,
+ * purged hourly 6 h after the last heartbeat (and gone with the household/player). One row per (player, walk);
+ * `points` is the simplified route so far (at most API_LIMITS.maxPresencePoints). Only the OTHER members of the
+ * same household ever read it.
+ */
+export const walkPresence = pgTable(
+  'walk_presence',
+  {
+    householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
+    playerId: uuid('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
+    walkId: text('walk_id').notNull(),
+    startedAt: ms('started_at').notNull(),
+    updatedAt: ms('updated_at').notNull(),
+    points: jsonb('points').notNull().default([]),
+    endedAt: ms('ended_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.playerId, t.walkId] }),
+    index('walk_presence_household_idx').on(t.householdId, t.endedAt),
+    index('walk_presence_updated_idx').on(t.updatedAt),
+  ]
+);
+
 // ------------------------------------------------------------------ Track B: Nachbarhunde
 
 /** One row per bot household (design Decision 17). `household_id` is the BOT household; the human one is `host_household_id`. */

@@ -294,6 +294,26 @@ describe('pull', () => {
     expect(onRangeChanged).toHaveBeenCalled();
     expect((await repos.sync.getState()).cursor).toBe(9);
   });
+
+  it('hands the partner walks it just fetched to onPartnerWalks (the mini homecoming matches them to a presence that ended)', async () => {
+    const repos = await joined();
+    const added = {
+      seq: 8,
+      kind: 'walk.added' as const,
+      actorPlayerId: 'p-lisa',
+      createdAt: 1,
+      payload: {
+        walk: { id: 'wl', playerId: 'p-lisa', startTime: 500, startSource: 'button' as const, closed: true, newGroundCellIds: [], treatsEarned: 9, deleted: false },
+        cellsPainted: 0,
+      },
+    };
+    const getWalk = jest.fn(async (id: string) => ({ ...added.payload.walk, id, locations: [{ latitude: 1, longitude: 2, timestamp: 500, accuracy: 5 }] }));
+    const engine = makeEngine(repos, { events: async () => ({ events: [added], cursor: 8, hasMore: false, serverTime: 1 }), getWalk });
+    const onPartnerWalks = jest.fn();
+    engine.setCallbacks({ onPartnerWalks });
+    await engine.syncNow();
+    expect(onPartnerWalks).toHaveBeenCalledWith([expect.objectContaining({ walkId: 'wl', playerId: 'p-lisa', treatsEarned: 9 })]);
+  });
 });
 
 describe('join flow (mock fetch)', () => {

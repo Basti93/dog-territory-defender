@@ -1,5 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
+import { PARTNER_TRAIL_CSS, PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
 import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 /**
@@ -51,6 +52,7 @@ export const mapHTML = `
     /* Toy-world look: see mapTheme.ts. Wild marker = docs/decisions/somewhere-wild's warm accent. */
 ${MAP_THEME_CSS}
 ${MAP_MARKER_CSS}
+${PARTNER_TRAIL_CSS}
   </style>
 </head>
 <body>
@@ -58,6 +60,7 @@ ${MAP_MARKER_CSS}
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
 ${NEIGHBOUR_OVERLAY_SCRIPT}
+${PARTNER_TRAIL_SCRIPT}
 ${STITCH_PATCH_JS}
 
     const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
@@ -82,6 +85,8 @@ ${CORNER_SIGN_JS}
     let cornersLayerGroup = null;
     // Nachbarhunde (SHOW_NEIGHBOURS): dotted soft patches under ours plus tappable name signs.
     let neighbourLayerGroup = null;
+    // A household partner's walk in progress (SHOW_PARTNER_TRAIL): a stitched thread with a paw head.
+    let partnerTrailGroup = null;
 
     function reset() {
       if (trailPolyline) {
@@ -283,6 +288,15 @@ ${MAP_THEME_PROBE_JS}
           if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'NEIGHBOUR_TAPPED', id: id }));
         });
         reportToRN('SHOW_NEIGHBOURS_APPLIED', { count: nbItems.length, patches: neighbourLayerGroup ? neighbourLayerGroup.nbStats.patches : 0 });
+      }
+
+      // Alex's thread: payload { points: [{ lat, lon }], name } (partnerTrail.ts). Empty points clear it.
+      if (type === 'SHOW_PARTNER_TRAIL') {
+        partnerTrailGroup = ptRenderLive(map, payload, partnerTrailGroup, {
+          set: function (fn, ms) { return setInterval(fn, ms); },
+          clear: function (handle) { clearInterval(handle); }
+        });
+        reportToRN('SHOW_PARTNER_TRAIL_APPLIED', { points: partnerTrailGroup ? partnerTrailGroup.ptStats.points : 0 });
       }
 
       // Heimkehr beat 1: payload { segments?: [[[lat, lon], [lat, lon]], ...] } (new-ground streets, drawn coral).

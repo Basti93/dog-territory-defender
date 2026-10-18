@@ -26,6 +26,7 @@ import { dayKeyInZone, sameLocalDay } from '../lib/time';
 import { onHostWalkAccepted } from '../neighbours/reactions';
 import { paintCells } from './cellPaint';
 import { appendEvent, currentSeq, type EventBus } from './events';
+import { endPresenceForWalk, presenceChannel } from './presence';
 import { cellFromRow, denFromRow, lockDen, saveDen, stripRev, territoryFromRow, walkMetaFromRow } from './state';
 
 export interface AuthCtx {
@@ -360,6 +361,9 @@ export async function ingestWalk(
       })
       .returning();
 
+    // The upload proves the walk is over: close its live presence even if the `ended` heartbeat never arrived.
+    await endPresenceForWalk(dbx, auth.playerId, req.id, now);
+
     // ---- change feed
     const { route: _route, ...meta } = stored;
     await appendEvent(dbx, hid, 'walk.added', auth.playerId, { walk: walkMetaFromRow(meta), cellsPainted: painted.size });
@@ -390,7 +394,10 @@ export async function ingestWalk(
     };
   });
 
-  if (result.kind === 'ok' && !result.response.duplicate) bus.notify(auth.householdId);
+  if (result.kind === 'ok' && !result.response.duplicate) {
+    bus.notify(auth.householdId);
+    bus.notify(presenceChannel(auth.householdId));
+  }
   return result;
 }
 

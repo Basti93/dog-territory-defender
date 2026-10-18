@@ -23,6 +23,45 @@ export interface HomecomingWalk {
   /** ms epoch of the walk, for the weekday / time-of-day phrase. */
   walkTime: number;
   manual: boolean;
+  /** Set for the mini homecoming of a household partner's walk ("Alex und Buddy sind zurück"). */
+  partnerName?: string;
+}
+
+/** What a partner's walk (seen through sync) gives the mini homecoming. Treats are already in the shared bowl. */
+export interface PartnerWalkSummary {
+  walkId: string;
+  name: string;
+  treatsEarned: number;
+  newGroundCellCount: number;
+  distanceMeters: number;
+  walkTime: number;
+}
+
+/** Variant "Partner": a household partner's walk as a HomecomingWalk. No achievements, no level-up, no upgrade tease: those are hers to keep. */
+export function partnerHomecomingWalk(p: PartnerWalkSummary): HomecomingWalk {
+  return {
+    walkId: p.walkId,
+    rewards: {
+      cellsPainted: 0,
+      hasTerritory: true,
+      treatsEarned: p.treatsEarned,
+      tease: null,
+      unlockedAchievements: [],
+      leveledUpTo: null,
+      oldTreatsPerWalk: null,
+      newTreatsPerWalk: null,
+      cliffhangerTitle: null,
+      newGroundCellCount: p.newGroundCellCount,
+      bloomMultiplier: 1,
+    },
+    newTerritoryName: null,
+    mergedTerritoryNames: null,
+    territoryName: null,
+    distanceMeters: p.distanceMeters,
+    walkTime: p.walkTime,
+    manual: false,
+    partnerName: p.name,
+  };
 }
 
 /** Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). */
@@ -34,8 +73,9 @@ export function planExtras(rewards: WalkRewardsCelebration): ExtraKind[] {
   return all.slice(0, 2);
 }
 
-/** Full: patch, bowl, extras (only if any), rest. Manual log: bowl, rest. */
-export function planBeats(manual: boolean, extras: readonly ExtraKind[]): BeatId[] {
+/** Full: patch, bowl, extras (only if any), rest. Manual log: bowl, rest. Partner: patch, bowl, then the closing line (no extras). */
+export function planBeats(manual: boolean, extras: readonly ExtraKind[], partner = false): BeatId[] {
+  if (partner) return ['patch', 'bowl', 'rest'];
   if (manual) return ['bowl', 'rest'];
   return extras.length > 0 ? ['patch', 'bowl', 'extras', 'rest'] : ['patch', 'bowl', 'rest'];
 }
@@ -115,6 +155,8 @@ function placeOf(walk: HomecomingWalk): string | null {
  * headlines and the rare weird headlines are part of the pool for real (non-manual) walks.
  */
 export function pickClosingLine(walk: HomecomingWalk, dog: string): string {
+  // The partner's return has one fixed sentence; it does not touch the no-repeat memory of the player's own lines.
+  if (walk.partnerName) return t('homecoming.partner.back', { name: walk.partnerName, dog });
   const place = placeOf(walk);
   const hash = seedHash(walk.walkId);
   const pool: string[] = [...WHEN_LINES];

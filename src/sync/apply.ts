@@ -16,10 +16,11 @@ import type { DenEconomyState } from '../economy/denEconomy';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { NEIGHBOUR_LINES_KEPT, type NeighbourLineEntry, type SyncRepository } from '../storage/SyncRepository';
-import { setNearby } from './nearbyStore';
+import { setNearby } from './neighbourhoodStore';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
+import { cumulativeDistance } from '../utils/geometry';
 import type { ApiCell, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
@@ -38,11 +39,24 @@ export interface ApplyContext {
   fetchWalk: (id: string) => Promise<ApiWalkFull | null>;
 }
 
+/** A walk by another household member that arrived in this apply (not one we already had). Feeds the mini homecoming. */
+export interface PartnerWalkAdded {
+  walkId: string;
+  playerId: string;
+  /** The partner's display name when known. */
+  name: string | null;
+  startTime: number;
+  treatsEarned: number;
+  newGroundCellCount: number;
+  distanceMeters: number;
+}
+
 export interface ApplyResult {
   /** The new local Den state when the server's was applied, else null. */
   denState: DenEconomyState | null;
   rangeChanged: boolean;
   walksAdded: number;
+  partnerWalks: PartnerWalkAdded[];
   /** Neighbour events arrived: the caller may refresh /v1/nearby. */
   neighbourEvents: boolean;
 }
@@ -116,6 +130,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
   if (batch.removedTerritoryIds.length > 0) await repos.territories.removeTerritories(batch.removedTerritoryIds);
 
   let walksAdded = 0;
+  const partnerWalks: PartnerWalkAdded[] = [];
   const deletedIds = new Set(batch.deletedWalkIds);
   for (const meta of batch.walks) {
     if (deletedIds.has(meta.id)) continue;
@@ -129,6 +144,17 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
       if (!full) continue;
       await repos.walks.saveWalk(toLocalWalk(full, players[meta.playerId]));
       walksAdded += 1;
+      if (meta.playerId !== ctx.playerId) {
+        partnerWalks.push({
+          walkId: full.id,
+          playerId: meta.playerId,
+          name: players[meta.playerId] ?? null,
+          startTime: full.startTime,
+          treatsEarned: full.treatsEarned ?? 0,
+          newGroundCellCount: full.newGroundCellIds.length,
+          distanceMeters: cumulativeDistance(full.locations),
+        });
+      }
     }
     // The server has it either way (we sent it, or it sent it to us).
     if (!existing || existing.syncedAt === null) await repos.walks.markSynced(meta.id, ctx.now);
@@ -163,6 +189,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     denState: finalDen,
     rangeChanged: batch.cells.length > 0 || batch.reassigned.length > 0,
     walksAdded,
+    partnerWalks,
     neighbourEvents: batch.neighbourLines.length > 0,
   };
 }

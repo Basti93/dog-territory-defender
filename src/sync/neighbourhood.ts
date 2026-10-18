@@ -1,21 +1,14 @@
-// What the world scene, the map and the mailbox list need from the Nachbarhunde (slice M3): a small read/open
-// interface (implemented by the sync engine, faked in tests) and the pure wording helpers. No React here.
+// What the world scene, the map and the mailbox list need from the Nachbarhunde (slice M3): the one action seam
+// (open a gift; reads go through neighbourhoodStore.ts) and the pure wording helpers. No React here.
 // Tone (game-master): warm, no comparison numbers, never "you're behind".
 
 import { t } from '../i18n';
-import type { NeighbourLineEntry } from '../storage/SyncRepository';
 import type { ApiGift, CoopWeekResponse } from './apiContract';
 
-/** Implemented by SyncEngine. Every method resolves quietly: not joined, offline or neighbours off just means "nothing". */
-export interface NeighbourhoodSource {
-  /** The stored neighbour lines (newest first). */
-  neighbourLines(): Promise<NeighbourLineEntry[]>;
-  /** All gifts, newest first. `[]` when not joined or on any failure. */
-  listGifts(): Promise<ApiGift[]>;
-  /** Opens a gift (`gift.open`) and applies the server's Den state. false = it did not work this time (try again later). */
+/** What a screen may ask of the neighbours (implemented by the sync engine, faked in tests). Reading is the neighbourhood store's job. */
+export interface NeighbourhoodActions {
+  /** Opens a gift (`gift.open`), applies the server's Den state and marks it opened in the store. false = it did not work this time (try again later). */
   openGift(giftId: string): Promise<boolean>;
-  /** null when not joined, offline or on any failure. */
-  coopWeek(): Promise<CoopWeekResponse | null>;
 }
 
 export const unopenedGifts = (gifts: ApiGift[]): ApiGift[] => gifts.filter((g) => g.openedAt === null);

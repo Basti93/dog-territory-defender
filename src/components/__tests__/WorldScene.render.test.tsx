@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
@@ -15,8 +15,10 @@ import { advance, flush, imagesIn, renderScreen, unmountAndExpectNoTimers } from
 import { pickSceneNotes, WorldScene, WorldSceneProps } from '../world/WorldScene';
 import * as sounds from '../../feedback/sounds';
 import type { ApiGift, CoopWeekResponse, NearbyItem } from '../../sync/apiContract';
-import { setNearby } from '../../sync/nearbyStore';
-import type { NeighbourhoodSource } from '../../sync/neighbourhood';
+import { resetNeighbourhood, setNearby, setNeighbourhood } from '../../sync/neighbourhoodStore';
+import type { NeighbourhoodActions } from '../../sync/neighbourhood';
+import { clearPartnerPresence, PRESENCE_STALE_MS, setPartnerPresence } from '../../sync/presenceStore';
+import { partnerHomecomingWalk } from '../world/homecomingPlan';
 
 jest.mock('../../feedback/sounds', () => ({
   ...jest.requireActual('../../feedback/sounds'),
@@ -30,7 +32,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.useRealTimers();
-  setNearby([]);
+  resetNeighbourhood();
+  clearPartnerPresence();
 });
 
 // Level-2 costs from balanceConfig: doghouse 60, sniff garden 72, bakery 96.
@@ -379,23 +382,15 @@ const coopWeek = (over: Partial<CoopWeekResponse> = {}): CoopWeekResponse => ({
   yardDecorations: [],
   ...over,
 });
-const source = (over: Partial<NeighbourhoodSource> = {}): NeighbourhoodSource => ({
-  neighbourLines: async () => [],
-  listGifts: async () => [],
-  openGift: async () => true,
-  coopWeek: async () => null,
-  ...over,
-});
+/** The store is what the scene reads (the sync engine fills it); `actions` is only the gift-open seam. */
+const actions: NeighbourhoodActions = { openGift: async () => true };
+const seed = (state: Parameters<typeof setNeighbourhood>[0]) => setNeighbourhood(state);
 const sniffLine = { line: 'neighbours.line.sniffCorner', botName: 'Momo', botId: 'b1', params: { bot: 'Momo' }, at: Date.now() - 60_000, seq: 4 };
 
 describe('WorldScene neighbours', () => {
   it('pins the neighbour line on the fence; tapping it opens the dog card with its last lines and the note is gone', async () => {
-    setNearby([momo]);
-    const { view } = await setup({
-      neighbourhood: source({
-        neighbourLines: async () => [sniffLine, { ...sniffLine, line: 'neighbours.line.wave', seq: 3, at: Date.now() - 9e6 }],
-      }),
-    });
+    seed({ nearby: [momo], lines: [sniffLine, { ...sniffLine, line: 'neighbours.line.wave', seq: 3, at: Date.now() - 9e6 }] });
+    const { view } = await setup({ neighbourhood: actions });
     const note = await screen.findByRole('button', { name: 'Momo had a good sniff at your corner today.' });
     expect(screen.getByText('Hello Rex!')).toBeOnTheScreen(); // Buddy's bubble keeps the greeting
     expect(screen.queryByTestId('neighbour-card')).toBeNull();
@@ -412,7 +407,8 @@ describe('WorldScene neighbours', () => {
 
   it('a note without a known dog (co-op line) is just dismissed, and shows no card', async () => {
     const coop = { line: 'neighbours.line.coopDone', botName: null, botId: null, params: { km: 40 }, at: Date.now() - 1000, seq: 5 };
-    const { view } = await setup({ neighbourhood: source({ neighbourLines: async () => [coop] }) });
+    seed({ lines: [coop] });
+    const { view } = await setup({ neighbourhood: actions });
     const note = await screen.findByRole('button', { name: /walked 40 km together/ });
     await fireEvent.press(note);
     expect(screen.queryByTestId('neighbour-card')).toBeNull();
@@ -424,14 +420,16 @@ describe('WorldScene neighbours', () => {
     const a = await setup();
     expect(screen.queryByText(/sniff/)).toBeNull();
     await unmountAndExpectNoTimers(a.view);
-    const b = await setup({ updateCard: { onApply: jest.fn(), onLater: jest.fn() }, neighbourhood: source({ neighbourLines: async () => [sniffLine] }) });
+    seed({ lines: [sniffLine] });
+    const b = await setup({ updateCard: { onApply: jest.fn(), onLater: jest.fn() }, neighbourhood: actions });
     expect(screen.getByText(t('update.ready'))).toBeOnTheScreen();
     expect(screen.queryByText(/sniff/)).toBeNull();
     await unmountAndExpectNoTimers(b.view);
   });
 
   it('a parcel with a Post! sign waits by the mailbox while a gift is unopened; tapping goes to the Post list', async () => {
-    const { view, onOpenSettings } = await setup({ neighbourhood: source({ listGifts: async () => [gift()] }) });
+    seed({ gifts: [gift()] });
+    const { view, onOpenSettings } = await setup({ neighbourhood: actions });
     const parcel = await screen.findAllByRole('button', { name: t('neighbours.parcel.label') });
     expect(screen.getByText(t('neighbours.parcel.sign'))).toBeOnTheScreen();
     await fireEvent.press(parcel[0]);
@@ -440,22 +438,26 @@ describe('WorldScene neighbours', () => {
   });
 
   it('no parcel when there are no gifts or all are opened', async () => {
-    const a = await setup({ neighbourhood: source({ listGifts: async () => [gift({ openedAt: 5 })] }) });
+    seed({ gifts: [gift({ openedAt: 5 })] });
+    const a = await setup({ neighbourhood: actions });
     expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
     await unmountAndExpectNoTimers(a.view);
-    const b = await setup({ neighbourhood: source() });
+    const b = await setup({ neighbourhood: actions });
     expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
     await unmountAndExpectNoTimers(b.view);
   });
 
   it('the Viertel-Runde sign shows one percentage while the co-op is active, and is hidden otherwise', async () => {
-    const a = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek() }) });
+    seed({ coop: coopWeek() });
+    const a = await setup({ neighbourhood: actions });
     expect(await screen.findByText('Neighbourhood Round: 43%')).toBeOnTheScreen();
     await unmountAndExpectNoTimers(a.view);
-    const b = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek({ active: false, ratio: 0 }) }) });
+    seed({ coop: coopWeek({ active: false, ratio: 0 }) });
+    const b = await setup({ neighbourhood: actions });
     expect(screen.queryByText(/Neighbourhood Round/)).toBeNull();
     await unmountAndExpectNoTimers(b.view);
-    const c = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek({ completed: true, ratio: 1 }) }) });
+    seed({ coop: coopWeek({ completed: true, ratio: 1 }) });
+    const c = await setup({ neighbourhood: actions });
     expect(await screen.findByText(t('neighbours.coop.done'))).toBeOnTheScreen();
     await unmountAndExpectNoTimers(c.view);
   });
@@ -472,5 +474,72 @@ describe('pickSceneNotes with a neighbour note', () => {
   it('waits for the OTA card, and stays gone once dismissed', () => {
     expect(pickSceneNotes([line], null, true, new Set(), null, nb).map((n) => n.key)).toEqual(['update', 'line-0']);
     expect(pickSceneNotes([line], null, false, new Set(['neighbour-4']), null, nb).map((n) => n.key)).toEqual(['line-0']);
+  });
+});
+
+// ---- Alex im Hof (M4) ----
+describe('WorldScene partner presence', () => {
+  const alex = (over: object = {}) => ({ playerId: 'p-c', name: 'Alex', walkId: 'w1', startedAt: 1, points: [{ lat: 52, lon: 13, t: 1 }], updatedAt: Date.now(), ...over });
+
+  it('hangs a sign by the gate while a partner is out, in her name and the dog\'s, and never says offline', async () => {
+    const { view } = await setup();
+    expect(screen.queryByTestId('partner-sign')).toBeNull();
+    await act(async () => setPartnerPresence([alex()], Date.now(), Date.now()));
+    expect(screen.getByText('Alex is out with Rex')).toBeOnTheScreen();
+    expect(screen.queryByText(/offline|last seen/i)).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('takes the sign down silently when she is back (her presence ended)', async () => {
+    const { view } = await setup();
+    await act(async () => setPartnerPresence([alex()], Date.now(), Date.now()));
+    expect(screen.getByTestId('partner-sign')).toBeOnTheScreen();
+    await act(async () => setPartnerPresence([], Date.now(), Date.now()));
+    expect(screen.queryByTestId('partner-sign')).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('takes the sign down silently when her last heartbeat is more than 3 minutes old', async () => {
+    const { view } = await setup();
+    await act(async () => setPartnerPresence([alex()], Date.now(), Date.now()));
+    await advance(PRESENCE_STALE_MS - 1000);
+    expect(screen.getByTestId('partner-sign')).toBeOnTheScreen();
+    await advance(16_000); // the next re-check after the 3 minutes
+    expect(screen.queryByTestId('partner-sign')).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a fresh heartbeat keeps the sign up', async () => {
+    const { view } = await setup();
+    await act(async () => setPartnerPresence([alex()], Date.now(), Date.now()));
+    await advance(150_000);
+    await act(async () => setPartnerPresence([alex({ updatedAt: Date.now() + 1 })], Date.now() + 1, Date.now()));
+    await advance(100_000);
+    expect(screen.getByTestId('partner-sign')).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('plays the mini homecoming: patch star, treats into the bowl, then her return line; one tap per beat, then hands back', async () => {
+    const onDone = jest.fn();
+    const { view, onStartWalk } = await setup({
+      homecoming: {
+        onDone,
+        walk: partnerHomecomingWalk({ walkId: 'wp', name: 'Alex', treatsEarned: 14, newGroundCellCount: 0, distanceMeters: 2100, walkTime: Date.now() }),
+      },
+    });
+    await flush();
+    expect(screen.getByTestId('homecoming-number')).toBeOnTheScreen();
+    await advance(500);
+    await fireEvent.press(screen.getByTestId('homecoming-tap')); // -> bowl
+    await advance(500);
+    expect(screen.queryByTestId('homecoming-number')).toBeNull();
+    await fireEvent.press(screen.getByTestId('homecoming-tap')); // -> closing line
+    await advance(500);
+    expect(screen.getByText('Alex and Rex are back.')).toBeOnTheScreen();
+    expect(onDone).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('homecoming-tap'));
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
   });
 });

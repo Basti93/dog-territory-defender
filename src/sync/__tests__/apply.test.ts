@@ -1,5 +1,5 @@
 import { applyEvents, applyNearby, applySnapshot } from '../apply';
-import { getNearby } from '../nearbyStore';
+import { getNearby } from '../neighbourhoodStore';
 import type { ApiEvent, ApiWalkFull } from '../apiContract';
 import { apiDen, IDENTITY, makeRepos, snapshot, defaultDenEconomyState } from '../../test/syncHelpers';
 
@@ -135,6 +135,21 @@ describe('walks', () => {
     await applySnapshot(snapshot({ walks: [{ ...fullWalk('mine', 'p-me'), locations: undefined } as never] }), repos, ctx(fetched));
     expect(fetched).toEqual([]);
     expect((await repos.walks.getWalk('mine'))?.syncedAt).toBe(9_000);
+  });
+
+  it('reports a walk by another member that was just fetched (name, treats, new ground, distance), but not mine and not one we already had', async () => {
+    const repos = makeRepos();
+    const partner = { ...fullWalk('wp'), newGroundCellIds: ['a', 'b'], locations: [{ latitude: 52, longitude: 13, timestamp: 1, accuracy: 5 }, { latitude: 52.001, longitude: 13, timestamp: 2, accuracy: 5 }] };
+    const added = (walk: ApiWalkFull, seq: number): ApiEvent => ({ seq, kind: 'walk.added', actorPlayerId: walk.playerId, createdAt: 1, payload: { walk: { ...walk, locations: undefined } as never, cellsPainted: 0 } });
+    const ownCtx = { ...ctx(), fetchWalk: async (id: string) => (id === 'wp' ? partner : fullWalk(id, 'p-me')) };
+    await applySnapshot(snapshot(), repos, ownCtx); // seeds the player names
+    const first = await applyEvents([added(partner, 1), added(fullWalk('wm', 'p-me'), 2)], 2, repos, ownCtx);
+    expect(first.partnerWalks).toEqual([
+      expect.objectContaining({ walkId: 'wp', playerId: 'p-lisa', name: 'Lisa', startTime: 500, treatsEarned: 12, newGroundCellCount: 2 }),
+    ]);
+    expect(first.partnerWalks[0].distanceMeters).toBeGreaterThan(100);
+    const replay = await applyEvents([added(partner, 1)], 2, repos, ownCtx);
+    expect(replay.partnerWalks).toEqual([]);
   });
 
   it('walk.deleted removes the local copy', async () => {

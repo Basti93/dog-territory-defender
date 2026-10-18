@@ -11,9 +11,11 @@ import { palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { t } from '../i18n';
 import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
-import type { NeighbourhoodSource } from '../sync/neighbourhood';
+import type { NeighbourhoodActions } from '../sync/neighbourhood';
 import { useNeighbourhood } from '../sync/useNeighbourhood';
 import { NeighbourCard } from './world/NeighbourCard';
+import { usePartnerWalk } from '../sync/presenceStore';
+import { partnerTrailPayload } from '../web/partnerTrail';
 
 interface MapViewProps {
   locations: Location[];
@@ -36,7 +38,7 @@ interface MapViewProps {
    */
   onOpenTerritories?: () => void;
   /** Household sync's neighbour source (the sync engine). Omitted = no profile lines on the Nachbarhund card. */
-  neighbourhood?: NeighbourhoodSource;
+  neighbourhood?: NeighbourhoodActions;
 }
 
 export function MapView({
@@ -62,7 +64,7 @@ export function MapView({
   const persistedCellsRef = useRef<Cell[]>([]);
 
   // Nachbarhunde: their dotted Ranges come from the in-memory nearby cache; a tap on a name sign opens the profile card.
-  const hood = useNeighbourhood(neighbourhood, 'lines');
+  const hood = useNeighbourhood(neighbourhood);
   const [cardBotId, setCardBotId] = useState<string | null>(null);
 
   const post = (type: string, payload: unknown) => {
@@ -125,6 +127,14 @@ export function MapView({
     post('SHOW_NEIGHBOURS', neighbourOverlayPayload(hood.nearby));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, hood.nearby]);
+
+  // A household partner's walk in progress: her path grows as a stitched thread (null / stale = cleared).
+  const partner = usePartnerWalk();
+  useEffect(() => {
+    if (!isReady) return;
+    post('SHOW_PARTNER_TRAIL', partnerTrailPayload(partner));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, partner]);
 
   useEffect(() => {
     if (!isReady || !currentLocation) return;

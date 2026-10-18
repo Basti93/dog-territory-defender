@@ -17,13 +17,14 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import { log } from '../utils/log';
 import { ApiClient, ApiError, createApiClient, normalizeBaseUrl } from './apiClient';
-import type { ApiDenState, ApiGift, CommandBody, CommandErrorCode, CoopWeekResponse, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
+import type { ApiDenState, CommandBody, CommandErrorCode, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
 import { API_LIMITS } from './apiContract';
 import { newClientId } from './ids';
 import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
 import { INVITE_CODE_LENGTH } from './syncConfig';
-import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult } from './apply';
-import type { NeighbourhoodSource } from './neighbourhood';
+import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult, PartnerWalkAdded } from './apply';
+import type { NeighbourhoodActions } from './neighbourhood';
+import { getNeighbourhood, resetNeighbourhood, setNeighbourhood, setNeighbourLines } from './neighbourhoodStore';
 import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
@@ -65,6 +66,8 @@ export interface SyncCallbacks {
   onRangeChanged?: () => void;
   /** Anything else that makes household news (new partner walks, a new member). */
   onHouseholdNews?: () => void;
+  /** Walks by other household members that were just fetched (the mini homecoming matches them to a presence that ended). */
+  onPartnerWalks?: (walks: PartnerWalkAdded[]) => void;
   /** A command got ok:false (e.g. the partner spent the treats first). The caller shows a gentle line; state was already corrected silently. */
   onCommandRejected?: (error: CommandErrorCode) => void;
 }
@@ -80,7 +83,7 @@ export interface JoinInput {
   deviceLabel: string;
 }
 
-export interface SyncEngine extends NeighbourhoodSource {
+export interface SyncEngine extends NeighbourhoodActions {
   getStatus(): Promise<SyncStatus>;
   subscribe(listener: () => void): () => void;
   setCallbacks(callbacks: SyncCallbacks): void;
@@ -140,6 +143,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     if (result.denState) callbacks.onDenChanged?.(result.denState);
     if (result.rangeChanged) callbacks.onRangeChanged?.();
     if (result.walksAdded > 0) callbacks.onHouseholdNews?.();
+    if (result.partnerWalks.length > 0) callbacks.onPartnerWalks?.(result.partnerWalks);
   }
 
   async function noteServerTime(serverTime: number) {
@@ -274,6 +278,35 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
 
   let nearbyLoaded = false;
 
+  /** Publishes the stored neighbour lines to the neighbourhood store (cheap: one storage read, no network). */
+  async function publishLines() {
+    setNeighbourLines((await deps.sync.getState()).neighbourLines ?? []);
+  }
+
+  /**
+   * The ONE fetch per neighbour change (first sync of a launch, neighbour events): the dogs' Ranges, then the gifts and
+   * the Viertel-Runde week when neighbours are on. Everything lands in the neighbourhood store, which every screen
+   * reads; no screen fetches on its own. Best effort: neighbours are optional, a failure keeps what is there.
+   */
+  async function refreshNeighbourhood(client: ApiClient) {
+    try {
+      const nearby = await client.nearby();
+      applyNearby(nearby);
+      nearbyLoaded = true;
+      if (nearby.items.length === 0) {
+        setNeighbourhood({ gifts: [], coop: null });
+        return;
+      }
+      const [gifts, coop] = await Promise.all([
+        client.gifts().then((r) => r.gifts, () => null),
+        client.coopWeek().catch(() => null),
+      ]);
+      setNeighbourhood({ ...(gifts ? { gifts } : {}), ...(coop ? { coop } : {}) });
+    } catch (err) {
+      if (err instanceof ApiError && err.kind === 'unauthorized') unauthorized = true;
+    }
+  }
+
   async function pull(client: ApiClient, identity: SyncIdentity): Promise<void> {
     const state = await deps.sync.getState();
     const ctx: ApplyContext = {
@@ -289,15 +322,6 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       },
     };
     const needsSnapshot = state.cursor === 0 && state.lastSyncAt === null;
-    // Neighbour Ranges live in memory only: fetch once per launch and again when neighbour events arrive. Best effort.
-    const refreshNearby = async () => {
-      try {
-        applyNearby(await client.nearby());
-        nearbyLoaded = true;
-      } catch {
-        // neighbours are optional; never fail a sync for them
-      }
-    };
     if (!needsSnapshot) {
       try {
         let cursor = state.cursor;
@@ -306,10 +330,11 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           await noteServerTime(response.serverTime);
           const applied = await applyEvents(response.events, response.cursor, applyRepos, ctx);
           reportApplied(applied);
-          if (applied.neighbourEvents || !nearbyLoaded) await refreshNearby();
+          if (applied.neighbourEvents || !nearbyLoaded) await refreshNeighbourhood(client);
           cursor = response.cursor;
           if (!response.hasMore) break;
         }
+        await publishLines();
         return;
       } catch (err) {
         // 410 Gone: our cursor is older than the server's retention. Fall through to a snapshot.
@@ -319,7 +344,8 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     const snapshot = await seedOrSnapshot(client);
     await noteServerTime(snapshot.serverTime);
     reportApplied(await applySnapshot(snapshot, applyRepos, ctx));
-    await refreshNearby();
+    await refreshNeighbourhood(client);
+    await publishLines();
   }
 
   /** Another phone of the same player may have renamed them: keep this phone's identity name in step with sync state. */
@@ -340,6 +366,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     const client = makeClient(identity.serverUrl, identity.token);
     try {
       unauthorized = false;
+      await publishLines(); // the notes from last time show even if this run cannot reach the server
       const drained = await push(client, force);
       if (!drained) return;
       await pull(client, identity);
@@ -348,21 +375,6 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     } catch (err) {
       if (err instanceof ApiError && err.kind === 'unauthorized') unauthorized = true;
       log('SYNC_RUN_FAILED', { error: String(err) });
-    }
-  }
-
-  /** Runs one read/open call for the neighbours: `fallback` when not joined or when anything fails (neighbours are optional). */
-  async function withClient<T>(fallback: T, run: (client: ApiClient) => Promise<T>): Promise<T> {
-    const identity = await deps.settings.getSyncIdentity();
-    if (!identity) return fallback;
-    try {
-      return await run(makeClient(identity.serverUrl, identity.token));
-    } catch (err) {
-      if (err instanceof ApiError && err.kind === 'unauthorized') {
-        unauthorized = true;
-        notify();
-      }
-      return fallback;
     }
   }
 
@@ -460,7 +472,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     async leave() {
       await deps.settings.saveSyncIdentity(null);
       await deps.sync.clear();
-      applyNearby({ items: [] }); // the neighbours belong to the household we just left
+      resetNeighbourhood(); // the neighbours belong to the household we just left
       nearbyLoaded = false;
       unauthorized = false;
       notify();
@@ -503,23 +515,24 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       void syncNow();
     },
 
-    async neighbourLines() {
-      return (await deps.sync.getState()).neighbourLines ?? [];
-    },
-
-    listGifts: () => withClient<ApiGift[]>([], async (client) => (await client.gifts()).gifts),
-
-    coopWeek: () => withClient<CoopWeekResponse | null>(null, (client) => client.coopWeek()),
-
     async openGift(giftId) {
-      return withClient(false, async (client) => {
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity) return false;
+      try {
         // A fresh clientId per tap is safe: the server lets the first opener win and a second open credits nothing.
-        const response = await client.openGift(giftId, newClientId());
+        const response = await makeClient(identity.serverUrl, identity.token).openGift(giftId, newClientId());
         if (!response.ok) return false;
         const applied = await applyServerDenState(applyRepos, response.den);
         if (applied) callbacks.onDenChanged?.(applied);
+        setNeighbourhood({ gifts: getNeighbourhood().gifts.map((g) => (g.id === giftId ? { ...g, openedAt: now() } : g)) });
         return true;
-      });
+      } catch (err) {
+        if (err instanceof ApiError && err.kind === 'unauthorized') {
+          unauthorized = true;
+          notify();
+        }
+        return false;
+      }
     },
 
     syncNow,

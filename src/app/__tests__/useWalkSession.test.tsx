@@ -3,6 +3,7 @@ import { useWalkSession } from '../useWalkSession';
 import * as gps from '../../utils/gps';
 import { Location } from '../../types';
 import { finishTrackedWalk } from '../finishTrackedWalk';
+import { PRESENCE_BEAT_MS, type PresenceSender } from '../../sync/presenceSender';
 
 jest.mock('../../utils/gps', () => ({
   getInitialLocation: jest.fn(),
@@ -33,8 +34,8 @@ beforeEach(() => {
   mocked.stopWatchingLocation.mockResolvedValue(undefined);
 });
 
-function setup() {
-  return renderHook(() => useWalkSession({ repos, dogName: 'Rex', onRangeChanged: jest.fn(), onRewards: jest.fn() }));
+function setup(presence?: PresenceSender) {
+  return renderHook(() => useWalkSession({ repos, dogName: 'Rex', onRangeChanged: jest.fn(), onRewards: jest.fn(), presence }));
 }
 
 describe('useWalkSession GPS fixes', () => {
@@ -129,5 +130,88 @@ describe('useWalkSession auto-finish', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('useWalkSession live presence', () => {
+  const fakePresence = () => ({ start: jest.fn(), tick: jest.fn(), end: jest.fn().mockResolvedValue(undefined) }) satisfies PresenceSender;
+  const startWith = async (presence: PresenceSender) => {
+    let emit: (l: Location) => void = () => undefined;
+    mocked.startWatchingLocation.mockImplementation(async (cb) => {
+      emit = cb;
+      return true;
+    });
+    const hook = await setup(presence);
+    await act(async () => {
+      await hook.result.current.startWalk();
+    });
+    return { hook, emit: (l: Location) => emit(l) };
+  };
+
+  it('starts the heartbeats with the walk, ticks on every fix, and closes them on finish', async () => {
+    const presence = fakePresence();
+    const { hook, emit } = await startWith(presence);
+    expect(presence.start).toHaveBeenCalledTimes(1);
+    const started = presence.start.mock.calls[0][0];
+    expect(started.locations).toHaveLength(1);
+    await act(async () => {
+      [1, 2].forEach((i) => emit(fix(i)));
+    });
+    expect(presence.tick).toHaveBeenCalledTimes(2);
+    expect(presence.tick.mock.calls[1][0].locations).toHaveLength(3); // the full, current walk (not a stale one)
+    await act(async () => {
+      await hook.result.current.finishWalk();
+    });
+    expect(presence.end).toHaveBeenCalledTimes(1);
+    expect(presence.end.mock.calls[0][0].id).toBe(started.id);
+    expect(presence.end.mock.calls[0][0].locations).toHaveLength(3);
+  });
+
+  it('also ticks on a timer, so a phone that stands still keeps its sign up', async () => {
+    jest.useFakeTimers();
+    try {
+      const presence = fakePresence();
+      await startWith(presence);
+      presence.tick.mockClear();
+      await act(async () => {
+        jest.advanceTimersByTime(PRESENCE_BEAT_MS * 2 + 10);
+      });
+      expect(presence.tick).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('closes the heartbeats when the walk is cancelled, and a second cancel (New Walk) closes nothing twice', async () => {
+    const presence = fakePresence();
+    const { hook } = await startWith(presence);
+    await act(async () => {
+      await hook.result.current.cancelWalk();
+    });
+    expect(presence.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes them even when saving the finished walk fails', async () => {
+    const presence = fakePresence();
+    const { hook } = await startWith(presence);
+    (finishTrackedWalk as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+    await act(async () => {
+      await hook.result.current.finishWalk().catch(() => undefined);
+    });
+    expect(presence.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('works unchanged without a presence sender', async () => {
+    let emit: (l: Location) => void = () => undefined;
+    mocked.startWatchingLocation.mockImplementation(async (cb) => {
+      emit = cb;
+      return true;
+    });
+    const hook = await setup();
+    await act(async () => {
+      await hook.result.current.startWalk();
+    });
+    await act(async () => emit(fix(1)));
+    expect(hook.result.current.walk?.locations).toHaveLength(2);
   });
 });

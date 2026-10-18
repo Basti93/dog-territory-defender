@@ -48,7 +48,8 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards)), [walk]);
-  const beats = useMemo(() => planBeats(walk.manual, extras), [walk.manual, extras]);
+  const partner = !!walk.partnerName;
+  const beats = useMemo(() => planBeats(walk.manual, extras, partner), [walk.manual, extras, partner]);
   const variant = useMemo(() => homecomingVariant(walkCount), [walkCount]);
   const oneNumber = useMemo(() => pickOneNumber(walk), [walk]);
   // Picking remembers the line in memory (no-repeat), so it must happen once per homecoming.
@@ -60,8 +61,10 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
 
   // Sound: the first moment is the loudest one.
   useEffect(() => {
+    if (partner) return; // her return is a quiet moment: only the treats make a sound
     play('celebrate');
     haptics.success();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Camera follows the beat.
@@ -86,7 +89,7 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {beat === 'patch' && <PatchBeat oneNumber={oneNumber} variant={variant} top={insets.top} bottom={insets.bottom} />}
+        {beat === 'patch' && <PatchBeat oneNumber={oneNumber} variant={variant} top={insets.top} bottom={insets.bottom} quiet={partner} />}
         {showYardPieces && (
           <>
             <BowlSign layout={layout} width={width} bowl={bowl} earned={walk.rewards.treatsEarned} active={beat === 'bowl'} />
@@ -140,7 +143,7 @@ export function buddySpot(variant: HomecomingVariant, layout: SceneLayout, yard:
   return { left: yard.buddy.left, top, size: BUDDY_SIZE };
 }
 
-function PatchBeat({ oneNumber, variant, top, bottom }: { oneNumber: OneNumber; variant: HomecomingVariant; top: number; bottom: number }) {
+function PatchBeat({ oneNumber, variant, top, bottom, quiet }: { oneNumber: OneNumber; variant: HomecomingVariant; top: number; bottom: number; quiet: boolean }) {
   const seam = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -178,7 +181,7 @@ function PatchBeat({ oneNumber, variant, top, bottom }: { oneNumber: OneNumber; 
         </WoodSign>
       </Animated.View>
       <Text style={[textStyle('hand'), styles.hint, { bottom: bottom + 110 }]}>{t('homecoming.hint')}</Text>
-      <Confetti />
+      {!quiet && <Confetti />}
     </>
   );
 }

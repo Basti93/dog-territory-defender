@@ -10,7 +10,7 @@ import { cumulativeDistance } from '../utils/geometry';
 import { Walk } from '../types';
 import { AppRepositories } from './repositories';
 import { ScreenFrame } from './ScreenFrame';
-import type { NeighbourhoodSource } from '../sync/neighbourhood';
+import type { NeighbourhoodActions } from '../sync/neighbourhood';
 
 interface MapScreenProps {
   repos: AppRepositories;
@@ -35,7 +35,7 @@ interface MapScreenProps {
   onCancelWalk: () => void;
   onNewWalk: () => void;
   /** The sync engine: Nachbarhund lines for the profile card. */
-  neighbourhood?: NeighbourhoodSource;
+  neighbourhood?: NeighbourhoodActions;
 }
 
 /** The live/idle map with its bottom controls. Hosts a WebView, so never FadeSlideIn-wrapped. */

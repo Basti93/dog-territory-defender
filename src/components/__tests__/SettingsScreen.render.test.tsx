@@ -167,8 +167,12 @@ describe('SettingsScreen with a household', () => {
 describe('SettingsScreen gifts from the neighbour dogs', () => {
   const giftOf = (over: object = {}) => ({ id: 'g1', botId: 'b1', botName: 'Pfote', cosmeticId: 'stick-oak', sprinkleTreats: 3, createdAt: 1, openedAt: null, ...over });
 
-  async function setupWithGifts(client: object) {
+  // The sync engine fills the neighbourhood store; the Post list only reads it, so the gifts are seeded there.
+  afterEach(() => require('../../sync/neighbourhoodStore').resetNeighbourhood());
+
+  async function setupWithGifts(client: object, gifts: object[]) {
     const { makeEngine, makeRepos, IDENTITY } = require('../../test/syncHelpers');
+    require('../../sync/neighbourhoodStore').setNeighbourhood({ gifts });
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
     const engine = makeEngine(repos, client);
@@ -196,7 +200,7 @@ describe('SettingsScreen gifts from the neighbour dogs', () => {
   it('lists wrapped gifts at the top; Open unwraps one, says the gentle line and removes the row', async () => {
     const { apiDen } = require('../../test/syncHelpers');
     const openGift = jest.fn(async (_id: string, clientId: string) => ({ clientId, ok: true, replayed: false, den: apiDen({ rev: 4 }), serverTime: 1, seq: 1 }));
-    const view = await setupWithGifts({ gifts: async () => ({ gifts: [giftOf(), giftOf({ id: 'g2', botName: 'Nebel', cosmeticId: 'sock-odd' })] }), coopWeek: async () => ({ active: false }), openGift });
+    const view = await setupWithGifts({ openGift }, [giftOf(), giftOf({ id: 'g2', botName: 'Nebel', cosmeticId: 'sock-odd' })]);
     expect(await screen.findByText(t('neighbours.gift.title'))).toBeOnTheScreen();
     expect(screen.getByText('Oak stick')).toBeOnTheScreen();
     expect(screen.getByText('From Nebel')).toBeOnTheScreen();
@@ -210,13 +214,14 @@ describe('SettingsScreen gifts from the neighbour dogs', () => {
   });
 
   it('keeps the gift and says a gentle retry line when opening did not work', async () => {
-    const view = await setupWithGifts({
-      gifts: async () => ({ gifts: [giftOf()] }),
-      coopWeek: async () => ({ active: false }),
-      openGift: async () => {
-        throw new Error('offline');
+    const view = await setupWithGifts(
+      {
+        openGift: async () => {
+          throw new Error('offline');
+        },
       },
-    });
+      [giftOf()]
+    );
     await fireEvent.press(await screen.findByRole('button', { name: t('neighbours.gift.openLabel', { bot: 'Pfote', thing: 'Oak stick' }) }));
     await flush();
     expect(screen.getByText(t('neighbours.gift.retry'))).toBeOnTheScreen();
@@ -225,7 +230,7 @@ describe('SettingsScreen gifts from the neighbour dogs', () => {
   });
 
   it('shows no Gifts section without gifts', async () => {
-    const view = await setupWithGifts({ gifts: async () => ({ gifts: [] }), coopWeek: async () => ({ active: false }) });
+    const view = await setupWithGifts({}, []);
     expect(screen.queryByText(t('neighbours.gift.title'))).toBeNull();
     await unmountAndExpectNoTimers(view);
   });

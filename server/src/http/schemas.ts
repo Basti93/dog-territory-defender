@@ -4,7 +4,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
 import { API_LIMITS } from '@game/sync/apiContract';
-import type { CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, WalkUploadRequest } from '@game/sync/apiContract';
+import type { CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
 const Id = Type.String({ minLength: 8, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' });
@@ -75,6 +75,30 @@ export const EventsQuerySchema = Type.Object(
     after: Type.Integer({ minimum: 0, default: 0 }),
     wait: Type.Integer({ minimum: 0, maximum: API_LIMITS.maxEventWaitSeconds, default: 0 }),
     limit: Type.Integer({ minimum: 1, maximum: API_LIMITS.maxEventsPerPull, default: 50 }),
+  },
+  { additionalProperties: false }
+);
+
+export const PresenceSchema = Type.Object(
+  {
+    walkId: Id,
+    startedAt: Type.Number({ minimum: 0 }),
+    points: Type.Array(
+      Type.Object(
+        { lat: Type.Number({ minimum: -90, maximum: 90 }), lon: Type.Number({ minimum: -180, maximum: 180 }), t: Type.Number({ minimum: 0 }) },
+        { additionalProperties: false }
+      ),
+      { maxItems: API_LIMITS.maxPresencePointsPerBeat }
+    ),
+    ended: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false }
+);
+
+export const PresenceQuerySchema = Type.Object(
+  {
+    after: Type.Optional(Type.Integer({ minimum: 0 })),
+    wait: Type.Integer({ minimum: 0, maximum: API_LIMITS.maxEventWaitSeconds, default: 0 }),
   },
   { additionalProperties: false }
 );
@@ -190,4 +214,5 @@ const _walk: Same<Static<typeof WalkUploadSchema>, WalkUploadRequest> = true;
 const _cmd: Same<Static<typeof CommandSchema>, CommandRequest> = true;
 const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
 const _logs: Same<Static<typeof LogUploadSchema>, LogUploadRequest> = true;
-void [_join, _walk, _cmd, _import, _logs];
+const _presence: Same<Static<typeof PresenceSchema>, PresenceUpdateRequest> = true;
+void [_join, _walk, _cmd, _import, _logs, _presence];

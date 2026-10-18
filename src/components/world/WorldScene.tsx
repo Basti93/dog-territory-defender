@@ -15,7 +15,8 @@ import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
 import type { NeighbourNote } from '../../sync/householdEvents';
 import { coopSignText } from '../../sync/neighbourhood';
-import type { NeighbourhoodSource } from '../../sync/neighbourhood';
+import type { NeighbourhoodActions } from '../../sync/neighbourhood';
+import { usePartnerWalk } from '../../sync/presenceStore';
 import { useNeighbourhood } from '../../sync/useNeighbourhood';
 import type { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import type { PersonalStatsRepository } from '../../storage/PersonalStatsRepository';
@@ -109,7 +110,7 @@ export interface WorldSceneProps {
   /** A walk just ended: the Heimkehr plays over the scene (camera to the Viertel, then the yard) until `onDone`. */
   homecoming?: { walk: HomecomingWalk; onDone: () => void } | null;
   /** The sync engine: neighbour lines, the gift parcel and the Viertel-Runde sign. Omitted (tests, not joined) = no neighbours. */
-  neighbourhood?: NeighbourhoodSource;
+  neighbourhood?: NeighbourhoodActions;
 }
 
 type NoteKind = 'update' | 'line' | 'neighbour';
@@ -303,6 +304,11 @@ export function WorldScene(props: WorldSceneProps) {
       setHomecomingCount(null);
       return;
     }
+    // The partner's mini homecoming plays the same fixed choreography every time: no stats read, no variants.
+    if (homecoming?.walk.partnerName) {
+      setHomecomingCount(0);
+      return;
+    }
     let alive = true;
     personalStatsRepository
       .getState()
@@ -397,6 +403,8 @@ export function WorldScene(props: WorldSceneProps) {
   const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
   const parcelWaiting = hood.unopenedGifts.length > 0;
   const coopText = coopSignText(hood.coop);
+  // A household partner is out walking: a small sign by the gate, gone again silently when she is back or silent for 3 min.
+  const partnerWalk = usePartnerWalk();
 
   const sky = skyTintForDate(new Date());
 
@@ -798,6 +806,17 @@ export function WorldScene(props: WorldSceneProps) {
               </WoodSign>
             </View>
           )}
+          {partnerWalk && (
+            <View
+              pointerEvents="none"
+              testID="partner-sign"
+              style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4 + (showsTerritorySign ? 64 : 0) + (coopText ? 64 : 0), width: 190, alignItems: 'flex-start', transform: [{ rotate: '-2deg' }] }]}
+            >
+              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT} accessibilityLabel={t('world.partnerOut', { name: partnerWalk.name, dog })}>
+                {t('world.partnerOut', { name: partnerWalk.name, dog })}
+              </WoodSign>
+            </View>
+          )}
           <Pressable
             onPress={scrollToViertel}
             accessibilityRole="button"
@@ -821,6 +840,7 @@ export function WorldScene(props: WorldSceneProps) {
               dog={dog}
               height={layout.viertelH - 72}
               showNeighbours
+              showPartnerTrail
             />
           </View>
         </Animated.View>
@@ -876,12 +896,14 @@ function WorldPortrait({
   dog,
   height,
   showNeighbours,
+  showPartnerTrail,
 }: {
   homeRangeRepository: HomeRangeRepository;
   onPress: () => void;
   dog: string;
   height: number;
   showNeighbours?: boolean;
+  showPartnerTrail?: boolean;
 }) {
   const [empty, setEmpty] = useState(false);
   return empty ? (
@@ -897,6 +919,7 @@ function WorldPortrait({
         height={height}
         accessibilityLabel={t('world.neighbourhoodLabel')}
         showNeighbours={showNeighbours}
+        showPartnerTrail={showPartnerTrail}
       />
     </View>
   );

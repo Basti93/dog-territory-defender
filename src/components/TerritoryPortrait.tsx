@@ -6,6 +6,8 @@ import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { portraitHTML } from '../web/portraitHTML';
 import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
+import { PARTNER_TRAIL_FRAME_ID, partnerTrailFrameItem, partnerTrailPayload } from '../web/partnerTrail';
+import { usePartnerWalk } from '../sync/presenceStore';
 import { useNearby } from '../sync/useNearby';
 import { log } from '../utils/log';
 import { ArtImage, palette, shadows, textStyle } from '../ui';
@@ -33,6 +35,8 @@ interface TerritoryPortraitProps {
   accessibilityLabel?: string;
   /** Draw the Nachbarhund Ranges (dotted, under ours) and widen the frame to hold the nearest ones. Only the whole-Range portrait sets this. */
   showNeighbours?: boolean;
+  /** Draw a household partner's walk in progress as a stitched thread (the whole-Range portrait only). Each new heartbeat re-captures the still image. */
+  showPartnerTrail?: boolean;
 }
 
 /**
@@ -47,13 +51,15 @@ interface TerritoryPortraitProps {
  * "network-dependency consequence" note): falls back to a neutral,
  * non-error line. Never a broken-image icon, never technical error text.
  */
-export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel, showNeighbours = false }: TerritoryPortraitProps) {
+export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel, showNeighbours = false, showPartnerTrail = false }: TerritoryPortraitProps) {
   const webViewRef = useRef<WebView>(null);
   const [isWebViewReady, setIsWebViewReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [hasCells, setHasCells] = useState<boolean | null>(null);
   const nearby = useNearby();
+  const partner = usePartnerWalk();
+  const partnerWalk = showPartnerTrail ? partner : null;
 
   useEffect(() => {
     if (suppliedCells) {
@@ -79,10 +85,16 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
       const raster = buildHomeRangeRasterPayload(cells, Date.now());
       if (!raster) return;
       const payload: { raster: typeof raster; neighbours?: unknown; frame?: unknown } = { raster };
-      if (showNeighbours) {
-        const framed = framePortraitNeighbours(raster, neighbourOverlayPayload(nearby).items);
+      // Alex's thread goes to the page first; the page draws it into the next capture. Its bounding box takes part in
+      // the framing like a neighbour (so the thread stays in the picture) but is never drawn as one.
+      const trail = partnerTrailPayload(partnerWalk);
+      if (showPartnerTrail) webViewRef.current?.postMessage(JSON.stringify({ type: 'SHOW_PARTNER_TRAIL', payload: trail }));
+      const trailItem = partnerTrailFrameItem(trail);
+      if (showNeighbours || trailItem) {
+        const items = showNeighbours ? neighbourOverlayPayload(nearby).items : [];
+        const framed = framePortraitNeighbours(raster, trailItem ? [...items, trailItem] : items);
         if (framed.frame) {
-          payload.neighbours = framed.items;
+          payload.neighbours = framed.items.filter((i) => i.id !== PARTNER_TRAIL_FRAME_ID);
           payload.frame = framed.frame;
         }
       }
@@ -94,7 +106,7 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
       return;
     }
     homeRangeRepository?.getCells().then(renderFromCells);
-  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells, showNeighbours, nearby]);
+  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells, showNeighbours, nearby, showPartnerTrail, partnerWalk]);
 
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
     try {

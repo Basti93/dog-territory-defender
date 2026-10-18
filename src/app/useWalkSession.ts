@@ -9,6 +9,7 @@ import { cellKey, MIN_CELLS_FOR_REWARD } from '../utils/grid';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { log } from '../utils/log';
 import { newClientId } from '../sync/ids';
+import { PRESENCE_BEAT_MS, type PresenceSender } from '../sync/presenceSender';
 import { t } from '../i18n';
 import { AppRepositories } from './repositories';
 import { finishTrackedWalk, FinishTrackedWalkDeps, WalkRewardsOutcome } from './finishTrackedWalk';
@@ -33,10 +34,12 @@ export interface UseWalkSessionDeps {
   onRewards: (outcome: WalkRewardsOutcome) => void;
   /** Household sync: forwarded to finishTrackedWalk. Optional. */
   sync?: FinishTrackedWalkDeps['sync'];
+  /** Live presence for the household partner (M4): heartbeats while tracking. Optional; absent = nobody sees the walk live. */
+  presence?: PresenceSender;
 }
 
 /** The tracked-walk lifecycle: start, GPS fixes, finish, cancel/reset. One walk in flight at a time. */
-export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync }: UseWalkSessionDeps) {
+export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync, presence }: UseWalkSessionDeps) {
   const { homeRangeRepository, walkRepository, notificationRepository } = repos;
   const [appState, setAppState] = useState<AppState>({ walk: null, isTracking: false, error: null });
 
@@ -82,6 +85,17 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     const timer = setInterval(() => runAutoFinishRef.current(null), AUTO_FINISH_TICK_MS);
     return () => clearInterval(timer);
   }, [appState.isTracking]);
+
+  // Heartbeat timer (foreground). The GPS callback below also ticks, which is what keeps beats going wherever that
+  // callback runs JS in the background; the sender itself decides whether 30 s have passed.
+  useEffect(() => {
+    if (!appState.isTracking || !presence) return;
+    const timer = setInterval(() => {
+      const current = walkRef.current;
+      if (current) presence.tick(current);
+    }, PRESENCE_BEAT_MS);
+    return () => clearInterval(timer);
+  }, [appState.isTracking, presence]);
 
   const setError = useCallback((error: string | null) => setAppState((prev) => ({ ...prev, error })), []);
 
@@ -141,6 +155,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         walkRef.current = { ...current, locations: [...current.locations, location] };
         const next = walkRef.current;
         setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
+        presence?.tick(next);
         runAutoFinishRef.current(location);
       });
       if (!watching) {
@@ -175,6 +190,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       });
 
       setAppState((prev) => ({ ...prev, walk: walkRef.current ?? newWalk, isTracking: true }));
+      presence?.start(walkRef.current ?? newWalk);
 
       // Replan reminders so one doesn't fire mid-walk (the walk isn't in the
       // repository until it finishes, so pass it in explicitly).
@@ -200,22 +216,27 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     }
     log('WALK_FINISH', { id: walkToFinish.id, points: walkToFinish.locations.length });
 
-    await finishTrackedWalk(walkToFinish, {
-      repos,
-      dogName,
-      onFinishCue: (qualifies) => {
-        walkCueState.active = false;
-        return cueTracker.onFinish(qualifies);
-      },
-      playCue: play,
-      onWalkFinished: (finishedWalk) => {
-        walkRef.current = finishedWalk;
-        setAppState((prev) => ({ ...prev, walk: finishedWalk, isTracking: false }));
-      },
-      onRangeChanged,
-      onRewards,
-      sync,
-    });
+    try {
+      await finishTrackedWalk(walkToFinish, {
+        repos,
+        dogName,
+        onFinishCue: (qualifies) => {
+          walkCueState.active = false;
+          return cueTracker.onFinish(qualifies);
+        },
+        playCue: play,
+        onWalkFinished: (finishedWalk) => {
+          walkRef.current = finishedWalk;
+          setAppState((prev) => ({ ...prev, walk: finishedWalk, isTracking: false }));
+        },
+        onRangeChanged,
+        onRewards,
+        sync,
+      });
+    } finally {
+      // After the upload was queued, so the partner's phone usually finds the walk right when presence ends.
+      void presence?.end(walkToFinish);
+    }
     // Auto-finished while the app is not in front: say so (the celebration state is
     // already set, so the Homecoming plays on the next foreground).
     if (endedBy) void notifyAutoFinishedIfBackgrounded(dogName);
@@ -234,6 +255,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     setHomeCountdownMin(null);
     await stopWatchingLocation();
     if (walkRef.current) {
+      void presence?.end(walkRef.current);
       log('WALK_CANCELLED', { id: walkRef.current.id, points: walkRef.current.locations.length });
     }
     walkRef.current = null;

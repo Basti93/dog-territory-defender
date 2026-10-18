@@ -7,7 +7,7 @@ import { t } from '../../../i18n';
 import { advance, flush, renderScreen, unmountAndExpectNoTimers } from '../../../test/render';
 import * as sounds from '../../../feedback/sounds';
 import { Homecoming, HomecomingProps, TAP_LOCK_MS } from '../Homecoming';
-import { HomecomingWalk, resetClosingLineMemory } from '../homecomingPlan';
+import { HomecomingWalk, partnerHomecomingWalk, resetClosingLineMemory } from '../homecomingPlan';
 import { sceneLayout, worldYardLayout } from '../sceneLayout';
 
 jest.mock('../../../feedback/sounds', () => ({
@@ -143,6 +143,29 @@ describe('Homecoming', () => {
     expect(screen.getByTestId('homecoming-closing')).toBeOnTheScreen();
     await tap();
     expect(onDone).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+});
+
+describe('Homecoming variant Partner', () => {
+  const partnerWalk = () => partnerHomecomingWalk({ walkId: 'wp', name: 'Alex', treatsEarned: 14, newGroundCellCount: 0, distanceMeters: 2100, walkTime: Date.now() });
+
+  it('plays the star, the treats and her return line, quietly (no celebrate fanfare), and nothing more', async () => {
+    const { view, onDone, onCamera } = await setup(partnerWalk());
+    expect(screen.getByTestId('homecoming-number')).toBeOnTheScreen();
+    expect(sounds.play).not.toHaveBeenCalledWith('celebrate');
+    await advance(200);
+    expect(onCamera).toHaveBeenLastCalledWith('viertel');
+    await tap();
+    expect(screen.queryByTestId('homecoming-number')).toBeNull();
+    for (let i = 0; i < 40; i++) await advance(100);
+    expect(sounds.play).toHaveBeenCalledWith('treat'); // the treats roll in, that is the sound
+    await tap();
+    expect(screen.getByTestId('homecoming-closing')).toBeOnTheScreen();
+    expect(screen.getByText('Alex and Rex are back.')).toBeOnTheScreen();
+    expect(onDone).not.toHaveBeenCalled();
+    await tap();
+    expect(onDone).toHaveBeenCalledTimes(1); // three beats, not four
     await unmountAndExpectNoTimers(view);
   });
 });

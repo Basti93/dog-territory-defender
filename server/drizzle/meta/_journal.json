@@ -36,6 +36,13 @@
       "when": 1792341997328,
       "tag": "0004_device_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792346968289,
+      "tag": "0005_walk_presence",
+      "breakpoints": true
     }
   ]
 }

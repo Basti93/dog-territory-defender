@@ -14,6 +14,9 @@ import {
   CoopWeekResponse,
   GiftsResponse,
   NearbyResponse,
+  PresenceResponse,
+  PresenceUpdateRequest,
+  PresenceUpdateResponse,
   giftOpenPath,
   EventsResponse,
   ImportRequest,
@@ -76,7 +79,17 @@ export interface ApiClient {
   coopWeek(): Promise<CoopWeekResponse>;
   /** Device diagnostics batch (log shipping). */
   uploadLogs(request: LogUploadRequest): Promise<LogUploadResponse>;
+  /** Live-walk heartbeat (M4). Ephemeral: callers never queue or retry it. */
+  sendPresence(request: PresenceUpdateRequest): Promise<PresenceUpdateResponse>;
+  /**
+   * The other household members' walks in progress. With `after` (the last `rev`) and `waitSeconds > 0` the server parks
+   * the call until something changes (long-poll, <= 25 s). `signal` cancels it (app went to the background).
+   */
+  presence(options?: { after?: number; waitSeconds?: number; signal?: AbortSignal }): Promise<PresenceResponse>;
 }
+
+/** A long-poll must outlive the server's wait: this much extra before the client gives up. */
+export const LONG_POLL_GRACE_MS = 10_000;
 
 export function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
@@ -87,13 +100,16 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const doFetch = options.fetchImpl ?? fetch;
 
-  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown, extra: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, timeoutMs);
+    }, extra.timeoutMs ?? timeoutMs);
+    const onOuterAbort = () => controller.abort();
+    if (extra.signal?.aborted) controller.abort();
+    else extra.signal?.addEventListener('abort', onOuterAbort, { once: true });
     try {
       const headers: Record<string, string> = { Accept: 'application/json', [API_HEADERS.clientLevel]: String(API_LEVEL) };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -107,7 +123,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
           signal: controller.signal,
         });
       } catch (err) {
-        if (timedOut) throw new ApiError('timeout', `Request timed out after ${timeoutMs} ms`);
+        if (timedOut) throw new ApiError('timeout', `Request timed out after ${extra.timeoutMs ?? timeoutMs} ms`);
         throw new ApiError('network', String(err));
       }
 
@@ -135,6 +151,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       }
     } finally {
       clearTimeout(timer);
+      extra.signal?.removeEventListener('abort', onOuterAbort);
     }
   }
 
@@ -151,5 +168,13 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     openGift: (giftId, clientId) => request<CommandResponse>('POST', giftOpenPath(giftId), { clientId }),
     coopWeek: () => request<CoopWeekResponse>('GET', API_PATHS.coopWeek),
     uploadLogs: (req) => request<LogUploadResponse>('POST', API_PATHS.logs, req),
+    sendPresence: (req) => request<PresenceUpdateResponse>('POST', API_PATHS.presence, req),
+    presence: ({ after, waitSeconds = 0, signal } = {}) => {
+      const query = [after !== undefined ? `after=${after}` : null, waitSeconds > 0 ? `wait=${waitSeconds}` : null].filter(Boolean).join('&');
+      return request<PresenceResponse>('GET', `${API_PATHS.presence}${query ? `?${query}` : ''}`, undefined, {
+        timeoutMs: waitSeconds > 0 ? waitSeconds * 1000 + LONG_POLL_GRACE_MS : undefined,
+        signal,
+      });
+    },
   };
 }

@@ -53,7 +53,7 @@ Public: `GET /healthz` (`{ok, apiLevel}`), `POST /v1/join`.
 
  Everything else needs `Authorization: Bearer <token>`; anything else, including unknown paths, answers the identical `401 {"error":"unauthorized"}`.
 
-`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs` (device log shipping, below).
+`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs` (device log shipping, below), `POST /v1/presence` and `GET /v1/presence?after=&wait=` (live walk presence, below).
 
 ## Behaviour worth knowing
 
@@ -62,6 +62,10 @@ Public: `GET /healthz` (`{ok, apiLevel}`), `POST /v1/join`.
 - Hardening: strict schemas (unknown properties rejected), 64 KiB body (1 MiB walks, 5 MiB import), helmet headers, no CORS, per-IP and per-device rate limits, IP bans in `banned_ips`, per-household daily write caps, redacted structured access log. Residual risk: design Decision 16.
 
 ## Device log shipping
+
+### Live presence (`/v1/presence`)
+
+While a household member walks, their phone sends a heartbeat (`POST`, about every 30 s, only the new points) and the other members long-poll `GET /v1/presence?after=<rev>&wait=25` while their app is open. Ephemeral: table `walk_presence`, never in the `events` feed, one row per (player, walk) with the route simplified to at most 400 points, purged 6 h after the last beat by the hourly job in `services/logRetention.ts`, and closed when the finished walk is uploaded. Visible only to the other members of the same household (full route; no start fuzz inside a household). Limits: 1 request / 10 s per device on `POST` (the closing `ended` beat is exempt), 400 points and 32 KiB per beat, long-poll counted once and capped per household like the events long-poll (separate channel `presence:<household>`). Budget per phone while the app is in front: about 2-3 `GET`s a minute plus 2 `POST`s a minute while walking, well inside `RL_DEVICE_PER_MIN`. Coordinates are redacted from request logs (`*.points`). Additive inside API level 2, no env change, no operator action beyond running the migration (`0005_walk_presence`, applied by `MIGRATE_ON_START`).
 
 The app copies its `log()` lines (redacted: no tokens, invite codes, backup data or raw lat/lon) to `POST /v1/logs` while joined and the Settings switch "Protokoll an den Server senden" is on. Batches are at most 64 KiB; `deviceSeq` numbers the first entry and the unique `(device_id, device_seq)` index makes resends idempotent. Limits: 30 requests / 10 min per device, 2000 rows / 24 h per device (429 `daily_cap`), entries over 2 KB skipped. Rows are deleted 14 days after receipt by an hourly in-process job (`services/logRetention.ts`, independent of `NEIGHBOURS_ENABLED`). There is no read endpoint: use the `logs` CLI command above. Redaction lives in the app (`src/utils/logShipper.ts`); the server stores what it gets.
 

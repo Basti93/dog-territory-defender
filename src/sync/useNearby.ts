@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
 import type { NearbyItem } from './apiContract';
-import { getNearby, subscribeNearby } from './nearbyStore';
+import { getNearby, subscribeNeighbourhood } from './neighbourhoodStore';
 
-/** The neighbour dogs from the last GET /v1/nearby (re-renders when the cache is replaced). `[]` while neighbours are off. */
+/** The neighbour dogs from the last GET /v1/nearby (re-renders when the store replaces them). `[]` while neighbours are off. */
 export function useNearby(): NearbyItem[] {
-  return useSyncExternalStore(subscribeNearby, getNearby);
+  return useSyncExternalStore(subscribeNeighbourhood, getNearby);
 }

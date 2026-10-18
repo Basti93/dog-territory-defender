@@ -2,7 +2,7 @@ import { setLocale } from '../../../i18n';
 import type { WalkRewardsCelebration } from '../../../economy/walkRewards';
 import { ACHIEVEMENTS, AchievementId } from '../../../economy/personalStats';
 import { NEW_GROUND_MIN_CELLS } from '../../../utils/grid';
-import { HomecomingWalk, homecomingVariant, pickClosingLine, pickOneNumber, planBeats, planExtras, resetClosingLineMemory } from '../homecomingPlan';
+import { HomecomingWalk, homecomingVariant, partnerHomecomingWalk, pickClosingLine, pickOneNumber, planBeats, planExtras, resetClosingLineMemory } from '../homecomingPlan';
 
 const rewards = (over: Partial<WalkRewardsCelebration> = {}): WalkRewardsCelebration => ({
   cellsPainted: 40,
@@ -148,5 +148,40 @@ describe('pickClosingLine', () => {
       resetClosingLineMemory();
       expect(pickClosingLine(walk({ walkId: 'a', territoryName: 'Park' }), 'Rex')).not.toContain('homecoming.line');
     }
+  });
+});
+
+describe('variant Partner (Alex und Buddy sind zurück)', () => {
+  const summary = { walkId: 'wp', name: 'Alex', treatsEarned: 14, newGroundCellCount: 0, distanceMeters: 2100, walkTime: 1000 };
+
+  it('is beat 1 (patch), beat 2 (bowl) and the closing line; never extras, even when the walk had something to show', () => {
+    expect(planBeats(false, ['badge', 'milestone'], true)).toEqual(['patch', 'bowl', 'rest']);
+    const w = partnerHomecomingWalk(summary);
+    expect(planExtras(w.rewards)).toEqual([]);
+    expect(w.partnerName).toBe('Alex');
+    expect(w.manual).toBe(false);
+  });
+
+  it('carries only what the shared bowl and the star need: treats, new ground, distance', () => {
+    const w = partnerHomecomingWalk({ ...summary, newGroundCellCount: NEW_GROUND_MIN_CELLS });
+    expect(w.rewards.treatsEarned).toBe(14);
+    expect(w.rewards.unlockedAchievements).toEqual([]);
+    expect(w.rewards.leveledUpTo).toBeNull();
+    expect(w.rewards.tease).toBeNull();
+    expect(pickOneNumber(w).kind).toBe('streets');
+    expect(pickOneNumber(partnerHomecomingWalk(summary)).kind).toBe('distance');
+  });
+
+  it('speaks one fixed line in both languages and leaves the no-repeat memory of the own lines alone', () => {
+    const w = partnerHomecomingWalk(summary);
+    expect(pickClosingLine(w, 'Buddy')).toBe('Alex and Buddy are back.');
+    setLocale('de');
+    expect(pickClosingLine(w, 'Buddy')).toBe('Alex und Buddy sind zurück.');
+    expect(pickClosingLine(w, 'Buddy')).toBe('Alex und Buddy sind zurück.'); // twice in a row is fine for this one
+    setLocale('en');
+    const own = pickClosingLine(walk({ walkId: 'a' }), 'Rex');
+    resetClosingLineMemory();
+    pickClosingLine(w, 'Buddy');
+    expect(pickClosingLine(walk({ walkId: 'a' }), 'Rex')).toBe(own);
   });
 });

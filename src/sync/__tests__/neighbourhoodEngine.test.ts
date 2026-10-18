@@ -1,34 +1,107 @@
 import type { ApiClient } from '../apiClient';
 import { ApiError } from '../apiClient';
-import type { ApiGift } from '../apiContract';
-import { getNearby } from '../nearbyStore';
+import type { ApiEvent, ApiGift } from '../apiContract';
+import { getNearby, getNeighbourhood, resetNeighbourhood, setNeighbourhood } from '../neighbourhoodStore';
 import { applyNearby } from '../apply';
 import { coopSignText, giftOpenedLine, giftThing, unopenedGifts } from '../neighbourhood';
 import { setLocale } from '../../i18n';
-import { apiDen, IDENTITY, makeEngine, makeRepos } from '../../test/syncHelpers';
+import { apiDen, IDENTITY, makeEngine, makeRepos, snapshot } from '../../test/syncHelpers';
 
 const gift = (over: Partial<ApiGift> = {}): ApiGift => ({ id: 'g1', botId: 'b1', botName: 'Pfote', cosmeticId: 'stick-oak', sprinkleTreats: 3, createdAt: 1, openedAt: null, ...over });
 
 beforeEach(() => setLocale('en'));
 
-describe('sync engine neighbour calls', () => {
-  it('are quiet no-ops when not joined (no network, nothing to show)', async () => {
-    const client = { gifts: jest.fn(), coopWeek: jest.fn(), openGift: jest.fn() };
+const momoItem = { id: 'b1', kind: 'bot' as const, generated: true as const, archetype: 'momo', dogName: 'Momo', appearance: {}, traitKey: 'k', areaLabel: 'near', lastActiveBucket: 'today' as const, metCount: 1 };
+const coopActive = { active: true, weekStart: '2026-10-12', goalKm: 20, totalKm: 5, ratio: 0.25, completed: false, rewardId: null, yardDecorations: [] };
+const sniffEvent = (seq: number): ApiEvent => ({
+  seq,
+  kind: 'neighbour.sniffed' as const,
+  actorPlayerId: 'p-lisa',
+  createdAt: 5,
+  payload: { line: 'neighbours.line.sniffCorner', botName: 'Momo', botId: 'b1', params: { bot: 'Momo' } },
+});
+
+beforeEach(() => resetNeighbourhood());
+
+describe('sync engine and the neighbourhood store', () => {
+  function scripted(over: Partial<ApiClient> = {}) {
+    const calls = { nearby: 0, gifts: 0, coop: 0 };
+    const client: Partial<ApiClient> = {
+      snapshot: async () => snapshot(),
+      events: async (after: number) => ({ events: [], cursor: after, hasMore: false, serverTime: 5 }),
+      nearby: async () => {
+        calls.nearby++;
+        return { items: [momoItem] };
+      },
+      gifts: async () => {
+        calls.gifts++;
+        return { gifts: [gift()] };
+      },
+      coopWeek: async () => {
+        calls.coop++;
+        return coopActive;
+      },
+      ...over,
+    };
+    return { client, calls };
+  }
+
+  it('is a quiet no-op when not joined (no network, nothing to show)', async () => {
+    const client = { nearby: jest.fn(), gifts: jest.fn(), coopWeek: jest.fn(), openGift: jest.fn() };
     const engine = makeEngine(makeRepos(), client as unknown as Partial<ApiClient>);
-    await expect(engine.listGifts()).resolves.toEqual([]);
-    await expect(engine.coopWeek()).resolves.toBeNull();
+    await engine.syncNow();
     await expect(engine.openGift('g1')).resolves.toBe(false);
-    expect(client.gifts).not.toHaveBeenCalled();
+    expect(client.nearby).not.toHaveBeenCalled();
+    expect(getNeighbourhood()).toEqual({ nearby: [], lines: [], gifts: [], coop: null });
   });
 
-  it('lists gifts and the co-op week, and swallows failures', async () => {
+  it('one sync fetches the dogs, gifts and co-op week once and publishes them; the next sync without neighbour events fetches nothing', async () => {
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
-    const coop = { active: true, weekStart: '2026-10-12', goalKm: 20, totalKm: 5, ratio: 0.25, completed: false, rewardId: null, yardDecorations: [] };
-    const engine = makeEngine(repos, { gifts: async () => ({ gifts: [gift()] }), coopWeek: async () => coop });
-    await expect(engine.listGifts()).resolves.toEqual([gift()]);
-    await expect(engine.coopWeek()).resolves.toEqual(coop);
-    const failing = makeEngine(repos, {
+    const { client, calls } = scripted();
+    const engine = makeEngine(repos, client);
+    await engine.syncNow();
+    expect(getNeighbourhood().nearby).toEqual([momoItem]);
+    expect(getNeighbourhood().gifts).toEqual([gift()]);
+    expect(getNeighbourhood().coop).toEqual(coopActive);
+    expect(calls).toEqual({ nearby: 1, gifts: 1, coop: 1 });
+    await engine.syncNow({ force: true });
+    expect(calls).toEqual({ nearby: 1, gifts: 1, coop: 1 });
+  });
+
+  it('a neighbour event triggers exactly one refresh and its line reaches the store', async () => {
+    const repos = makeRepos();
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    let pending = false;
+    const { client, calls } = scripted({
+      events: async (after: number) => (pending ? { events: [sniffEvent(after + 1)], cursor: after + 1, hasMore: false, serverTime: 5 } : { events: [], cursor: after, hasMore: false, serverTime: 5 }),
+    });
+    const engine = makeEngine(repos, client);
+    await engine.syncNow();
+    pending = true;
+    await engine.syncNow({ force: true });
+    pending = false;
+    expect(calls.nearby).toBe(2);
+    expect(calls.gifts).toBe(2);
+    expect(getNeighbourhood().lines.map((l) => l.line)).toEqual(['neighbours.line.sniffCorner']);
+  });
+
+  it('publishes stored lines before reaching the server, and keeps what it has when gifts or the co-op week fail', async () => {
+    const repos = makeRepos();
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    const entry = { line: 'neighbours.line.wave', botName: 'Keks', botId: 'b4', params: { bot: 'Keks' }, at: 1, seq: 1 };
+    await repos.sync.saveState({ neighbourLines: [entry], cursor: 3, lastSyncAt: 1 });
+    const engine = makeEngine(repos, {
+      events: async () => {
+        throw new ApiError('network', 'down');
+      },
+    });
+    await engine.syncNow();
+    expect(getNeighbourhood().lines).toEqual([entry]);
+    setNeighbourhood({ gifts: [gift()] });
+    const flaky = makeEngine(repos, {
+      events: async (after: number) => ({ events: [], cursor: after, hasMore: false, serverTime: 5 }),
+      nearby: async () => ({ items: [momoItem] }),
       gifts: async () => {
         throw new ApiError('network', 'down');
       },
@@ -36,8 +109,20 @@ describe('sync engine neighbour calls', () => {
         throw new Error('boom');
       },
     });
-    await expect(failing.listGifts()).resolves.toEqual([]);
-    await expect(failing.coopWeek()).resolves.toBeNull();
+    await flaky.syncNow();
+    expect(getNeighbourhood().gifts).toEqual([gift()]);
+    expect(getNeighbourhood().nearby).toEqual([momoItem]);
+  });
+
+  it('empties gifts and the co-op week when the server has no neighbours', async () => {
+    const repos = makeRepos();
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    setNeighbourhood({ gifts: [gift()], coop: coopActive });
+    const { client, calls } = scripted({ nearby: async () => ({ items: [] }) });
+    await makeEngine(repos, client).syncNow();
+    expect(getNeighbourhood().gifts).toEqual([]);
+    expect(getNeighbourhood().coop).toBeNull();
+    expect(calls.gifts).toBe(0);
   });
 
   it('opens a gift with a fresh clientId and applies the server Den state (treats sprinkle)', async () => {
@@ -47,7 +132,9 @@ describe('sync engine neighbour calls', () => {
     const engine = makeEngine(repos, { openGift });
     const onDenChanged = jest.fn();
     engine.setCallbacks({ onDenChanged });
+    setNeighbourhood({ gifts: [gift()] });
     await expect(engine.openGift('g1')).resolves.toBe(true);
+    expect(getNeighbourhood().gifts[0].openedAt).not.toBeNull(); // the Post list and the mailbox parcel update without a refetch
     expect(openGift).toHaveBeenCalledWith('g1', expect.any(String));
     expect((await repos.denEconomy.getState()).treats).toBe(777);
     expect(onDenChanged).toHaveBeenCalledWith(expect.objectContaining({ treats: 777 }));
@@ -73,15 +160,6 @@ describe('sync engine neighbour calls', () => {
     const engine = makeEngine(repos, {});
     await engine.leave();
     expect(getNearby()).toEqual([]);
-  });
-
-  it('exposes the stored neighbour lines', async () => {
-    const repos = makeRepos();
-    const engine = makeEngine(repos, {});
-    await expect(engine.neighbourLines()).resolves.toEqual([]);
-    const entry = { line: 'neighbours.line.wave', botName: 'Keks', botId: 'b4', params: { bot: 'Keks' }, at: 1, seq: 1 };
-    await repos.sync.saveState({ neighbourLines: [entry] });
-    await expect(engine.neighbourLines()).resolves.toEqual([entry]);
   });
 });
 

@@ -1,5 +1,8 @@
 import { createApiClient } from '../sync/apiClient';
 import { createSyncEngine } from '../sync/syncEngine';
+import { createPartnerHomecomingQueue } from '../sync/partnerHomecoming';
+import { createPresenceSender } from '../sync/presenceSender';
+import { createPresenceViewer } from '../sync/presenceViewer';
 import { configureLogShipper } from '../utils/logShipper';
 import { resolveHouseholdLines } from '../sync/householdEvents';
 import { repos } from './repositories';
@@ -13,6 +16,15 @@ export const syncEngine = createSyncEngine({
   territories: repos.territoryRepository,
   denEconomy: repos.denEconomyRepository,
   buddyAppearance: repos.buddyAppearanceRepository,
+});
+
+// Live presence of the household (M4 "Alex im Hof"): this phone's heartbeats while it walks, the foreground
+// poller that watches the others, and the queue that turns "her walk ended + her walk arrived" into a mini homecoming.
+export const presenceSender = createPresenceSender({ getIdentity: () => repos.settingsRepository.getSyncIdentity() });
+export const partnerHomecoming = createPartnerHomecomingQueue({ syncNow: () => syncEngine.syncNow() });
+export const presenceViewer = createPresenceViewer({
+  getIdentity: () => repos.settingsRepository.getSyncIdentity(),
+  onWalkEnded: (walk) => partnerHomecoming.noteEnded(walk),
 });
 
 // Device log shipping (utils/logShipper.ts): uses the same identity (token, server URL) as sync.

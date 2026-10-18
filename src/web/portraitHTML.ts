@@ -1,5 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
+import { PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_FILTER, MAP_TILE_HOST_SUFFIX, MAP_TILE_URL, MAP_TINT_ALPHA, MAP_TINT_COLOR } from './mapTheme';
 import { tokens } from '../ui/tokens';
 
@@ -62,7 +63,10 @@ export const portraitHTML = `
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
 ${NEIGHBOUR_OVERLAY_SCRIPT}
+${PARTNER_TRAIL_SCRIPT}
 
+    // Alex's thread for the next capture (SHOW_PARTNER_TRAIL); { points: [] } or null = none.
+    var partnerTrail = null;
     var TILE_TIMEOUT_MS = 8000;
     // Roughly the width (pt) the captured image is shown at; sizes the neighbour stitches/signs in canvas pixels.
     var PORTRAIT_DISPLAY_PT = 340;
@@ -211,6 +215,9 @@ ${NEIGHBOUR_OVERLAY_SCRIPT}
             overlayBottomRightPx.y - overlayTopLeftPx.y
           );
 
+          // Alex's thread lies over the cloth (it is not sewn in yet), under the little name signs.
+          if (partnerTrail && partnerTrail.points && partnerTrail.points.length) ptDrawPortrait(ctx, partnerTrail, toCanvas, canvas.width / PORTRAIT_DISPLAY_PT);
+
           if (neighbours && neighbours.length) hrDrawNeighbourSigns(ctx, neighbours, toCanvas, canvas.width / PORTRAIT_DISPLAY_PT);
 
           // Attribution travels with the captured image (ODbL).
@@ -247,7 +254,9 @@ ${NEIGHBOUR_OVERLAY_SCRIPT}
     function handleMessage(e) {
       try {
         var msg = JSON.parse(e.data);
-        if (msg.type === 'RENDER_PORTRAIT') {
+        if (msg.type === 'SHOW_PARTNER_TRAIL') {
+          partnerTrail = msg.payload || null;
+        } else if (msg.type === 'RENDER_PORTRAIT') {
           handleRenderPortrait(msg.payload.raster, msg.payload.neighbours, msg.payload.frame);
         }
       } catch (error) {
