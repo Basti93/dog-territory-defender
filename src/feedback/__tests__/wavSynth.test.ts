@@ -1,6 +1,20 @@
-const { SAMPLE_RATE, SOUNDS, encodeWav } = require('../../../scripts/soundSynth.cjs');
+const { SAMPLE_RATE, AMBIENT_SAMPLE_RATE, SOUNDS, encodeWav, ambientMusicBox } = require('../../../scripts/soundSynth.cjs');
 
-const EXPECTED_MS: Record<string, number> = { tap: 40, treat: 120, upgrade: 350, celebrate: 700, bark: 180, sleepy: 400, 'new-street': 150, 'reward-reached': 400, 'walk-done': 300 };
+const EXPECTED_MS: Record<string, number> = {
+  tap: 35,
+  'buddy-1': 400,
+  'buddy-2': 400,
+  'buddy-3': 400,
+  treat: 150,
+  upgrade: 400,
+  celebrate: 800,
+  sleepy: 450,
+  'new-street': 160,
+  'reward-reached': 450,
+  'walk-done': 300,
+};
+const peakOf = (xs: number[]) => xs.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+const dbfs = (lin: number) => 20 * Math.log10(lin);
 
 describe('WAV generator', () => {
   it('writes a valid 22.05 kHz mono 16-bit PCM header', () => {
@@ -16,13 +30,69 @@ describe('WAV generator', () => {
     expect(wav.length).toBe(44 + 8);
   });
 
-  it('produces every sound with the right length, under 60 KB, and audible', () => {
+  it('has exactly the expected cue set (no old bark)', () => {
+    expect(Object.keys(SOUNDS).sort()).toEqual(Object.keys(EXPECTED_MS).sort());
+  });
+
+  it('produces every cue with the right length, small, peak <= -6 dBFS (tap -14) and audible', () => {
     for (const [name, ms] of Object.entries(EXPECTED_MS)) {
       const samples: number[] = SOUNDS[name]();
       expect(samples.length).toBe(Math.round((ms / 1000) * SAMPLE_RATE));
       expect(encodeWav(samples).length).toBeLessThanOrEqual(60 * 1024);
-      expect(Math.max(...samples.map(Math.abs))).toBeGreaterThan(0.1);
-      expect(Math.max(...samples.map(Math.abs))).toBeLessThanOrEqual(1);
+      const peak = dbfs(peakOf(samples));
+      const target = name === 'tap' ? -14 : -6;
+      expect(peak).toBeLessThanOrEqual(target + 0.01);
+      expect(peak).toBeGreaterThan(target - 0.5);
+      expect(Math.abs(samples[samples.length - 1])).toBeLessThan(0.01);
     }
+  });
+
+  it('is deterministic', () => {
+    expect(SOUNDS['buddy-1']()).toEqual(SOUNDS['buddy-1']());
+  });
+});
+
+describe('ambient music box', () => {
+  const samples: number[] = ambientMusicBox();
+
+  it('is 60 s at 16 kHz, under 2.5 MB, peak -12 dBFS', () => {
+    expect(AMBIENT_SAMPLE_RATE).toBe(16000);
+    expect(samples.length).toBe(60 * 16000);
+    expect(encodeWav(samples, AMBIENT_SAMPLE_RATE).length).toBeLessThanOrEqual(2.5 * 1024 * 1024);
+    expect(dbfs(peakOf(samples))).toBeCloseTo(-12, 1);
+  });
+
+  it('is deterministic (seeded)', () => {
+    expect(ambientMusicBox()).toEqual(samples);
+  });
+
+  it('loops without a click: the seam step is as small as a normal sample step', () => {
+    const seam = Math.abs(samples[0] - samples[samples.length - 1]);
+    let maxStep = 0;
+    for (let i = 1; i < samples.length; i++) maxStep = Math.max(maxStep, Math.abs(samples[i] - samples[i - 1]));
+    expect(seam).toBeLessThan(maxStep * 0.2);
+    // And no jump near the seam either, on both sides.
+    const sr = AMBIENT_SAMPLE_RATE;
+    for (const i of [...Array(200).keys()]) {
+      expect(Math.abs(samples[i + 1] - samples[i])).toBeLessThanOrEqual(maxStep);
+      expect(Math.abs(samples[samples.length - 1 - i] - samples[samples.length - 2 - i])).toBeLessThanOrEqual(maxStep);
+    }
+    expect(sr).toBe(16000);
+  });
+
+  it('crossfaded ends carry comparable energy (no dip or bump in the first 2 s)', () => {
+    const sr = AMBIENT_SAMPLE_RATE;
+    const rms = (from: number, to: number) => {
+      let sum = 0;
+      for (let i = from; i < to; i++) sum += samples[i] * samples[i];
+      return Math.sqrt(sum / (to - from));
+    };
+    const first = rms(0, 2 * sr);
+    const last = rms(samples.length - 2 * sr, samples.length);
+    const middle = rms(20 * sr, 40 * sr);
+    expect(first / last).toBeGreaterThan(0.4);
+    expect(first / last).toBeLessThan(2.5);
+    expect(first / middle).toBeGreaterThan(0.3);
+    expect(first / middle).toBeLessThan(3);
   });
 });

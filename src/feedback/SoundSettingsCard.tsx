@@ -37,6 +37,19 @@ export function SoundSettingsCard() {
           accessibilityLabel={t('settings.haptics.title')}
         />
       </View>
+      <View style={[styles.row, styles.second]}>
+        <View style={styles.rowText}>
+          <Text style={textStyle('h2')}>{t('settings.music.title')}</Text>
+          <Text style={[textStyle('small'), styles.subtitle]}>{t('settings.music.subtitle')}</Text>
+        </View>
+        <Switch
+          value={prefs.music}
+          disabled={!prefs.sound}
+          onValueChange={(music) => updateFeedbackPrefs(getFeedbackPrefsRepository(), { ...prefs, music })}
+          trackColor={{ true: tokens.green }}
+          accessibilityLabel={t('settings.music.title')}
+        />
+      </View>
     </Card>
   );
 }

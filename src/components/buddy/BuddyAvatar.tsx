@@ -17,7 +17,7 @@ import { tokens } from '../../ui/tokens';
 import { BuddyMood, BuddyTrick, nextTrickDelayMs, partsForMood, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
 import { t } from '../../i18n';
 import * as haptics from '../../feedback/haptics';
-import { play } from '../../feedback/sounds';
+import { playBuddy } from '../../feedback/sounds';
 
 export interface BuddyAvatarProps {
   appearance: BuddyAppearance;
@@ -482,7 +482,7 @@ export function BuddyAvatar({
         out.start();
       }, CAPTION_HOLD_MS);
     }
-    play('bark');
+    playBuddy();
     haptics.pop();
     onPress?.();
   };

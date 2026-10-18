@@ -26,6 +26,8 @@ import { OnboardingScreen, PermissionPrimerScreen } from './src/components/onboa
 import { SettingsScreen } from './src/components/SettingsScreen';
 import { BuddyAppearancePicker } from './src/components/buddy';
 import { useBuddyAppearance } from './src/components/useBuddyAppearance';
+import { useAmbientMusic } from './src/app/useAmbientMusic';
+import { useMusicEnabled } from './src/feedback/feedbackPrefs';
 import { dogDisplayName } from './src/economy/denEconomy';
 import { requestNotificationPermission } from './src/notifications/scheduler';
 
@@ -68,6 +70,12 @@ export default function App() {
     },
   });
   const firstLaunch = useFirstLaunch(repos, { dogName, setDogName }, walkSession.setError);
+  useAmbientMusic({
+    screen: celebration ? 'celebration' : screen,
+    walkActive: walkSession.isTracking,
+    // Silent during the first-launch flow (cards, name, look, primer): nav.screen is still 'doorstep' there.
+    enabled: useMusicEnabled() && firstLaunch.step === 'done',
+  });
 
   const manualLog = useManualWalkLog(repos, {
     screenOpen: screen === 'logMissedWalk',

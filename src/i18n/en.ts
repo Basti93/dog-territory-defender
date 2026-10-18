@@ -326,6 +326,8 @@ const en: Record<string, string> = {
   "settings.language.system": "System",
   "settings.sound.title": "Sound",
   "settings.sound.subtitle": "Tiny happy sounds for taps, treats and Buddy. Your phone's silent switch always wins.",
+  "settings.music.title": "Music",
+  "settings.music.subtitle": "A quiet music box melody on the Doorstep and in the Den. Never during a walk.",
   "settings.haptics.title": "Haptics",
   "settings.haptics.subtitle": "A soft little buzz when you tap and celebrate.",
   "settings.reminder.title": "Daily walk reminders",

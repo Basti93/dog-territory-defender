@@ -340,6 +340,8 @@ const de: Record<string, string> = {
   "settings.language.system": "System",
   "settings.sound.title": "Sound",
   "settings.sound.subtitle": "Kleine fröhliche Geräusche für Tipper, Leckerli und Buddy. Der Stumm-Schalter deines Handys hat immer Vorrang.",
+  "settings.music.title": "Musik",
+  "settings.music.subtitle": "Eine leise Spieluhr-Melodie an der Haustür und in der Höhle. Nie während eines Spaziergangs.",
   "settings.haptics.title": "Haptik",
   "settings.haptics.subtitle": "Ein sanftes Vibrieren beim Tippen und Feiern.",
   "settings.reminder.title": "Tägliche Gassi-Erinnerungen",

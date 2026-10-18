@@ -46,7 +46,7 @@ async function populate(repos: BackupRepositories) {
   await repos.buddyAppearance.saveAppearance({ ...defaultBuddyAppearance(), coat: 'charcoal' });
   await repos.settings.saveLocalePreference('de');
   await repos.settings.saveOnboardingDone(true);
-  await repos.feedbackPrefs.savePrefs({ sound: false, haptics: true });
+  await repos.feedbackPrefs.savePrefs({ sound: false, haptics: true, music: true });
   return territoryId;
 }
 
@@ -100,7 +100,7 @@ describe('export -> import round trip', () => {
     expect((await target.buddyAppearance.getAppearance()).coat).toBe('charcoal');
     expect(await target.settings.getLocalePreference()).toBe('de');
     expect(await target.settings.getOnboardingDone()).toBe(true);
-    expect(await target.feedbackPrefs.getPrefs()).toEqual({ sound: false, haptics: true });
+    expect(await target.feedbackPrefs.getPrefs()).toEqual({ sound: false, haptics: true, music: true });
   });
 
   it('does not grant passive accrual for time since export (lastTickAt reset to now)', async () => {

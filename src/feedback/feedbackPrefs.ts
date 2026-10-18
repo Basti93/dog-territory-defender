@@ -22,8 +22,8 @@ export function getFeedbackPrefs(): FeedbackPrefs {
 
 /** Updates the in-app value only (no persistence). */
 export function setFeedbackPrefs(next: FeedbackPrefs): void {
-  if (next.sound === current.sound && next.haptics === current.haptics) return;
-  current = { sound: next.sound, haptics: next.haptics };
+  if (next.sound === current.sound && next.haptics === current.haptics && next.music === current.music) return;
+  current = { sound: next.sound, haptics: next.haptics, music: next.music };
   listeners.forEach((l) => l());
 }
 
@@ -60,4 +60,10 @@ export async function updateFeedbackPrefs(repo: FeedbackPrefsRepository, next: F
   } catch {
     // best effort: the toggle still works for this session
   }
+}
+
+/** Music plays only when both the master sound switch and the music switch are on. */
+export function useMusicEnabled(): boolean {
+  const prefs = useFeedbackPrefs();
+  return prefs.sound && prefs.music;
 }

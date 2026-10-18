@@ -52,8 +52,8 @@ describe('SettingsScreen', () => {
     for (const slot of ['morning', 'noon', 'evening']) {
       expect(screen.getByText(t(`settings.reminder.slot.${slot}`))).toBeOnTheScreen();
     }
-    // 3 reminder switches + sound + haptics
-    expect(screen.getAllByRole('switch')).toHaveLength(5);
+    // 3 reminder switches + sound + haptics + music
+    expect(screen.getAllByRole('switch')).toHaveLength(6);
     await unmountAndExpectNoTimers(view);
   });
 
