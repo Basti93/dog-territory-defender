@@ -1,14 +1,9 @@
-// Jest manual mock (openspec/changes/home-dashboard). expo-sqlite wraps a
-// native module that isn't available in this project's plain jest-expo test
-// environment (no native binary) — calling the real module's
-// openDatabaseAsync crashes the whole process (not just a test failure)
-// because src/utils/debugLog.ts calls it eagerly at module-import time. No
-// existing test file happened to transitively import debugLog.ts (via
-// src/utils/log.ts) until this change's DoorstepScreen.test.ts started
-// importing DoorstepScreen.tsx -> TerritoryPortrait.tsx -> utils/log.ts.
-// This mock only needs to let that import chain resolve without crashing;
-// no test in this codebase asserts anything about the debug log's own
-// content.
+// Jest manual mock for expo-sqlite (no native binary under jest).
+// src/utils/debugLog.ts calls openDatabaseAsync eagerly at import time (via
+// utils/log.ts, e.g. TerritoryPortrait), so that one entry point returns an
+// inert fake database. Every OTHER way of opening a database throws loudly:
+// screens under test must receive in-memory repositories as props, never
+// sqlite-backed ones.
 
 function makeFakeDatabase() {
   return {
@@ -19,6 +14,17 @@ function makeFakeDatabase() {
   };
 }
 
+function refuse(name) {
+  return () => {
+    throw new Error(
+      `expo-sqlite.${name} was called in a test. Pass in-memory repositories (src/storage/inMemory*) to the screen instead.`
+    );
+  };
+}
+
 module.exports = {
-  openDatabaseAsync: async () => makeFakeDatabase(),
+  openDatabaseAsync: async () => makeFakeDatabase(), // debugLog.ts only
+  openDatabaseSync: refuse('openDatabaseSync'),
+  deleteDatabaseAsync: refuse('deleteDatabaseAsync'),
+  SQLiteProvider: refuse('SQLiteProvider'),
 };
