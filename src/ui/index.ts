@@ -42,3 +42,5 @@ export type { PostcardProps } from './paper/Postcard';
 export { stitch } from './paper/Stitch';
 export { SpeechBubble } from './paper/SpeechBubble';
 export type { SpeechBubbleProps } from './paper/SpeechBubble';
+export { PaperSheet, PaperSection, PaperHeader, PaperRow, PaperHint, TextLink } from './paper/PaperList';
+export type { PaperRowProps } from './paper/PaperList';

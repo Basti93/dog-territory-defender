@@ -18,7 +18,7 @@ import {
 } from '../../buddy/buddyAppearance';
 import { PICKER_STEPS, PickerStep } from '../../buddy/pickerSteps';
 import { BuddyAvatar } from './BuddyAvatar';
-import { Button, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../../ui';
+import { material, PressableScale, radii, spacing, TextLink, textStyle, WoodSign } from '../../ui';
 import { t } from '../../i18n';
 
 export interface BuddyAppearancePickerProps {
@@ -139,7 +139,7 @@ function Swatch({
 function OptionChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} accessibilityLabel={label} style={[styles.chip, selected && styles.chipSelected]}>
-      <Text style={[textStyle('body'), selected && styles.chipTextSelected]}>{label}</Text>
+      <Text style={[textStyle('body'), styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </PressableScale>
   );
 }
@@ -172,7 +172,7 @@ export function BuddyAppearancePicker({
         <BuddyAvatar appearance={look} size={170} mood="idle" name={name} showCaption />
       </View>
 
-      <Text style={[textStyle('h2'), styles.caption]}>{stepCaption(step, name)}</Text>
+      <Text style={[textStyle('sign'), styles.caption]}>{stepCaption(step, name)}</Text>
 
       {step === 'coat' && (
           <View style={styles.row}>
@@ -231,26 +231,24 @@ export function BuddyAppearancePicker({
         </View>
       )}
 
-      <Button
-        label={isLast ? t('dogName.submit') : t('common.next')}
-        onPress={isLast ? finish : () => setStepIndex(stepIndex + 1)}
-        style={styles.primary}
-      />
+      <WoodSign size="wide" onPress={isLast ? finish : () => setStepIndex(stepIndex + 1)} style={styles.primary}>
+        {isLast ? t('dogName.submit') : t('common.next')}
+      </WoodSign>
 
       <View style={styles.footer}>
         {stepIndex > 0 ? (
-          <Button label={t('common.backButton')} variant="ghost" onPress={() => setStepIndex(stepIndex - 1)} style={styles.textButton} />
+          <TextLink label={t('common.backButton')} onPress={() => setStepIndex(stepIndex - 1)} />
         ) : (
-          <View style={styles.textButton} />
+          <View />
         )}
-        {onSkip && <Button label={t('buddy.skip')} variant="ghost" onPress={onSkip} style={styles.textButton} />}
+        {onSkip && <TextLink label={t('buddy.skip')} onPress={onSkip} />}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.background },
+  screen: { flex: 1, backgroundColor: material.linen },
   content: {
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
@@ -259,14 +257,15 @@ const styles = StyleSheet.create({
   previewCard: {
     width: 230,
     height: 210,
-    borderRadius: radii.card,
-    backgroundColor: palette.meadowTint,
+    borderRadius: 8,
+    backgroundColor: material.yarn,
+    borderWidth: 2,
+    borderColor: material.woodRim,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
-    ...shadows.card,
   },
-  caption: { textAlign: 'center', marginBottom: spacing.lg, minHeight: 56 },
+  caption: { color: material.ink, textAlign: 'center', marginBottom: spacing.lg, minHeight: 56 },
     row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -282,14 +281,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  swatchSelected: { borderColor: tokens.green },
+  swatchSelected: { borderColor: material.inkGreen },
   // Shadow lives on this wrapper: overflow hidden on the inner view would clip it on iOS.
   swatchShadow: {
     width: 44,
     height: 44,
     borderRadius: radii.pill,
-    backgroundColor: palette.card,
-    ...shadows.soft,
+    backgroundColor: material.yarn,
   },
   swatchInner: {
     flex: 1,
@@ -301,18 +299,15 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    borderWidth: 3,
-    borderColor: 'transparent',
-    backgroundColor: palette.card,
+    borderWidth: 2,
+    borderColor: material.woodRim,
+    backgroundColor: material.yarn,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.soft,
   },
-  chipSelected: {
-    borderColor: tokens.green,
-    backgroundColor: palette.meadowTint,
-  },
-  chipTextSelected: { color: palette.greenText },
+  chipSelected: { borderColor: material.inkGreen, borderWidth: 3 },
+  chipText: { color: material.ink },
+  chipTextSelected: { color: material.inkGreen },
   primary: { marginTop: spacing.xl, minWidth: 200 },
   footer: {
     flexDirection: 'row',
@@ -320,5 +315,4 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: spacing.md,
   },
-  textButton: { minHeight: 44, minWidth: 96 },
 });

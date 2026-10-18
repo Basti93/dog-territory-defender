@@ -527,7 +527,7 @@ const en: Record<string, string> = {
   "homecoming.line.place.4": "{when} at {place}: that goes in the memory box.",
   "homecoming.line.place.5": "{dog} is sure {place} smelled better than yesterday.",
   "homecoming.line.when.1": "{when}, and {dog} is home with a full nose.",
-  "homecoming.line.when.2": "A good {when} for a walk. {dog} agrees.",
+  "homecoming.line.when.2": "{when} is a good time for a walk. {dog} agrees.",
   "homecoming.line.when.3": "{dog} lies down like someone who earned it.",
   "homecoming.line.when.4": "The yard missed you both, a little.",
   "homecoming.line.when.5": "{when}: stitched in, signed, sniffed.",

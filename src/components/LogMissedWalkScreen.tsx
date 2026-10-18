@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 
-import { Button, Card, Header, palette, PressableScale, radii, Screen, spacing, textStyle, tokens } from '../ui';
+import { material, PaperHeader, PaperSheet, PressableScale, radii, Screen, spacing, textStyle, WoodSign } from '../ui';
 
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
 import { eligibleRefreshRoutes, MissedWalkTiming } from '../utils/manualWalkLog';
@@ -32,10 +32,10 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
   }, [walkRepository, routeRefreshAvailable]);
 
   return (
-    <Screen scroll backdrop="sky">
-      <Header title={t('menu.logMissedWalk')} icon="icon-walks" onBack={onClose} />
+    <Screen scroll backdrop="linen">
+      <PaperHeader title={t('menu.logMissedWalk')} onBack={onClose} />
 
-      <Card style={styles.form}>
+      <PaperSheet style={styles.form}>
         <Text style={[textStyle('body'), styles.prompt]}>
           {t('logWalk.prompt')}
         </Text>
@@ -66,13 +66,16 @@ export function LogMissedWalkScreen({ onLog, onClose, walkRepository, routeRefre
           </View>
         )}
 
-        <Button
-          label={t('logWalk.submit')}
+        <WoodSign
+          size="wide"
+          fullWidth
           disabled={!selected}
           onPress={() => selected && onLog(selected, selectedRouteId ?? undefined)}
           style={styles.logButton}
-        />
-      </Card>
+        >
+          {t('logWalk.submit')}
+        </WoodSign>
+      </PaperSheet>
     </Screen>
   );
 }
@@ -84,7 +87,7 @@ function OptionRow({ label, selected, onPress }: { label: string; selected: bool
       onPress={onPress}
       accessibilityLabel={label}
     >
-      <Text style={[textStyle('body'), selected && { color: palette.greenText }]}>{label}</Text>
+      <Text style={[textStyle('body'), { color: material.ink }, selected && { color: material.inkGreen }]}>{label}</Text>
     </PressableScale>
   );
 }
@@ -92,16 +95,16 @@ function OptionRow({ label, selected, onPress }: { label: string; selected: bool
 const styles = StyleSheet.create({
   form: { gap: spacing.md },
   routePicker: { marginTop: spacing.md, gap: spacing.md },
-  prompt: { color: palette.muted },
+  prompt: { color: material.muted },
   option: {
     minHeight: 52,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     borderRadius: radii.tile,
-    borderWidth: 3,
-    borderColor: 'transparent',
-    backgroundColor: palette.background,
+    borderWidth: 2,
+    borderColor: material.linen,
+    backgroundColor: material.yarn,
   },
-  optionSelected: { borderColor: tokens.green, backgroundColor: palette.meadowTint },
+  optionSelected: { borderColor: material.inkGreen },
   logButton: { marginTop: spacing.md },
 });

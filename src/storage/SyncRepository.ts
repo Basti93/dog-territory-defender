@@ -41,7 +41,20 @@ export interface SyncState {
   importId: string | null;
   /** Latest "X joined the pack" event, for the one-off Doorstep line. */
   lastMemberJoined: { playerName: string; at: number; /** Absent in state saved before renames existed. */ playerId?: string } | null;
+  /** Newest first, at most NEIGHBOUR_LINES_KEPT. Absent in state saved before neighbours existed. */
+  neighbourLines?: NeighbourLineEntry[];
 }
+
+/** A neighbour line from the event feed (Track B): an i18n key plus params, never copy. */
+export interface NeighbourLineEntry {
+  line: string;
+  botName: string | null;
+  params: Record<string, string | number>;
+  at: number;
+  seq: number;
+}
+
+export const NEIGHBOUR_LINES_KEPT = 5;
 
 export const EMPTY_SYNC_STATE: SyncState = { cursor: 0, denRev: 0, lastSyncAt: null, clockOffsetMs: 0, players: {}, importId: null, lastMemberJoined: null };
 

@@ -2,14 +2,14 @@ import React from 'react';
 import { Image, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { artOr } from '../art/artAssets';
-import { palette, spacing } from './theme';
+import { material, palette, spacing } from './theme';
 
 export interface ScreenProps {
   children?: React.ReactNode;
   /** Wrap content in a ScrollView. */
   scroll?: boolean;
-  /** 'sky' draws the doorstep sky faded at the top. Default 'none'. */
-  backdrop?: 'sky' | 'none';
+  /** 'sky' draws the doorstep sky faded at the top; 'linen' tiles the linen cloth (paper screens). Default 'none'. */
+  backdrop?: 'sky' | 'linen' | 'none';
   style?: StyleProp<ViewStyle>;
   /** Style for the inner content container (padding etc.). */
   contentStyle?: StyleProp<ViewStyle>;
@@ -25,8 +25,10 @@ export function Screen({ children, scroll = false, backdrop = 'none', style, con
     paddingHorizontal: padded ? spacing.lg : 0,
   };
   const sky = backdrop === 'sky' ? artOr('doorstep-sky', null) : null;
+  const linen = backdrop === 'linen' ? artOr('linen', null) : null;
   return (
-    <View style={[styles.root, style]}>
+    <View style={[styles.root, backdrop === 'linen' && styles.linenRoot, style]}>
+      {linen && <Image source={linen} resizeMode="repeat" style={StyleSheet.absoluteFillObject} testID="screen-linen" />}
       {sky && (
         <View pointerEvents="none" style={styles.sky}>
           <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />
@@ -54,6 +56,7 @@ export function Screen({ children, scroll = false, backdrop = 'none', style, con
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.background },
+  linenRoot: { backgroundColor: material.linen },
   fill: { flex: 1 },
   // flexGrow, never flex: 1: flex: 1 on a ScrollView content container locks it to the viewport on iOS (no scrolling).
   grow: { flexGrow: 1 },

@@ -215,4 +215,44 @@ describe('pickSceneNotes', () => {
     expect(pickSceneNotes([], 'Hi', false, new Set()).map((n) => n.text)).toEqual(['Hi']);
     expect(pickSceneNotes(lines, 'Hi', false, new Set(['line-0'])).map((n) => n.key)).toEqual(['line-1', 'line-2']);
   });
+
+  it('plays the homecoming over the scene: Buddy leaves the yard, a tap moves on, the end hands back', async () => {
+    const onDone = jest.fn();
+    const homecoming = {
+      onDone,
+      walk: {
+        walkId: 'w1',
+        rewards: {
+          cellsPainted: 40,
+          hasTerritory: true,
+          treatsEarned: 10,
+          tease: null,
+          unlockedAchievements: [],
+          leveledUpTo: null,
+          oldTreatsPerWalk: null,
+          newTreatsPerWalk: null,
+          cliffhangerTitle: null,
+          newGroundCellCount: 0,
+          bloomMultiplier: 1,
+        },
+        newTerritoryName: null,
+        mergedTerritoryNames: null,
+        territoryName: 'Park',
+        distanceMeters: 1500,
+        walkTime: Date.now(),
+        manual: false,
+      },
+    };
+    const { view, onStartWalk } = await setup({ homecoming });
+    await flush();
+    expect(screen.getByTestId('homecoming-number')).toBeOnTheScreen();
+    await advance(500);
+    for (let i = 0; i < 3; i++) {
+      await fireEvent.press(screen.getByTestId('homecoming-tap'));
+      await advance(500);
+    }
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
 });

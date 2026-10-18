@@ -14,6 +14,46 @@ const MAX_ACCEPTABLE_ACCURACY_M = 30;
 
 let currentSubscriber: ((location: LocationType) => void) | null = null;
 
+// Foreground fallback: if the background task cannot start (or delivers
+// nothing), a plain watchPositionAsync keeps the walk tracked while the app is
+// open. Both sources feed deliver(), which drops duplicate timestamps.
+const FALLBACK_AFTER_MS = 15000;
+let fallbackSubscription: Location.LocationSubscription | null = null;
+let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+let lastDeliveredTimestamp = 0;
+
+function deliver(location: LocationType): void {
+  if (location.timestamp <= lastDeliveredTimestamp) return;
+  lastDeliveredTimestamp = location.timestamp;
+  currentSubscriber?.(location);
+}
+
+async function startForegroundFallback(reason: string): Promise<boolean> {
+  if (fallbackSubscription || !currentSubscriber) return !!fallbackSubscription;
+  try {
+    fallbackSubscription = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 2 },
+      (position) => {
+        const accuracy = position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M;
+        if (!isAccurateEnough(accuracy)) return;
+        deliver(toLocationType(position));
+      }
+    );
+    log('GPS_FALLBACK_STARTED', { reason });
+    return true;
+  } catch (error) {
+    log('GPS_FALLBACK_ERROR', { error: String(error) });
+    return false;
+  }
+}
+
+function stopForegroundFallback(): void {
+  if (fallbackTimer) clearTimeout(fallbackTimer);
+  fallbackTimer = null;
+  fallbackSubscription?.remove();
+  fallbackSubscription = null;
+}
+
 export function isAccurateEnough(accuracy: number): boolean {
   return accuracy <= MAX_ACCEPTABLE_ACCURACY_M;
 }
@@ -47,7 +87,10 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
       accuracy,
       gpsTimestamp: position.timestamp,
     });
-    currentSubscriber?.(toLocationType(position));
+    deliver(toLocationType(position));
+    // The task works: the foreground fallback is not needed.
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    fallbackTimer = null;
   });
 });
 
@@ -87,6 +130,8 @@ export async function requestLocationPermission(): Promise<boolean> {
 export async function startWatchingLocation(callback: (location: LocationType) => void): Promise<boolean> {
   try {
     currentSubscriber = callback;
+    lastDeliveredTimestamp = 0;
+    stopForegroundFallback();
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
       accuracy: Location.Accuracy.High,
       timeInterval: 1000,
@@ -98,17 +143,21 @@ export async function startWatchingLocation(callback: (location: LocationType) =
       },
     });
     log('GPS_WATCH_STARTED');
+    // Safety net: if the task delivers no accepted fix soon, also watch in the foreground.
+    fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
     return true;
   } catch (error) {
     console.error('Error watching location:', error);
     log('GPS_WATCH_ERROR', { error: String(error) });
-    currentSubscriber = null;
-    return false;
+    const ok = await startForegroundFallback('task-start-failed');
+    if (!ok) currentSubscriber = null;
+    return ok;
   }
 }
 
 export async function stopWatchingLocation(): Promise<void> {
   currentSubscriber = null;
+  stopForegroundFallback();
   const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
   if (isRunning) {
     await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);

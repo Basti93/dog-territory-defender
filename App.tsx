@@ -24,7 +24,7 @@ import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
 import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
 import { WorldScene } from './src/components/world/WorldScene';
-import { CelebrationScreen } from './src/components/CelebrationScreen';
+import type { HomecomingWalk } from './src/components/world/homecomingPlan';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
 import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
@@ -95,7 +95,14 @@ export default function App() {
           : null,
         outcome.celebration.leveledUpTo !== null
       );
-      showCelebration({ walkId: outcome.walkId, rewards: outcome.celebration, territoryBeat: outcome.territoryBeat });
+      showCelebration({
+        walkId: outcome.walkId,
+        rewards: outcome.celebration,
+        territoryBeat: outcome.territoryBeat,
+        distanceMeters: outcome.distanceMeters,
+        territoryName: outcome.territoryName,
+        walkTime: outcome.wildExtra?.closedAt,
+      });
     },
   });
   const firstLaunch = useFirstLaunch(repos, { dogName, setDogName }, walkSession.setError);
@@ -116,7 +123,7 @@ export default function App() {
       // Every dismiss of Log a Missed Walk returns to the Doorstep; the
       // celebration renders on top of it and always wins (see below).
       nav.goDoorstep();
-      showCelebration({ walkId: outcome.walkId, rewards: outcome.celebration, territoryBeat: null });
+      showCelebration({ walkId: outcome.walkId, rewards: outcome.celebration, territoryBeat: null, manual: true });
     },
   });
 
@@ -188,29 +195,63 @@ export default function App() {
   // Doorstep in the same call that sets the celebration, and the celebration
   // (a one-off reward moment, not part of persistent navigation) must win and
   // render on top; the player lands on the Doorstep once they dismiss it.
+  const worldScene = (homecoming: { walk: HomecomingWalk; onDone: () => void } | null) => (
+      <WorldScene
+        dogName={dogName}
+        treats={treats ?? 0}
+        level={level ?? 1}
+        pendingDenAchievements={launch.pendingDenAchievements}
+        session={launch.doorstepSession}
+        greeting={launch.doorstepGreeting}
+        awayStripLines={launch.awayStripLines}
+        denEconomyRepository={repos.denEconomyRepository}
+        personalStatsRepository={repos.personalStatsRepository}
+        homeRangeRepository={repos.homeRangeRepository}
+        walkRepository={repos.walkRepository}
+        settingsRepository={repos.settingsRepository}
+        buddyAppearance={buddyAppearance}
+        buddyAppearanceLoaded={buddyAppearanceLoaded}
+        buddyMood={launch.buddyMood}
+        playGreeting={launch.playBuddyGreeting}
+        onBuddyGreetingStarted={launch.onBuddyGreetingStarted}
+        onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
+        onTreatsChanged={setTreats}
+        onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
+        onStartWalk={() => {
+          nav.goTo('map');
+          walkSession.startWalk();
+        }}
+        updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
+        walkActive={walkSession.isTracking}
+        onOpenMap={() => nav.goTo('map')}
+        onOpenHistory={() => nav.goTo('history')}
+        onOpenSettings={() => nav.goTo('settings')}
+        openDenPanel={screen === 'den' && !homecoming}
+        onDenPanelHandled={nav.goDoorstep}
+        homecoming={homecoming}
+      />
+  );
+
+  // The one-off reward moment (a "Heimkehr") plays over the world scene, never as a separate screen.
+  // Checked BEFORE the screen switch: logMissedWalk's success path goes to the Doorstep in the same
+  // call that sets the celebration, and the player lands on the scene once the homecoming ends.
   if (celebration) {
-    const { rewards } = celebration;
+    const territoryBeat = celebration.territoryBeat;
     return (
       <ScreenFrame fadeKey="celebration">
-        <CelebrationScreen
-          cellsPainted={rewards.cellsPainted}
-          hasTerritory={rewards.hasTerritory}
-          treatsEarned={rewards.treatsEarned}
-          tease={rewards.tease}
-          unlockedAchievements={rewards.unlockedAchievements}
-          leveledUpTo={rewards.leveledUpTo}
-          oldTreatsPerWalk={rewards.oldTreatsPerWalk}
-          newTreatsPerWalk={rewards.newTreatsPerWalk}
-          cliffhangerTitle={rewards.cliffhangerTitle}
-          newGroundCellCount={rewards.newGroundCellCount}
-          bloomMultiplier={rewards.bloomMultiplier}
-          newTerritoryName={celebration.territoryBeat?.newTerritoryName ?? null}
-          mergedTerritoryNames={celebration.territoryBeat?.mergedTerritoryNames ?? null}
-          dogName={dogName}
-          buddyAppearance={buddyAppearance}
-          walkId={celebration.walkId}
-          onContinue={dismissCelebration}
-        />
+        {worldScene({
+          walk: {
+            walkId: celebration.walkId,
+            rewards: celebration.rewards,
+            newTerritoryName: territoryBeat?.newTerritoryName ?? null,
+            mergedTerritoryNames: territoryBeat?.mergedTerritoryNames ?? null,
+            territoryName: celebration.territoryName ?? null,
+            distanceMeters: celebration.distanceMeters ?? null,
+            walkTime: celebration.walkTime ?? Date.now(),
+            manual: celebration.manual ?? false,
+          },
+          onDone: dismissCelebration,
+        })}
       </ScreenFrame>
     );
   }
@@ -223,39 +264,7 @@ export default function App() {
       // scene with the next-upgrade panel open (notification taps), then settles back to 'doorstep'.
       return (
         <ScreenFrame fadeKey={fadeKey}>
-          <WorldScene
-            dogName={dogName}
-            treats={treats ?? 0}
-            level={level ?? 1}
-            pendingDenAchievements={launch.pendingDenAchievements}
-            session={launch.doorstepSession}
-            greeting={launch.doorstepGreeting}
-            awayStripLines={launch.awayStripLines}
-            denEconomyRepository={repos.denEconomyRepository}
-            personalStatsRepository={repos.personalStatsRepository}
-            homeRangeRepository={repos.homeRangeRepository}
-            walkRepository={repos.walkRepository}
-            settingsRepository={repos.settingsRepository}
-            buddyAppearance={buddyAppearance}
-            buddyAppearanceLoaded={buddyAppearanceLoaded}
-            buddyMood={launch.buddyMood}
-            playGreeting={launch.playBuddyGreeting}
-            onBuddyGreetingStarted={launch.onBuddyGreetingStarted}
-            onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
-            onTreatsChanged={setTreats}
-            onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
-            onStartWalk={() => {
-              nav.goTo('map');
-              walkSession.startWalk();
-            }}
-            updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
-            walkActive={walkSession.isTracking}
-            onOpenMap={() => nav.goTo('map')}
-            onOpenHistory={() => nav.goTo('history')}
-            onOpenSettings={() => nav.goTo('settings')}
-            openDenPanel={screen === 'den'}
-            onDenPanelHandled={nav.goDoorstep}
-          />
+          {worldScene(null)}
         </ScreenFrame>
       );
     case 'territories':
@@ -321,6 +330,8 @@ export default function App() {
             syncEngine={syncEngine}
             about={{ versionLabel: ota.currentVersionLabel, onCheck: ota.checkNow }}
             onSaveAppearance={saveAppearance}
+            onOpenLogMissedWalk={() => nav.goTo('logMissedWalk')}
+            onOpenDebugLog={() => nav.goTo('debugLog')}
             localePreference={localePreference}
             onChangeLocalePreference={changeLocalePreference}
             onClose={nav.close}

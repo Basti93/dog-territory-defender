@@ -1,6 +1,40 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
+/**
+ * "Naht läuft" (Heimkehr beat 1): animates the newest (fresh-band) patch seams' dash offset over STITCH_MS and
+ * draws the new-ground street segments in coral. Plain ES5 string so it can be embedded in the page and unit-tested
+ * with stubs (L, requestAnimationFrame, now). `patches` = layerGroup.hrPatches; segments = [[[lat,lon],[lat,lon]], ...].
+ */
+export const STITCH_PATCH_JS = `
+    var STITCH_MS = 1200;
+    var STITCH_CORAL = '#F2786E';
+    var stitchSegmentsLayer = null;
+    function hrStitchPatch(map, patches, segments, now, raf) {
+      if (stitchSegmentsLayer) { map.removeLayer(stitchSegmentsLayer); stitchSegmentsLayer = null; }
+      var list = (patches || []).filter(function (p) { return p.hrBand && p.hrBand.name === 'fresh'; });
+      if (list.length === 0 && patches && patches.length) list = [patches[patches.length - 1]];
+      var start = now();
+      var distance = 40;
+      function frame() {
+        var k = Math.min(1, (now() - start) / STITCH_MS);
+        list.forEach(function (p) {
+          var el = p._path;
+          if (el && el.style) el.style.strokeDashoffset = String(distance * (1 - k));
+        });
+        if (k < 1) raf(frame);
+      }
+      frame();
+      if (segments && segments.length) {
+        stitchSegmentsLayer = L.layerGroup().addTo(map);
+        segments.forEach(function (seg) {
+          L.polyline(seg, { color: STITCH_CORAL, weight: 4, opacity: 1, lineCap: 'round' }).addTo(stitchSegmentsLayer);
+        });
+      }
+      return list.length;
+    }
+`;
+
 export const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -22,6 +56,7 @@ ${MAP_MARKER_CSS}
   <div id="map"></div>
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
+${STITCH_PATCH_JS}
 
     const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
 ${MAP_TILE_LAYER_JS}
@@ -231,6 +266,12 @@ ${MAP_THEME_PROBE_JS}
           });
         }
         reportToRN('SHOW_CORNERS_APPLIED', { count: corners.length });
+      }
+
+      // Heimkehr beat 1: payload { segments?: [[[lat, lon], [lat, lon]], ...] } (new-ground streets, drawn coral).
+      if (type === 'STITCH_PATCH') {
+        const stitched = hrStitchPatch(map, homeRangeLayerGroup && homeRangeLayerGroup.hrPatches, (payload && payload.segments) || [], function () { return Date.now(); }, function (fn) { requestAnimationFrame(fn); });
+        reportToRN('STITCH_PATCH_APPLIED', { patches: stitched });
       }
 
       // docs/decisions/somewhere-wild — pans/zooms to a specific spot on

@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { BuddyAppearance, defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { ArtKey } from '../../art/artAssets';
-import { ArtImage, Button, Card, Chip, Header, palette, Screen, spacing, textStyle } from '../../ui';
+import { ArtImage, material, PaperHeader, PaperSheet, Screen, spacing, TextLink, textStyle, WoodSign } from '../../ui';
 import { BuddyAvatar } from '../buddy';
 import { t } from '../../i18n';
 
@@ -39,20 +39,20 @@ function PermissionRow({
   onPress: () => void;
 }) {
   return (
-    <Card style={styles.row}>
+    <PaperSheet style={styles.row}>
       <View style={styles.rowHead}>
         <ArtImage art={icon} size={40} />
         <View style={styles.rowText}>
-          <Text style={textStyle('h2')}>{title}</Text>
+          <Text style={[textStyle('sign'), styles.ink]}>{title}</Text>
           <Text style={[textStyle('small'), styles.muted]}>{body}</Text>
         </View>
       </View>
-      {status === 'granted' && <Chip label={t('primer.granted')} tint="meadow" />}
+      {status === 'granted' && <Text style={[textStyle('body'), styles.granted]}>{t('primer.granted')}</Text>}
       {status === 'declined' && <Text style={[textStyle('small'), styles.muted]}>{t('primer.declined')}</Text>}
       {(status === 'idle' || status === 'asking') && (
-        <Button label={buttonLabel} variant="secondary" disabled={status === 'asking'} onPress={onPress} />
+        <TextLink label={buttonLabel} disabled={status === 'asking'} onPress={onPress} />
       )}
-    </Card>
+    </PaperSheet>
   );
 }
 
@@ -72,8 +72,8 @@ export function PermissionPrimerScreen({ onRequestLocation, onRequestReminders, 
   const anyAnswered = location === 'granted' || location === 'declined' || reminders === 'granted' || reminders === 'declined';
 
   return (
-    <Screen scroll backdrop="sky" contentStyle={styles.content}>
-      <Header title={t('primer.title')} icon="icon-paw" />
+    <Screen scroll backdrop="linen" contentStyle={styles.content}>
+      <PaperHeader title={t('primer.title')} style={styles.header} />
       <BuddyAvatar appearance={buddyAppearance ?? defaultBuddyAppearance()} size={140} mood="curious" />
       <Text style={[textStyle('body'), styles.subtitle]}>{t('primer.subtitle')}</Text>
 
@@ -95,9 +95,11 @@ export function PermissionPrimerScreen({ onRequestLocation, onRequestReminders, 
       />
 
       {anyAnswered ? (
-        <Button label={t('onboarding.start')} onPress={onDone} style={styles.cta} />
+        <WoodSign size="wide" fullWidth onPress={onDone} style={styles.cta}>
+          {t('onboarding.start')}
+        </WoodSign>
       ) : (
-        <Button label={t('primer.later')} variant="ghost" onPress={onDone} style={styles.cta} />
+        <TextLink label={t('primer.later')} onPress={onDone} style={styles.later} />
       )}
     </Screen>
   );
@@ -105,10 +107,14 @@ export function PermissionPrimerScreen({ onRequestLocation, onRequestReminders, 
 
 const styles = StyleSheet.create({
   content: { alignItems: 'center', gap: spacing.md },
-  subtitle: { textAlign: 'center', color: palette.muted },
+  subtitle: { textAlign: 'center', color: material.muted },
   row: { alignSelf: 'stretch', gap: spacing.md },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowText: { flex: 1 },
-  muted: { color: palette.muted },
-  cta: { alignSelf: 'stretch', marginTop: spacing.sm },
+  muted: { color: material.muted },
+  ink: { color: material.ink },
+  granted: { color: material.inkGreen },
+  header: { alignSelf: 'stretch' },
+  later: { alignSelf: 'center' },
+  cta: { marginTop: spacing.sm },
 });

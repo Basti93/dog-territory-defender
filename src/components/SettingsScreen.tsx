@@ -5,7 +5,7 @@ import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@rea
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyAppearancePicker } from './buddy';
 import { BuddyLoading } from './BuddyLoading';
-import { Button, Card, Header, ListRow, mix, palette, PressableScale, radii, Screen, spacing, textStyle, tokens } from '../ui';
+import { material, mix, PaperHeader, PaperHint, PaperRow, PaperSection, PaperSheet, palette, PressableScale, radii, Screen, spacing, TextLink, textStyle, tokens, WoodSign } from '../ui';
 import { SoundSettingsCard } from '../feedback/SoundSettingsCard';
 import { dogDisplayName } from '../economy/denEconomy';
 import { NotificationRepository } from '../storage/NotificationRepository';
@@ -41,7 +41,11 @@ interface SettingsScreenProps {
   onChangeLocalePreference: (pref: LocalePreference) => void | Promise<void>;
   /** Household sync (multiplayer-sync). Omitted = no Household card and Restore stays as before. */
   syncEngine?: SyncEngine;
-  /** OTA update info + manual check (useOtaUpdates). Omitted = no About card. */
+  /** Opens the "log a walk we missed" screen (a row on the sheet). */
+  onOpenLogMissedWalk: () => void;
+  /** Opens the debug log screen (a row on the sheet). */
+  onOpenDebugLog: () => void;
+  /** OTA update info + manual check (useOtaUpdates). Omitted = no About section. */
   about?: { versionLabel: string; onCheck: () => Promise<'current' | 'ready' | 'unavailable'> };
 }
 
@@ -73,6 +77,8 @@ export function SettingsScreen({
   onChangeLocalePreference,
   syncEngine,
   about,
+  onOpenLogMissedWalk,
+  onOpenDebugLog,
 }: SettingsScreenProps) {
   const [aboutStatus, setAboutStatus] = useState<string | null>(null);
   useLocale(); // re-render when the language switches
@@ -209,7 +215,7 @@ export function SettingsScreen({
 
   if (!loaded) {
     return (
-      <Screen>
+      <Screen backdrop="linen">
         <BuddyLoading appearance={buddyAppearance} text={t('common.gettingReady')} />
       </Screen>
     );
@@ -217,10 +223,9 @@ export function SettingsScreen({
 
   if (editingLook) {
     return (
-      <Screen padded={false}>
-        <Header
+      <Screen padded={false} backdrop="linen">
+        <PaperHeader
           title={t('settings.lookTitle', { dog: dogDisplayName(dogName) })}
-          icon="icon-paw"
           onBack={() => setEditingLook(false)}
           style={styles.lookHeader}
         />
@@ -237,129 +242,130 @@ export function SettingsScreen({
     );
   }
 
+  const dog = dogDisplayName(dogName);
+
   return (
-    <Screen scroll backdrop="sky">
-      <Header title={t('menu.settings')} icon="icon-settings" onBack={onClose} />
+    <Screen scroll backdrop="linen">
+      <PaperHeader title={t('menu.settings')} onBack={onClose} />
 
-      <Card tint="sky" style={styles.reminderCard}>
-        <View style={styles.rowText}>
-          <Text style={textStyle('h2')}>{t('settings.reminder.title')}</Text>
-          <Text style={[textStyle('small'), styles.rowSubtitle]}>
-            {t('settings.reminder.subtitle')}
-          </Text>
-        </View>
+      <PaperSheet>
+        <PaperSection title={t('post.dog')} first>
+          <PaperRow title={dog} />
+          <PaperRow
+            title={t('settings.changeLook', { dog })}
+            subtitle={t('settings.edit')}
+            onPress={() => setEditingLook(true)}
+            right={<Text style={[textStyle('h2'), styles.chevron]}>{'\u203A'}</Text>}
+          />
+        </PaperSection>
 
-        {permissionDenied && (
-          <View style={styles.hintBox}>
-            <Text style={textStyle('small')}>
-              {t('settings.reminder.permissionOff')}
-            </Text>
-            <Button label={t('settings.openSettings')} variant="secondary" onPress={() => Linking.openSettings()} />
-          </View>
-        )}
-
-        {REMINDER_SLOT_IDS.map((id) => {
-          const slot = slots.find((s) => s.id === id);
-          if (!slot) return null;
-          return (
-            <View key={id} style={styles.slotRow}>
-              <Switch value={slot.enabled} onValueChange={(v) => handleToggle(slot, v)} trackColor={{ true: tokens.green }} />
-              <Text style={[textStyle('body'), styles.slotLabel]}>{t(`settings.reminder.slot.${id}`)}</Text>
-              <PressableScale style={styles.slotTime} onPress={() => openPicker(slot)} accessibilityLabel={t(`settings.reminder.slot.${id}`)}>
-                <Text style={[textStyle('h2'), { color: slot.enabled ? palette.greenText : palette.muted }]}>
-                  {formatReminderTime(slot.hour, slot.minute)}
-                </Text>
-              </PressableScale>
+        <PaperSection title={t('post.reminders')}>
+          <PaperHint>{t('settings.reminder.subtitle')}</PaperHint>
+          {permissionDenied && (
+            <View style={styles.block}>
+              <Text style={[textStyle('small'), styles.ink]}>{t('settings.reminder.permissionOff')}</Text>
+              <TextLink label={t('settings.openSettings')} onPress={() => Linking.openSettings()} />
             </View>
-          );
-        })}
-
-        <View style={styles.hintBox}>
-          <Text style={textStyle('small')}>
-            {t('settings.reminder.diag.permission', {
-              status: diagnostics ? t(`settings.reminder.diag.${diagnostics.permission}`) : LOADING_PLACEHOLDER,
-            })}
-          </Text>
-          <Text style={textStyle('small')}>
-            {diagnostics?.next
-              ? t('settings.reminder.diag.next', { when: `${formatDate(diagnostics.next)} ${formatTime(diagnostics.next)}` })
-              : t('settings.reminder.diag.nextNone')}
-            {' · '}
-            {t('settings.reminder.diag.planned', { count: diagnostics?.planned ?? 0 })}
-          </Text>
-          <Button label={t('settings.reminder.test')} variant="secondary" onPress={handleTest} />
-          {testSent && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.reminder.testSent')}</Text>}
-        </View>
-        <Text style={[textStyle('small'), styles.rowSubtitle]}>
-          {t('settings.reminder.battery')}
-        </Text>
-      </Card>
-
-      <SoundSettingsCard />
-
-      <ListRow
-        icon="icon-paw"
-        title={t('settings.changeLook', { dog: dogDisplayName(dogName) })}
-        subtitle={t('settings.edit')}
-        onPress={() => setEditingLook(true)}
-        style={styles.lookRow}
-      />
-
-      <Card style={styles.languageCard}>
-        <Text style={textStyle('h2')}>Language / Sprache</Text>
-        <View style={styles.languageOptions}>
-          {LANGUAGE_OPTIONS.map((option) => {
-            const selected = localePreference === option.value;
-            const label = option.labelKey ? t(option.labelKey) : option.label;
+          )}
+          {REMINDER_SLOT_IDS.map((id) => {
+            const slot = slots.find((s) => s.id === id);
+            if (!slot) return null;
             return (
-              <PressableScale
-                key={option.value}
-                style={[styles.languageChip, selected && styles.languageChipSelected]}
-                onPress={() => onChangeLocalePreference(option.value)}
-                accessibilityLabel={label}
-              >
-                <Text style={[textStyle('small'), selected && { color: palette.greenText }]}>{label}</Text>
-              </PressableScale>
+              <PaperRow
+                key={id}
+                title={t(`settings.reminder.slot.${id}`)}
+                right={
+                  <View style={styles.slotControls}>
+                    <PressableScale style={styles.slotTime} onPress={() => openPicker(slot)} accessibilityLabel={t(`settings.reminder.slot.${id}`)}>
+                      <Text style={[textStyle('h2'), { color: slot.enabled ? material.inkGreen : material.muted }]}>
+                        {formatReminderTime(slot.hour, slot.minute)}
+                      </Text>
+                    </PressableScale>
+                    <Switch value={slot.enabled} onValueChange={(v) => handleToggle(slot, v)} trackColor={{ true: material.inkGreen }} />
+                  </View>
+                }
+              />
             );
           })}
-        </View>
-      </Card>
+          <View style={styles.block}>
+            <Text style={[textStyle('small'), styles.ink]}>
+              {t('settings.reminder.diag.permission', {
+                status: diagnostics ? t(`settings.reminder.diag.${diagnostics.permission}`) : LOADING_PLACEHOLDER,
+              })}
+            </Text>
+            <Text style={[textStyle('small'), styles.ink]}>
+              {diagnostics?.next
+                ? t('settings.reminder.diag.next', { when: `${formatDate(diagnostics.next)} ${formatTime(diagnostics.next)}` })
+                : t('settings.reminder.diag.nextNone')}
+              {' \u00B7 '}
+              {t('settings.reminder.diag.planned', { count: diagnostics?.planned ?? 0 })}
+            </Text>
+            <TextLink label={t('settings.reminder.test')} onPress={handleTest} />
+            {testSent && <PaperHint>{t('settings.reminder.testSent')}</PaperHint>}
+          </View>
+          <PaperHint>{t('settings.reminder.battery')}</PaperHint>
+        </PaperSection>
 
-      {syncEngine && (
-        <HouseholdCard
-          engine={syncEngine}
-          status={syncStatus}
-          onShareBackup={handleShareBackup}
-          deviceLabel={Platform.OS === 'ios' ? 'iPhone' : 'Android'}
-        />
-      )}
+        <PaperSection title={t('post.sounds')}>
+          <SoundSettingsCard />
+        </PaperSection>
 
-      <Card style={styles.languageCard}>
-        <View style={styles.rowText}>
-          <Text style={textStyle('h2')}>{t('settings.backup.title')}</Text>
-          <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.subtitle')}</Text>
-        </View>
-        <Button label={t('settings.backup.share')} variant="secondary" onPress={handleShareBackup} disabled={backupBusy || walkActive} />
-        <Button label={t('settings.backup.restore')} variant="ghost" onPress={handleRestoreBackup} disabled={backupBusy || walkActive || !restoreAllowed} />
-        {syncStatus?.joined && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('household.restoreOff')}</Text>}
-        {walkActive && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.walkActive')}</Text>}
-      </Card>
+        <PaperSection title="Language / Sprache">
+          <View style={styles.languageOptions}>
+            {LANGUAGE_OPTIONS.map((option) => {
+              const selected = localePreference === option.value;
+              const label = option.labelKey ? t(option.labelKey) : option.label;
+              return (
+                <PressableScale
+                  key={option.value}
+                  style={[styles.languageChip, selected && styles.languageChipSelected]}
+                  onPress={() => onChangeLocalePreference(option.value)}
+                  accessibilityLabel={label}
+                >
+                  <Text style={[textStyle('small'), styles.ink, selected && { color: material.inkGreen }]}>{label}</Text>
+                </PressableScale>
+              );
+            })}
+          </View>
+        </PaperSection>
 
-      {about && (
-        <Card style={styles.languageCard}>
-          <Text style={textStyle('h2')}>{t('settings.about.title')}</Text>
-          <Text style={[textStyle('small'), styles.rowSubtitle]}>{about.versionLabel}</Text>
-          <Button
-            label={t('settings.about.check')}
-            variant="ghost"
-            onPress={async () => {
-              const result = await about.onCheck();
-              setAboutStatus(t(`settings.about.${result}`));
-            }}
-          />
-          {aboutStatus && <Text style={[textStyle('small'), styles.rowSubtitle]}>{aboutStatus}</Text>}
-        </Card>
-      )}
+        {syncEngine && (
+          <PaperSection title={t('household.title')}>
+            <HouseholdCard
+              engine={syncEngine}
+              status={syncStatus}
+              onShareBackup={handleShareBackup}
+              deviceLabel={Platform.OS === 'ios' ? 'iPhone' : 'Android'}
+            />
+          </PaperSection>
+        )}
+
+        <PaperSection title={t('settings.backup.title')}>
+          <PaperHint>{t('settings.backup.subtitle')}</PaperHint>
+          <TextLink label={t('settings.backup.share')} onPress={handleShareBackup} disabled={backupBusy || walkActive} />
+          <TextLink label={t('settings.backup.restore')} onPress={handleRestoreBackup} disabled={backupBusy || walkActive || !restoreAllowed} />
+          {syncStatus?.joined && <PaperHint>{t('household.restoreOff')}</PaperHint>}
+          {walkActive && <PaperHint>{t('settings.backup.walkActive')}</PaperHint>}
+        </PaperSection>
+
+        <PaperSection title={t('menu.logMissedWalk')} onPress={onOpenLogMissedWalk} />
+
+        {about && (
+          <PaperSection title={t('settings.about.title')}>
+            <PaperHint>{about.versionLabel}</PaperHint>
+            <TextLink
+              label={t('settings.about.check')}
+              onPress={async () => {
+                const result = await about.onCheck();
+                setAboutStatus(t(`settings.about.${result}`));
+              }}
+            />
+            {aboutStatus && <PaperHint>{aboutStatus}</PaperHint>}
+          </PaperSection>
+        )}
+
+        <PaperSection title={t('menu.debugLog')} onPress={onOpenDebugLog} />
+      </PaperSheet>
 
       {Platform.OS === 'ios' && iosPicker && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
@@ -374,16 +380,17 @@ export function SettingsScreen({
                 }}
               />
               <View style={styles.iosPickerActions}>
-                <Button label={t('common.cancel')} variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPicker(null)} />
-                <Button
-                  label={t('common.done')}
-                  style={styles.iosPickerButton}
+                <TextLink label={t('common.cancel')} onPress={() => setIosPicker(null)} />
+                <WoodSign
+                  size="medium"
                   onPress={() => {
                     const picked = iosPicker;
                     setIosPicker(null);
                     updateSlot(picked.slotId, { hour: picked.date.getHours(), minute: picked.date.getMinutes() });
                   }}
-                />
+                >
+                  {t('common.done')}
+                </WoodSign>
               </View>
             </View>
           </View>
@@ -394,43 +401,29 @@ export function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  lookRow: { marginTop: spacing.lg },
-  languageCard: { marginTop: spacing.lg, gap: spacing.md },
+  ink: { color: material.ink },
+  chevron: { color: material.inkGreen },
+  block: { gap: spacing.xs, marginVertical: spacing.sm },
   languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   languageChip: {
     minHeight: 44,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     borderRadius: radii.chip,
-    borderWidth: 3,
-    borderColor: 'transparent',
-    backgroundColor: palette.background,
+    borderWidth: 2,
+    borderColor: material.linen,
+    backgroundColor: material.yarn,
   },
-  languageChipSelected: { borderColor: tokens.green, backgroundColor: palette.meadowTint },
-  reminderCard: { gap: spacing.md },
-  hintBox: { gap: spacing.sm },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  rowText: { flex: 1 },
-  rowSubtitle: { color: palette.muted, marginTop: spacing.xs },
-  slotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.tile,
-    backgroundColor: palette.card,
-  },
-  slotLabel: { flex: 1 },
+  languageChipSelected: { borderColor: material.inkGreen },
+  slotControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   slotTime: { minHeight: 44, justifyContent: 'center' },
   lookHeader: { paddingHorizontal: spacing.lg },
   iosPickerBackdrop: { flex: 1, backgroundColor: mix(tokens.brown, tokens.text, 0.3) + '40', justifyContent: 'flex-end' },
   iosPickerSheet: {
-    backgroundColor: palette.background,
+    backgroundColor: material.yarn,
     borderTopLeftRadius: radii.card,
     borderTopRightRadius: radii.card,
     padding: spacing.lg,
   },
-  iosPickerActions: { flexDirection: 'row', gap: spacing.md, paddingTop: spacing.sm },
-  iosPickerButton: { flex: 1 },
+  iosPickerActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
 });

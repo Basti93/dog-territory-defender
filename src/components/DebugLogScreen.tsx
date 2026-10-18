@@ -6,7 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { getDebugLogText, getDebugLogCount, clearDebugLog } from '../utils/debugLog';
 import * as Notifications from 'expo-notifications';
 import { NotificationRepository } from '../storage/NotificationRepository';
-import { Button, Card, Header, palette, radii, Screen, spacing, textStyle } from '../ui';
+import { material, PaperHeader, PaperSheet, radii, Screen, spacing, TextLink, textStyle } from '../ui';
 import { formatDate, t } from '../i18n';
 
 interface DebugLogScreenProps {
@@ -99,48 +99,48 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
   };
 
   return (
-    <Screen>
-      <Header title={t('menu.debugLog')} icon="icon-den" onBack={onClose} />
+    <Screen backdrop="linen">
+      <PaperHeader title={t('menu.debugLog')} onBack={onClose} />
 
       <View style={styles.actions}>
-        <Button label={t('debug.share')} variant="secondary" style={styles.actionButton} onPress={handleShare} />
-        <Button label={t('debug.clear')} variant="secondary" style={styles.actionButton} onPress={handleClear} />
+        <TextLink label={t('debug.share')} onPress={handleShare} />
+        <TextLink label={t('debug.clear')} onPress={handleClear} />
       </View>
 
       {walkReminderSummary && (
-        <Card tint="meadow" style={styles.walkReminderSummary}>
-          <Text style={textStyle('small')}>
+        <PaperSheet style={styles.walkReminderSummary}>
+          <Text style={[textStyle('small'), styles.ink]}>
             {t('debug.reminderSummary', {
               date: formatDate(walkReminderSummary.startedAt),
               fired: walkReminderSummary.firedCount,
               followed: walkReminderSummary.followedCount,
             })}
           </Text>
-        </Card>
+        </PaperSheet>
       )}
 
       {pendingReminders && (
-        <Card tint="meadow" style={styles.walkReminderSummary}>
-          <Text style={textStyle('small')}>
+        <PaperSheet style={styles.walkReminderSummary}>
+          <Text style={[textStyle('small'), styles.ink]}>
             {t('debug.pendingReminders', { count: pendingReminders.length })}
             {pendingReminders.map((d) => `\n${d}`).join('')}
           </Text>
-        </Card>
+        </PaperSheet>
       )}
 
       <Text style={[textStyle('small'), styles.count]}>{count === null ? t('common.loading') : t('debug.entries', { count })}</Text>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={[textStyle('small'), styles.logText]}>{preview || t('debug.noEntries')}</Text>
+        <Text style={[textStyle('small'), styles.ink, styles.logText]}>{preview || t('debug.noEntries')}</Text>
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', gap: spacing.sm },
-  actionButton: { flex: 1 },
-  count: { color: palette.muted, textAlign: 'center', marginTop: spacing.sm },
+  actions: { flexDirection: 'row', gap: spacing.xl },
+  ink: { color: material.ink },
+  count: { color: material.muted, textAlign: 'center', marginTop: spacing.sm },
   // The 4-week measurement summary (docs/decisions/walk-reminder/design.md
   // Decision 10) — a small fixed block above the scrollable log preview,
   // reading durable counters directly off NotificationRepository rather than
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: spacing.sm,
     borderRadius: radii.card,
-    backgroundColor: palette.card,
+    backgroundColor: material.yarn,
   },
   scrollContent: { padding: spacing.lg },
   logText: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 12 },

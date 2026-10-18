@@ -34,6 +34,7 @@ export type ArtKey =
   | 'sign-medium'
   | 'sign-wide'
   | 'doormat'
+  | 'linen'
   | 'pennant'
   | 'postcard-blank'
   // Wild Extras props (weird streak). Registry lines land with the PNGs; until then YardExtras draws fallbacks.
@@ -124,6 +125,7 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'sign-medium': require('../../assets/art/sign-medium.png'),
   'sign-wide': require('../../assets/art/sign-wide.png'),
   'doormat': require('../../assets/art/doormat.png'),
+  'linen': require('../../assets/art/linen.png'),
   'pennant': require('../../assets/art/pennant.png'),
   'postcard-blank': require('../../assets/art/postcard-blank.png'),
 };

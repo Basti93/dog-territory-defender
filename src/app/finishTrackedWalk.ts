@@ -23,6 +23,10 @@ export interface WalkRewardsOutcome {
   celebration: WalkRewardsCelebration;
   territoryBeat: TerritoryBeat | null;
   /** Inputs for the Den's Wild Extras (cosmetic cameos); absent for manual logs. */
+  /** Walk length in metres (the homecoming's fallback "one number"). */
+  distanceMeters?: number;
+  /** Name of the territory this walk was credited to, for the homecoming's closing line. */
+  territoryName?: string | null;
   wildExtra?: { distanceKm: number; walkIndex: number; closedAt: number };
 }
 
@@ -82,6 +86,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
   // (design.md Decision 5's structural exclusion).
   const territoryIdByNewCellId = new Map<string, string>();
   let creditedTerritoryId: string | null = null;
+  let creditedTerritoryName: string | null = null;
   let resolvedTerritoryBeat: TerritoryBeat | null = null;
   let pendingMerges: Array<{ survivorId: string; loserId: string }> = [];
 
@@ -113,6 +118,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     }
 
     creditedTerritoryId = resolveRealId(plan.creditedTerritoryId);
+    creditedTerritoryName = territoryNamesById.get(creditedTerritoryId) ?? null;
     resolvedTerritoryBeat = resolveCelebrationTerritoryBeat(plan, birthNamesByProvisionalId, territoryNamesById);
     pendingMerges = plan.merges;
   }
@@ -209,6 +215,8 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
       level: result.denEconomyState.level,
       celebration: result.celebration,
       territoryBeat: resolvedTerritoryBeat,
+      distanceMeters,
+      territoryName: creditedTerritoryName,
       wildExtra: { distanceKm: distanceMeters / 1000, walkIndex, closedAt: Date.now() },
     });
 

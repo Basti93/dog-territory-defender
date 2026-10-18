@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import * as Location from 'expo-location';
 import { play } from '../feedback/sounds';
 import { createWalkCueTracker } from '../feedback/walkCues';
 import { AppState, Walk } from '../types';
@@ -73,12 +74,20 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       startWalkCueState(walkCueState, initialLoc);
 
       // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
-      await startWatchingLocation((location) => {
+      let fixCount = 0;
+      const watching = await startWatchingLocation((location) => {
+        fixCount++;
+        if (fixCount % 10 === 0) log('WALK_FIX_APPENDED', { count: fixCount });
         // Audio cues only (never visual); sounds.play() also checks the sound pref.
         const cue = applyLocationToCues(walkCueState, location, cueTracker);
         if (cue) play(cue);
         setAppState((prev) => appendLocation(prev, location));
       });
+      if (!watching) {
+        // Previously swallowed: the walk then "tracked" with only its first point.
+        log('WALK_WATCH_FAILED', { id: newWalk.id });
+        setError(t('app.watchFailed'));
+      }
       if (cancelled()) {
         // cancelWalk ran while the watcher was starting; it may have stopped nothing yet.
         await stopWatchingLocation();
@@ -92,7 +101,17 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         })
         .catch((err) => log('WALK_CUE_RANGE_ERROR', { error: String(err) }));
 
-      log('WALK_START', { id: newWalk.id, lat: initialLoc.latitude, lon: initialLoc.longitude });
+      const [fg, bg] = await Promise.all([Location.getForegroundPermissionsAsync(), Location.getBackgroundPermissionsAsync()]).catch(
+        () => [{ status: 'unknown' }, { status: 'unknown' }]
+      );
+      log('WALK_START', {
+        id: newWalk.id,
+        lat: initialLoc.latitude,
+        lon: initialLoc.longitude,
+        watching,
+        foreground: fg.status,
+        background: bg.status,
+      });
 
       setAppState((prev) => ({ ...prev, walk: newWalk, isTracking: true }));
 

@@ -17,7 +17,17 @@ afterEach(() => {
 });
 
 /** Mirrors App.tsx: applying a preference switches the live locale. */
-function Harness({ walkActive = false, onClose = () => {} }: { walkActive?: boolean; onClose?: () => void }) {
+function Harness({
+  walkActive = false,
+  onClose = () => {},
+  onOpenLogMissedWalk = () => {},
+  onOpenDebugLog = () => {},
+}: {
+  walkActive?: boolean;
+  onClose?: () => void;
+  onOpenLogMissedWalk?: () => void;
+  onOpenDebugLog?: () => void;
+}) {
   const [pref, setPref] = useState<LocalePreference>('en');
   const [notificationRepository] = useState(createInMemoryNotificationRepository);
   const [walkRepository] = useState(createInMemoryWalkRepository);
@@ -30,6 +40,8 @@ function Harness({ walkActive = false, onClose = () => {} }: { walkActive?: bool
       buddyAppearance={defaultBuddyAppearance()}
       walkActive={walkActive}
       onSaveAppearance={jest.fn()}
+      onOpenLogMissedWalk={onOpenLogMissedWalk}
+      onOpenDebugLog={onOpenDebugLog}
       localePreference={pref}
       onChangeLocalePreference={(next) => {
         setPref(next);
@@ -41,7 +53,7 @@ function Harness({ walkActive = false, onClose = () => {} }: { walkActive?: bool
 
 async function setup(props: React.ComponentProps<typeof Harness> = {}) {
   const view = await renderScreen(<Harness {...props} />);
-  await screen.findByText(t('settings.reminder.title')); // repo state loaded
+  await screen.findByText(t('post.reminders')); // repo state loaded
   await flush();
   return view;
 }
@@ -54,6 +66,21 @@ describe('SettingsScreen', () => {
     }
     // 3 reminder switches + sound + haptics + music
     expect(screen.getAllByRole('switch')).toHaveLength(6);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('lists the paper sections in order and opens the missed-walk and debug screens', async () => {
+    const onOpenLogMissedWalk = jest.fn();
+    const onOpenDebugLog = jest.fn();
+    const view = await setup({ onOpenLogMissedWalk, onOpenDebugLog });
+    const titles = [t('post.dog'), t('post.reminders'), t('post.sounds'), 'Language / Sprache', t('settings.backup.title'), t('menu.logMissedWalk'), t('menu.debugLog')];
+    const headers = screen.getAllByRole('header').map((n) => n.props.children).filter((c) => typeof c === 'string');
+    const seen = titles.filter((title) => headers.includes(title) || screen.queryByRole('button', { name: title }));
+    expect(seen).toEqual(titles);
+    await fireEvent.press(screen.getByRole('button', { name: t('menu.logMissedWalk') }));
+    await fireEvent.press(screen.getByRole('button', { name: t('menu.debugLog') }));
+    expect(onOpenLogMissedWalk).toHaveBeenCalledTimes(1);
+    expect(onOpenDebugLog).toHaveBeenCalledTimes(1);
     await unmountAndExpectNoTimers(view);
   });
 
@@ -106,12 +133,14 @@ describe('SettingsScreen with a household', () => {
         buddyAppearance={defaultBuddyAppearance()}
         walkActive={false}
         onSaveAppearance={jest.fn()}
+        onOpenLogMissedWalk={jest.fn()}
+        onOpenDebugLog={jest.fn()}
         localePreference="en"
         onChangeLocalePreference={jest.fn()}
         syncEngine={engine}
       />
     );
-    await screen.findByText(t('settings.reminder.title'));
+    await screen.findByText(t('post.reminders'));
     await flush();
     return view;
   }

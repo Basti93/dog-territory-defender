@@ -541,7 +541,7 @@ const de: Record<string, string> = {
   "homecoming.line.place.4": "{when} bei {place}: das kommt in die Erinnerungskiste.",
   "homecoming.line.place.5": "{dog} ist sicher, dass {place} heute besser roch als gestern.",
   "homecoming.line.when.1": "{when}, und {dog} ist mit voller Nase zu Hause.",
-  "homecoming.line.when.2": "Ein guter Zeitpunkt für eine Runde, findet {dog}.",
+  "homecoming.line.when.2": "{when} ist ein guter Zeitpunkt für eine Runde, findet {dog}.",
   "homecoming.line.when.3": "{dog} legt sich hin wie jemand, der es sich verdient hat.",
   "homecoming.line.when.4": "Der Hof hat euch beide ein bisschen vermisst.",
   "homecoming.line.when.5": "{when}: eingenäht, unterschrieben, beschnuppert.",

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Button, Card, palette, radii, spacing, textStyle } from '../ui';
+import { material, PaperHint, TextLink, WoodSign, radii, spacing, textStyle } from '../ui';
 import { formatDate, formatTime, t, tPlural } from '../i18n';
 import { API_LIMITS } from '../sync/apiContract';
 import { DEFAULT_SERVER_URL, INVITE_CODE_LENGTH } from '../sync/syncConfig';
@@ -76,20 +76,19 @@ export function HouseholdCard({ engine, status, onShareBackup, deviceLabel }: Ho
     const shownName = nameDraft ?? status.playerName ?? '';
     const canSaveName = nameDraft !== null && nameDraft.trim().length > 0 && nameDraft.trim() !== (status.playerName ?? '');
     return (
-      <Card style={styles.card}>
-        <Text style={textStyle('h2')}>{t('household.title')}</Text>
-        <Text style={textStyle('body')}>
+      <View style={styles.card}>
+        <Text style={[textStyle('body'), styles.ink]}>
           {status.householdName
             ? t('household.status.connectedHousehold', { player: status.playerName ?? '', household: status.householdName })
             : t('household.status.connected', { player: status.playerName ?? '' })}
         </Text>
-        <Text style={[textStyle('small'), styles.muted]}>
+        <PaperHint>
           {last
             ? t('household.status.lastSync', { when: `${formatDate(last)} ${formatTime(last)}` })
             : t('household.status.never')}
           {status.pending > 0 ? ` · ${tPlural('household.status.outbox', status.pending)}` : ''}
-        </Text>
-        {status.unauthorized && <Text style={[textStyle('small'), styles.muted]}>{t('household.status.unauthorized')}</Text>}
+        </PaperHint>
+        {status.unauthorized && <PaperHint>{t('household.status.unauthorized')}</PaperHint>}
         <TextInput
           style={[textStyle('body'), styles.input]}
           value={shownName}
@@ -98,28 +97,27 @@ export function HouseholdCard({ engine, status, onShareBackup, deviceLabel }: Ho
             setNameSaved(false);
           }}
           placeholder={t('household.playerName')}
-          placeholderTextColor={palette.muted}
+          placeholderTextColor={material.muted}
           maxLength={API_LIMITS.maxRenameLength}
           accessibilityLabel={t('household.rename.label')}
         />
-        {nameSaved && <Text style={[textStyle('small'), styles.muted]}>{t('household.rename.saved')}</Text>}
-        <Button label={t('household.rename.save')} variant="secondary" onPress={() => void saveName()} disabled={!canSaveName} />
-        <Button label={t('household.syncNow')} variant="secondary" onPress={() => void engine.syncNow({ force: true })} disabled={status.busy} />
-        <Button label={t('household.leave.button')} variant="ghost" onPress={handleLeave} />
-      </Card>
+        {nameSaved && <PaperHint>{t('household.rename.saved')}</PaperHint>}
+        <TextLink label={t('household.rename.save')} onPress={() => void saveName()} disabled={!canSaveName} />
+        <TextLink label={t('household.syncNow')} onPress={() => void engine.syncNow({ force: true })} disabled={status.busy} />
+        <TextLink label={t('household.leave.button')} onPress={handleLeave} />
+      </View>
     );
   }
 
   return (
-    <Card style={styles.card}>
-      <Text style={textStyle('h2')}>{t('household.title')}</Text>
-      <Text style={[textStyle('small'), styles.muted]}>{t('household.subtitle')}</Text>
+    <View style={styles.card}>
+      <PaperHint>{t('household.subtitle')}</PaperHint>
       <TextInput
         style={[textStyle('body'), styles.input]}
         value={serverUrl}
         onChangeText={setServerUrl}
         placeholder={t('household.serverUrl')}
-        placeholderTextColor={palette.muted}
+        placeholderTextColor={material.muted}
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
@@ -130,7 +128,7 @@ export function HouseholdCard({ engine, status, onShareBackup, deviceLabel }: Ho
         value={playerName}
         onChangeText={setPlayerName}
         placeholder={t('household.playerName')}
-        placeholderTextColor={palette.muted}
+        placeholderTextColor={material.muted}
         maxLength={API_LIMITS.maxRenameLength}
         accessibilityLabel={t('household.playerName')}
       />
@@ -139,29 +137,32 @@ export function HouseholdCard({ engine, status, onShareBackup, deviceLabel }: Ho
         value={code}
         onChangeText={setCode}
         placeholder={t('household.inviteCode')}
-        placeholderTextColor={palette.muted}
+        placeholderTextColor={material.muted}
         autoCapitalize="characters"
         autoCorrect={false}
         maxLength={INVITE_CODE_LENGTH + 2}
         accessibilityLabel={t('household.inviteCode')}
       />
-      {error && <Text style={[textStyle('small'), styles.muted]}>{error}</Text>}
-      <Button label={t('household.join.button')} onPress={handleJoin} disabled={!canJoin} />
-    </Card>
+      {error && <PaperHint>{error}</PaperHint>}
+      <WoodSign size="medium" fullWidth onPress={handleJoin} disabled={!canJoin}>
+        {t('household.join.button')}
+      </WoodSign>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: spacing.lg, gap: spacing.md },
-  muted: { color: palette.muted },
+  card: { gap: spacing.sm },
+  ink: { color: material.ink },
   input: {
     borderWidth: 2,
-    borderColor: palette.border,
-    borderRadius: radii.tile,
-    backgroundColor: palette.background,
+    borderColor: material.woodRim,
+    borderRadius: radii.chip,
+    backgroundColor: material.yarn,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     minHeight: 52,
+    color: material.ink,
     lineHeight: undefined, // fixed lineHeight clips text inside a TextInput
   },
 });

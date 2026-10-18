@@ -3,7 +3,7 @@ import { NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, 
 
 import { BuddyAppearance, defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { ArtKey } from '../../art/artAssets';
-import { ArtImage, Button, Card, palette, PressableScale, Screen, spacing, textStyle, tokens } from '../../ui';
+import { ArtImage, material, PaperSheet, PressableScale, Screen, spacing, TextLink, textStyle, WoodSign } from '../../ui';
 import { BuddyAvatar } from '../buddy';
 import { BuddyMood } from '../buddy/buddyMood';
 import { t } from '../../i18n';
@@ -80,9 +80,9 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
   };
 
   return (
-    <Screen backdrop="sky" padded={false}>
+    <Screen backdrop="linen" padded={false}>
       <View style={styles.skipRow}>
-        {!last && <Button label={t('onboarding.skip')} variant="ghost" onPress={onDone} style={styles.skip} />}
+        {!last && <TextLink label={t('onboarding.skip')} onPress={onDone} style={styles.skip} />}
       </View>
 
       <ScrollView
@@ -100,10 +100,10 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
             testID="onboarding-page"
           >
             <Scene spec={spec} appearance={appearance} width={width} maxBox={pagerHeight > 0 ? pagerHeight * 0.5 : 300} />
-            <Card style={styles.textCard}>
-              <Text style={[textStyle('h1'), styles.center]}>{t(spec.titleKey)}</Text>
+            <PaperSheet style={styles.textCard}>
+              <Text style={[textStyle('signBig'), styles.center, styles.ink]}>{t(spec.titleKey)}</Text>
               <Text style={[textStyle('body'), styles.center, styles.body]}>{t(spec.bodyKey)}</Text>
-            </Card>
+            </PaperSheet>
           </View>
         ))}
       </ScrollView>
@@ -123,11 +123,9 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
             />
           ))}
         </View>
-        <Button
-          label={last ? t('onboarding.start') : t('common.next')}
-          onPress={goNext}
-          style={styles.cta}
-        />
+        <WoodSign size="wide" fullWidth onPress={goNext} style={styles.cta}>
+          {last ? t('onboarding.start') : t('common.next')}
+        </WoodSign>
       </View>
     </Screen>
   );
@@ -147,10 +145,11 @@ const styles = StyleSheet.create({
   houseBehind: { position: 'absolute', top: 0 },
   textCard: { alignSelf: 'stretch', gap: spacing.sm },
   center: { textAlign: 'center' },
-  body: { color: palette.muted },
+  body: { color: material.muted },
+  ink: { color: material.ink },
   footer: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.lg, alignItems: 'center' },
   dots: { flexDirection: 'row', gap: spacing.sm },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.border },
-  dotActive: { width: 26, backgroundColor: tokens.green },
-  cta: { alignSelf: 'stretch' },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: material.woodRim },
+  dotActive: { width: 26, backgroundColor: material.inkGreen },
+  cta: {},
 });

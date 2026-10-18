@@ -1,4 +1,4 @@
-import { mapHTML } from '../mapHTML';
+import { mapHTML, STITCH_PATCH_JS } from '../mapHTML';
 import { portraitHTML } from '../portraitHTML';
 
 describe('live map HTML', () => {
@@ -70,5 +70,53 @@ describe('live map HTML', () => {
 
   it('uses the coral pin for Somewhere Wild', () => {
     expect(mapHTML).toContain(encodeURIComponent('#F2786E'));
+  });
+
+  describe('STITCH_PATCH (Heimkehr: the seam runs)', () => {
+    const load = () => new Function('L', `${STITCH_PATCH_JS}; return hrStitchPatch;`);
+    const makeEnv = () => {
+      const added: unknown[] = [];
+      const layer = { addTo: () => layer };
+      const L = {
+        layerGroup: () => layer,
+        polyline: (seg: unknown, opts: { color: string }) => {
+          added.push({ seg, color: opts.color });
+          return { addTo: () => undefined };
+        },
+      };
+      return { L, added, map: { removeLayer: jest.fn() } };
+    };
+
+    it('is wired into the live map message handler', () => {
+      expect(mapHTML).toContain("type === 'STITCH_PATCH'");
+      expect(mapHTML).toContain('function hrStitchPatch');
+    });
+
+    it('animates only the fresh patches dash offset over 1.2 s, ending at 0', () => {
+      const env = makeEnv();
+      const fresh = { hrBand: { name: 'fresh' }, _path: { style: { strokeDashoffset: '' } } };
+      const usual = { hrBand: { name: 'usual' }, _path: { style: { strokeDashoffset: '' } } };
+      let time = 0;
+      const frames: Array<() => void> = [];
+      const stitch = load()(env.L);
+      const count = stitch(env.map, [usual, fresh], [], () => time, (fn: () => void) => frames.push(fn));
+      expect(count).toBe(1);
+      expect(Number(fresh._path.style.strokeDashoffset)).toBe(40);
+      expect(usual._path.style.strokeDashoffset).toBe('');
+      time = 600;
+      frames.shift()!();
+      expect(Number(fresh._path.style.strokeDashoffset)).toBeCloseTo(20);
+      time = 1200;
+      frames.shift()!();
+      expect(Number(fresh._path.style.strokeDashoffset)).toBe(0);
+      expect(frames).toHaveLength(0);
+    });
+
+    it('draws the new-ground segments in coral', () => {
+      const env = makeEnv();
+      const stitch = load()(env.L);
+      stitch(env.map, [], [[[1, 2], [3, 4]]], () => 0, () => undefined);
+      expect(env.added).toEqual([{ seg: [[1, 2], [3, 4]], color: '#F2786E' }]);
+    });
   });
 });

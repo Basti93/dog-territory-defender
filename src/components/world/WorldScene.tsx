@@ -30,6 +30,8 @@ import { YardButterflies } from '../den/YardButterflies';
 import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
 import { BuildingPanel } from './BuildingPanel';
+import { Homecoming } from './Homecoming';
+import type { HomecomingWalk } from './homecomingPlan';
 import {
   BOTTOM_ROW_H,
   BUDDY_SIZE,
@@ -93,6 +95,8 @@ export interface WorldSceneProps {
   /** The `den` screen alias (notification taps): scroll to the yard and open the next-upgrade panel. */
   openDenPanel?: boolean;
   onDenPanelHandled?: () => void;
+  /** A walk just ended: the Heimkehr plays over the scene (camera to the Viertel, then the yard) until `onDone`. */
+  homecoming?: { walk: HomecomingWalk; onDone: () => void } | null;
 }
 
 type NoteKind = 'update' | 'line';
@@ -149,6 +153,7 @@ export function WorldScene(props: WorldSceneProps) {
     onOpenSettings,
     openDenPanel = false,
     onDenPanelHandled,
+    homecoming = null,
   } = props;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -251,6 +256,24 @@ export function WorldScene(props: WorldSceneProps) {
       alive = false;
     };
   }, [walkRepository]);
+
+  // Homecoming: walks closed so far (this one included) picks the choreography variant; no new storage.
+  const [homecomingCount, setHomecomingCount] = useState<number | null>(null);
+  const homecomingActive = !!homecoming;
+  useEffect(() => {
+    if (!homecomingActive) {
+      setHomecomingCount(null);
+      return;
+    }
+    let alive = true;
+    personalStatsRepository
+      .getState()
+      .then((s) => alive && setHomecomingCount(s.totalWalksClosed))
+      .catch(() => alive && setHomecomingCount(0));
+    return () => {
+      alive = false;
+    };
+  }, [homecomingActive, personalStatsRepository]);
 
   // ---- Gate: swing open, Buddy trots through, then the existing walk flow ----
   type GateFrame = 'sit' | 'a' | 'b';
@@ -361,6 +384,7 @@ export function WorldScene(props: WorldSceneProps) {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         overScrollMode="never"
+        scrollEnabled={!homecoming}
       >
         {/* Layer order in the tree is the TalkBack order: yard, fence, neighbourhood; zIndex sets what is drawn on top. */}
 
@@ -399,7 +423,7 @@ export function WorldScene(props: WorldSceneProps) {
                 bounceN={den.upgrade && den.upgrade.building === k ? den.upgrade.n : 0}
               />
             ))}
-            <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { opacity: leaving ? 0 : 1 }]}>
+            <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { opacity: leaving || homecoming ? 0 : 1 }]}>
               <YardBuddy
                 appearance={buddyAppearance}
                 name={dog}
@@ -676,7 +700,23 @@ export function WorldScene(props: WorldSceneProps) {
         </Animated.View>
       </Animated.ScrollView>
 
-      {isUp && (
+      {homecoming && homecomingCount !== null && (
+        <Homecoming
+          walk={homecoming.walk}
+          walkCount={homecomingCount}
+          dog={dog}
+          appearance={buddyAppearance}
+          layout={layout}
+          yard={yard}
+          bowl={{ total: Math.floor(state.treats), cap }}
+          level={level}
+          levelTitle={title}
+          onCamera={(target) => (target === 'viertel' ? scrollToViertel() : scrollToYard())}
+          onDone={homecoming.onDone}
+        />
+      )}
+
+      {isUp && !homecoming && (
         <View pointerEvents="box-none" style={[styles.backWrap, { bottom: insets.bottom + spacing.lg }]}>
           <WoodSign size="medium" onPress={scrollToYard} accessibilityLabel={t('world.backToYard')} textStyleOverride={SMALL_SIGN_TEXT}>
             {`↓ ${t('world.backToYard')}`}
