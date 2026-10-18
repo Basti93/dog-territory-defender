@@ -28,3 +28,7 @@ Converts any mp3/m4a/wav to the app format, trims leading silence, caps at 1.5 s
 and protects the cue in `keep.json`. Free sources usable in a published app without
 attribution: Pixabay (pixabay.com/sound-effects), Mixkit (mixkit.co). On Freesound use
 the CC0 filter. Restart the app after importing (Metro caches assets).
+
+## Third-party recordings
+
+- `buddy-1.wav`, `buddy-2.wav`, `buddy-3.wav`: derived from "George vuf 1996.ogg" by its author, released into the public domain on Wikimedia Commons (https://commons.wikimedia.org/wiki/File:George_vuf_1996.ogg). Variants: original, +12% pitch, double bark.
