@@ -149,6 +149,18 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
     return loadingRef.current;
   };
 
+  // Start (or resume) playback on `sound` at volume 0, then fade in.
+  const startPlayback = async (sound: AvSound) => {
+    if (!playingRef.current) {
+      volumeRef.current = 0;
+      await sound.setVolumeAsync(0);
+      await sound.playAsync();
+      playingRef.current = true;
+      setMusicPlaying(true);
+    }
+    fadeTo(sound, AMBIENT_VOLUME, FADE_IN_MS);
+  };
+
   useEffect(() => {
     wantedRef.current = wanted;
     if (Platform.OS === 'web') return;
@@ -156,17 +168,27 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
       load().then(async (sound) => {
         if (!sound || !wantedRef.current || unmountedRef.current) return;
         try {
-          if (!playingRef.current) {
-            volumeRef.current = 0;
-            await sound.setVolumeAsync(0);
-            await sound.playAsync();
-            playingRef.current = true;
-            setMusicPlaying(true);
-          }
-          fadeTo(sound, AMBIENT_VOLUME, FADE_IN_MS);
+          await startPlayback(sound);
         } catch (e) {
-          // audio is a bonus; stay silent on failure, but leave a trace
-          log('music', { event: 'play-failed', error: e instanceof Error ? e.message : String(e) });
+          const message = e instanceof Error ? e.message : String(e);
+          if (!message.includes('does not exist')) {
+            // audio is a bonus; stay silent on failure, but leave a trace
+            log('music', { event: 'play-failed', error: message });
+            return;
+          }
+          // Native player is gone (e.g. after a hot reload): recreate once and resume.
+          try {
+            stopFade();
+            soundRef.current?.unloadAsync().catch(() => {});
+            soundRef.current = null;
+            playingRef.current = false;
+            const fresh = await load();
+            if (!fresh || !wantedRef.current || unmountedRef.current) return;
+            log('music', { event: 'reloaded' });
+            await startPlayback(fresh);
+          } catch (e2) {
+            log('music', { event: 'play-failed', error: e2 instanceof Error ? e2.message : String(e2) });
+          }
         }
       });
     } else if (soundRef.current && playingRef.current) {

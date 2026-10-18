@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
+import { LogBox } from 'react-native';
+
+// expo-av still works on SDK 54; the deprecation banner would otherwise cover the Doorstep menu in dev builds.
+LogBox.ignoreLogs(['Expo AV has been deprecated']);
 
 import { repos } from './src/app/repositories';
 import { screenKey, useNavigation } from './src/app/navigation';

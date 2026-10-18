@@ -21,9 +21,32 @@ const SOURCES: Record<SoundName, () => number> = {
   'walk-done': () => require('../../assets/sounds/walk-done.wav'),
 };
 
-type AvSound = { replayAsync: () => Promise<unknown> };
+type AvSound = {
+  replayAsync: () => Promise<unknown>;
+  getStatusAsync?: () => Promise<{ isLoaded?: boolean }>;
+  unloadAsync?: () => Promise<unknown>;
+};
 
-const loaded: Partial<Record<SoundName, AvSound>> = {};
+// Fast Refresh re-evaluates this module but expo-av's native players may already
+// be gone (or still alive and now orphaned). The cache therefore lives on
+// globalThis; a re-evaluated module unloads the previous instances and starts clean.
+declare global {
+  // eslint-disable-next-line no-var
+  var __dtdSounds: Partial<Record<SoundName, AvSound>> | undefined;
+}
+
+function discardPrevious(previous: Partial<Record<SoundName, AvSound>> | undefined): void {
+  if (!previous) return;
+  for (const sound of Object.values(previous)) {
+    try {
+      sound?.unloadAsync?.().catch(() => {});
+    } catch {
+      // already released natively
+    }
+  }
+}
+discardPrevious(globalThis.__dtdSounds);
+const loaded: Partial<Record<SoundName, AvSound>> = (globalThis.__dtdSounds = {});
 let audioModeSet = false;
 let inFlight: Promise<void> | null = null;
 let audioModeInFlight: Promise<void> | null = null;
@@ -107,6 +130,51 @@ function ensureLoaded(): Promise<void> {
   return inFlight;
 }
 
+function isDeadPlayerError(e: unknown): boolean {
+  return errorMessage(e).includes('does not exist');
+}
+
+// Evicts the cached entry and creates a fresh native player. Separate from the
+// load-failure attempt counter on purpose. Concurrent heals of one sound share a promise.
+const reloading: Partial<Record<SoundName, Promise<AvSound>>> = {};
+function reloadSound(name: SoundName, reason: string): Promise<AvSound> {
+  const existing = reloading[name];
+  if (existing) return existing;
+  const old = loaded[name];
+  delete loaded[name];
+  discardPrevious({ [name]: old });
+  const p = (async () => {
+    const { Audio } = require('expo-av') as typeof import('expo-av');
+    const { sound } = await Audio.Sound.createAsync(SOURCES[name](), { shouldPlay: false });
+    loaded[name] = sound;
+    log('sound', { event: 'reloaded', sound: name, reason });
+    return sound as AvSound;
+  })().finally(() => {
+    delete reloading[name];
+  });
+  reloading[name] = p;
+  return p;
+}
+
+// Replays; if the native player is gone (unloaded, or "Player does not exist"
+// after a hot reload) re-creates it and retries exactly once. Throws if the retry fails.
+async function replayWithHeal(name: SoundName, sound: AvSound): Promise<void> {
+  let current = sound;
+  try {
+    const status = await current.getStatusAsync?.();
+    if (status && status.isLoaded === false) current = await reloadSound(name, 'not-loaded');
+  } catch (e) {
+    // getStatusAsync itself failing means the player is gone too
+    current = await reloadSound(name, isDeadPlayerError(e) ? 'player-missing' : 'status-failed');
+  }
+  try {
+    await current.replayAsync();
+  } catch (e) {
+    current = await reloadSound(name, isDeadPlayerError(e) ? 'player-missing' : 'replay-failed');
+    await current.replayAsync();
+  }
+}
+
 /** Loads every sound ahead of time (call at app start, non-blocking) so the first tap is audible. */
 export function preloadSounds(): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
@@ -127,6 +195,8 @@ let lastBuddySound: BuddySoundName | null = null;
 /** The "wuff-wuff" for a Buddy tap; rotates through the three motifs. */
 export function playBuddy(): void {
   lastBuddySound = pickBuddySound(lastBuddySound);
+  // Always logged, so the Debug Log tells "tap never arrived" (no line) apart from "tap arrived, sound muted/failed".
+  log('sound', { event: 'buddy-tap', sound: lastBuddySound, enabled: shouldPlay(getFeedbackPrefs(), 'sound') });
   play(lastBuddySound);
 }
 
@@ -144,7 +214,7 @@ export function play(name: SoundName): void {
         log('sound', { event: 'play-skipped-not-loaded', sound: name });
         return undefined;
       }
-      return sound.replayAsync();
+      return replayWithHeal(name, sound);
     })
     .catch((e) => {
       log('sound', { event: 'play-failed', sound: name, error: errorMessage(e) });

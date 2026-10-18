@@ -27,9 +27,10 @@ export function DoorstepMenu({ visible, onClose, onOpenDebugLog, onOpenLogMissed
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* Inner Pressable swallows taps so touching the sheet does not close it. */}
         <Pressable style={[styles.sheet, { paddingBottom: spacing.xl + insets.bottom }]} onPress={() => {}}>
-          <ListRow title={t('menu.debugLog')} icon="icon-pin" onPress={onOpenDebugLog} />
-          <ListRow title={t('menu.logMissedWalk')} icon="icon-walks" onPress={onOpenLogMissedWalk} />
+          {/* Settings first: in dev builds the LogBox warning banner covers the bottom row. */}
           <ListRow title={t('menu.settings')} icon="icon-settings" onPress={onOpenSettings} />
+          <ListRow title={t('menu.logMissedWalk')} icon="icon-walks" onPress={onOpenLogMissedWalk} />
+          <ListRow title={t('menu.debugLog')} icon="icon-pin" onPress={onOpenDebugLog} />
         </Pressable>
       </Pressable>
     </Modal>
