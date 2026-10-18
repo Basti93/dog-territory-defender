@@ -3,7 +3,7 @@ import { createInMemoryTerritoryRepository } from '../../storage/inMemoryTerrito
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { Location } from '../../types';
 import { CELLS_PER_STREET, cellKey } from '../../utils/grid';
-import { dayPhrase, evaluateSomewhereWild, INITIAL_WILD_CLUSTER_VARIANT_STATE } from '../SomewhereWildCard';
+import { dayPhrase, evaluateSomewhereWild, evaluateSomewhereWildShared, INITIAL_WILD_CLUSTER_VARIANT_STATE } from '../SomewhereWildCard';
 import { setLocale } from '../../i18n';
 
 // These tests assert English copy; pin the locale explicitly.
@@ -232,6 +232,38 @@ describe('evaluateSomewhereWild — full path', () => {
 
     expect(result.card).toBeNull();
     expect(mockReverseGeocodeAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('evaluateSomewhereWildShared — once per data change', () => {
+  it('reuses one evaluation for the same data version, re-runs on a new version, a new dog name or after the TTL', async () => {
+    const homeRangeRepository = createInMemoryHomeRangeRepository();
+    const walkRepository = createInMemoryWalkRepository();
+    const getCells = jest.spyOn(homeRangeRepository, 'getCells');
+    const deps = { homeRangeRepository, walkRepository, dogName: 'Buddy', now: NOW };
+
+    const first = await evaluateSomewhereWildShared(deps, 0);
+    const again = await evaluateSomewhereWildShared({ ...deps, now: NOW + 60_000 }, 0);
+    expect(again).toBe(first);
+    expect(getCells).toHaveBeenCalledTimes(1);
+
+    await evaluateSomewhereWildShared(deps, 1); // a walk was finished
+    expect(getCells).toHaveBeenCalledTimes(2);
+    await evaluateSomewhereWildShared({ ...deps, dogName: 'Rex' }, 1);
+    expect(getCells).toHaveBeenCalledTimes(3);
+    await evaluateSomewhereWildShared({ ...deps, dogName: 'Rex', now: NOW + 21 * 60_000 }, 1);
+    expect(getCells).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not remember a failed evaluation', async () => {
+    const homeRangeRepository = createInMemoryHomeRangeRepository();
+    const walkRepository = createInMemoryWalkRepository();
+    const getCells = jest.spyOn(homeRangeRepository, 'getCells').mockRejectedValueOnce(new Error('offline'));
+    const deps = { homeRangeRepository, walkRepository, dogName: 'Buddy', now: NOW };
+
+    await expect(evaluateSomewhereWildShared(deps, 0)).rejects.toThrow('offline');
+    await expect(evaluateSomewhereWildShared(deps, 0)).resolves.toEqual(expect.objectContaining({ card: null }));
+    expect(getCells).toHaveBeenCalledTimes(2);
   });
 });
 

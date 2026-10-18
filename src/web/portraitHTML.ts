@@ -1,5 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
+import { GAP_SPLIT_SCRIPT } from './gapSplitScript';
 import { PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_FILTER, MAP_TILE_HOST_SUFFIX, MAP_TILE_URL, MAP_TINT_ALPHA, MAP_TINT_COLOR } from './mapTheme';
 import { tokens } from '../ui/tokens';
@@ -63,6 +64,7 @@ export const portraitHTML = `
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
 ${NEIGHBOUR_OVERLAY_SCRIPT}
+${GAP_SPLIT_SCRIPT}
 ${PARTNER_TRAIL_SCRIPT}
 
     // Alex's thread for the next capture (SHOW_PARTNER_TRAIL); { points: [] } or null = none.

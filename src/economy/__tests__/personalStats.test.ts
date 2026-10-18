@@ -2,6 +2,7 @@ import { Walk } from '../../types';
 import { defaultDenEconomyState, DenEconomyState } from '../denEconomy';
 import { defaultPersonalStatsState, recordBuildingUpgrade, recordTreatsEarned, recordWalkClosed } from '../personalStats';
 import { setLocale } from '../../i18n';
+import { DISTANCE_RULE_SINCE_MS } from '../../utils/geometry';
 
 // These tests assert English copy; pin the locale explicitly.
 beforeAll(() => setLocale('en'));
@@ -19,6 +20,27 @@ function makeWalk(overrides: Partial<Walk> = {}): Walk {
     ...overrides,
   };
 }
+
+describe('recordWalkClosed — distance rule', () => {
+  // 40 m, then a 3 km tram ride 60 s later, then 40 m again: only the two strolls are walked distance.
+  const ride = [
+    { latitude: 52.5, longitude: 13.4, timestamp: 0, accuracy: 5 },
+    { latitude: 52.5 + 40 / 111320, longitude: 13.4, timestamp: 30_000, accuracy: 5 },
+    { latitude: 52.5 + 3040 / 111320, longitude: 13.4, timestamp: 90_000, accuracy: 5 },
+    { latitude: 52.5 + 3080 / 111320, longitude: 13.4, timestamp: 120_000, accuracy: 5 },
+  ];
+
+  it('a walk started after the rule shipped does not count the ride', () => {
+    const { stats } = recordWalkClosed(defaultPersonalStatsState(), makeWalk({ startTime: DISTANCE_RULE_SINCE_MS + 1, locations: ride }), 30);
+    expect(stats.lifetimeDistanceMeters).toBeGreaterThan(70);
+    expect(stats.lifetimeDistanceMeters).toBeLessThan(90);
+  });
+
+  it('a walk started before keeps the old, unfiltered distance (nothing recomputed ever goes down)', () => {
+    const { stats } = recordWalkClosed(defaultPersonalStatsState(), makeWalk({ startTime: DISTANCE_RULE_SINCE_MS - 1, locations: ride }), 30);
+    expect(stats.lifetimeDistanceMeters).toBeGreaterThan(3000);
+  });
+});
 
 describe('recordWalkClosed', () => {
   it('unlocks first-steps exactly once, on the first walk only', () => {

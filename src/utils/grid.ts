@@ -28,6 +28,20 @@ export const MAX_SEGMENT_M = 60;
 /** Faster than this between consecutive GPS fixes = not a dog walk (bike/tram/car); don't paint it. */
 export const MAX_SEGMENT_SPEED_MS = 4.5;
 
+// Dropout bridge — only the DISTANCE rule uses these (geometry.ts's stepCountsAsDistance), never the paint filter above.
+// A step longer than MAX_SEGMENT_M still counts as walked distance when it plainly is a signal dropout (tunnel, app
+// resumed after a kill) and not a ride: short enough, quick enough to be a pause, and at a strolling pace on average.
+// docs/specs/walk-lifecycle.md "Distance rule" has the reasoning.
+
+/** A dropout step may be at most this long, metres. */
+export const DROPOUT_BRIDGE_MAX_M = 250;
+
+/** A dropout step may span at most this much time, seconds. */
+export const DROPOUT_BRIDGE_MAX_S = 180;
+
+/** A dropout step's average speed over the whole gap may be at most this, m/s (a stroll; a tram or car is far above). */
+export const DROPOUT_BRIDGE_MAX_SPEED_MS = 2.0;
+
 /** Freshness curve time constant, days. See design.md Decision 2. */
 const TAU_DAYS = 5;
 

@@ -4,7 +4,7 @@
 // empty `points` clears it. Never shows distance, time or "since when" (game-master).
 //
 // Look: a worn-path bed in the Trampelpfad brown (material.pathBrown) with the cream seam (material.yarn) running over it
-// as a dashed thread whose dash offset creeps forward slowly on the live map, and a small paw head, in the warm token
+// as a dashed thread (cut at gaps: no line across a jump or a long signal loss, see gapSplitScript.ts) whose dash offset creeps forward slowly on the live map, and a small paw head, in the warm token
 // so it is never mistaken for our own green paw, at the newest point. The portrait is a still capture, so the thread
 // there is still too.
 
@@ -47,6 +47,24 @@ function ptClean(trail) {
 }
 
 /**
+ * The thread as runs of [lat, lon], cut wherever a step fails the distance rule (gapSplit, from gapSplitScript.ts, which
+ * the page must include before this script). Points without a usable time only connect while they are within 60 m.
+ */
+function ptRuns(trail) {
+  var list = (trail && trail.points) || [];
+  var pts = [];
+  for (var i = 0; i < list.length && pts.length < PT_MAX_POINTS; i++) {
+    var p = list[i];
+    if (p && typeof p.lat === 'number' && typeof p.lon === 'number' && isFinite(p.lat) && isFinite(p.lon)) {
+      pts.push({ latitude: p.lat, longitude: p.lon, timestamp: p.t });
+    }
+  }
+  return gapSplit(pts).map(function (run) {
+    return run.map(function (q) { return [q.latitude, q.longitude]; });
+  });
+}
+
+/**
  * Live map: draws (or redraws) the thread. Returns the layer group (pass it back in as previousGroup) or null when
  * there is nothing to show. timers = { set(fn, ms), clear(handle) } drives the slow dash creep.
  */
@@ -60,8 +78,9 @@ function ptRenderLive(map, trail, previousGroup, timers) {
   var group = L.layerGroup();
   var seam = null;
   if (pts.length > 1) {
-    L.polyline(pts, { color: PT_BED.color, weight: PT_BED.weight, opacity: PT_BED.opacity, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(group);
-    seam = L.polyline(pts, { color: PT_SEAM.color, weight: PT_SEAM.weight, opacity: 1, dashArray: PT_SEAM.dashArray, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(group);
+    var runs = ptRuns(trail);
+    L.polyline(runs, { color: PT_BED.color, weight: PT_BED.weight, opacity: PT_BED.opacity, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(group);
+    seam = L.polyline(runs, { color: PT_SEAM.color, weight: PT_SEAM.weight, opacity: 1, dashArray: PT_SEAM.dashArray, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(group);
   }
   var name = (trail && trail.name) || '';
   L.marker(pts[pts.length - 1], {
@@ -97,9 +116,12 @@ function ptDrawPortrait(ctx, trail, project, unit) {
   ctx.lineJoin = 'round';
   if (pts.length > 1) {
     ctx.beginPath();
-    pts.forEach(function (p, i) {
-      var pt = project(p[0], p[1]);
-      if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
+    ptRuns(trail).forEach(function (run) {
+      if (run.length < 2) return;
+      run.forEach(function (p, i) {
+        var pt = project(p[0], p[1]);
+        if (i === 0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y);
+      });
     });
     ctx.globalAlpha = PT_BED.opacity;
     ctx.strokeStyle = PT_BED.color;

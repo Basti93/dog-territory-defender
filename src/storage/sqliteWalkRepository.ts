@@ -72,6 +72,28 @@ export function createSqliteWalkRepository(dbName: string = DEFAULT_DB_NAME): Wa
       await db.runAsync('UPDATE walks SET syncedAt = ? WHERE id = ?', at, id);
     },
 
+    async countClosedWalks(): Promise<number> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM walks WHERE closed = 1');
+      return row?.n ?? 0;
+    },
+
+    async getLastWalkEnd(): Promise<{ latitude: number; longitude: number } | null> {
+      const db = await dbPromise;
+      // Newest first, a few rows at a time: nearly always the first row has fixes, so only that one walk is parsed
+      // (a manual log has none and is skipped).
+      const PAGE = 10;
+      for (let offset = 0; ; offset += PAGE) {
+        const rows = await db.getAllAsync<{ data: string }>('SELECT data FROM walks ORDER BY startTime DESC LIMIT ? OFFSET ?', PAGE, offset);
+        for (const row of rows) {
+          const walk: Walk = JSON.parse(row.data);
+          const end = walk.locations[walk.locations.length - 1];
+          if (end) return { latitude: end.latitude, longitude: end.longitude };
+        }
+        if (rows.length < PAGE) return null;
+      }
+    },
+
     async replaceAll(walks: Walk[]): Promise<void> {
       const db = await dbPromise;
       await db.withTransactionAsync(async () => {

@@ -11,6 +11,10 @@ export interface WalkRepository {
   deleteWalk(id: string): Promise<void>;
   /** Household sync: records that the server acknowledged this walk. No-op for an unknown id. */
   markSynced(id: string, at: number): Promise<void>;
+  /** How many stored walks are closed (reward-eligible); cheap, no locations are read. */
+  countClosedWalks(): Promise<number>;
+  /** Last fix of the walk with the newest startTime that has any fixes (manual logs have none); null when no walk has a fix. */
+  getLastWalkEnd(): Promise<{ latitude: number; longitude: number } | null>;
   /** Atomically replaces every stored walk with `walks` (used by backup restore). */
   replaceAll(walks: Walk[]): Promise<void>;
 }

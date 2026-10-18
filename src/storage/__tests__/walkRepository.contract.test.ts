@@ -138,4 +138,29 @@ describe('WalkRepository contract', () => {
     await repo.replaceAll([]);
     expect(await repo.getWalks()).toEqual([]);
   });
+
+  it('countClosedWalks counts only closed walks', async () => {
+    const repo = createInMemoryWalkRepository();
+    expect(await repo.countClosedWalks()).toBe(0);
+    await repo.saveWalk(makeWalk({ id: 'a', closed: true }));
+    await repo.saveWalk(makeWalk({ id: 'b', closed: false }));
+    await repo.saveWalk(makeWalk({ id: 'c', closed: true, startSource: 'manual-log', locations: [] }));
+    expect(await repo.countClosedWalks()).toBe(2);
+    await repo.deleteWalk('a');
+    expect(await repo.countClosedWalks()).toBe(1);
+  });
+
+  it('getLastWalkEnd is the last fix of the newest walk that has fixes (manual logs have none)', async () => {
+    const repo = createInMemoryWalkRepository();
+    expect(await repo.getLastWalkEnd()).toBeNull();
+    const fix = (latitude: number) => ({ latitude, longitude: 13.4, timestamp: 1, accuracy: 5 });
+    await repo.saveWalk(makeWalk({ id: 'old', startTime: 1000, locations: [fix(1), fix(2)] }));
+    await repo.saveWalk(makeWalk({ id: 'new', startTime: 3000, locations: [fix(3), fix(4)] }));
+    await repo.saveWalk(makeWalk({ id: 'manual', startTime: 5000, startSource: 'manual-log', locations: [] }));
+    expect(await repo.getLastWalkEnd()).toEqual({ latitude: 4, longitude: 13.4 });
+    await repo.deleteWalk('new');
+    expect(await repo.getLastWalkEnd()).toEqual({ latitude: 2, longitude: 13.4 });
+    await repo.replaceAll([makeWalk({ id: 'only-manual', startSource: 'manual-log', locations: [] })]);
+    expect(await repo.getLastWalkEnd()).toBeNull();
+  });
 });

@@ -35,6 +35,25 @@ The system SHALL grant treats, XP, and any territory-derived bonus for a live-tr
 - **WHEN** a finished walk paints 25 or more Home Range cells
 - **THEN** the system SHALL grant the full treats/XP reward, whether or not the walk's start and end points are near each other
 
+### Requirement: Walked Distance Counts Only Plausible Steps
+The system SHALL count a step between two consecutive GPS fixes toward a walk's distance only if it is plausibly walked: either (normal) at most 60 m AND at most 4.5 m/s, the same limits the Home Range paint filter uses; or (dropout bridge) more than 60 m and at most 250 m, within 180 s, at an average of at most 2.0 m/s. A step with a missing, zero or negative time difference counts only if it is at most 60 m. The thresholds are named constants next to the paint filter in `src/utils/grid.ts` (`MAX_SEGMENT_M`, `MAX_SEGMENT_SPEED_MS`, `DROPOUT_BRIDGE_MAX_M`, `DROPOUT_BRIDGE_MAX_S`, `DROPOUT_BRIDGE_MAX_SPEED_MS`); the rule itself is `stepCountsAsDistance` in `src/utils/geometry.ts`. The live map's distance, the finished walk's distance (rewards, personal stats, Walk Portrait) and the server SHALL all use the one function `walkDistanceMeters`, so they never disagree. The rule SHALL be silent: the app never shows that part of a walk was not counted. A walk's trail line SHALL be cut wherever a step fails the rule, so no straight line is drawn across a jump, a ride or a long signal loss (`splitAtGaps`; the web pages carry a tested copy in `src/web/gapSplitScript.ts`).
+
+Why: before this, every step counted, so a GPS jump, a tram or car ride during a running walk, or the gap after an iOS force-quit inflated distance, XP and the lifetime and weekly kilometres. The dropout bridge keeps honest signal losses (a tunnel, an underpass, a phone that slept) from costing a fair walk its distance: such a gap is short and was crossed at a stroll, while a ride is fast or far.
+
+Not retroactive: a walk that started before 2026-10-18 19:35 UTC (`DISTANCE_RULE_SINCE_MS`) keeps the old unfiltered distance (`cumulativeDistanceLegacy`) wherever a distance is recomputed from its points (Walk Portrait, prior-walk XP average, server weekly kilometres). Stored lifetime stats are incremental and are never recomputed. No stat, record or badge may ever go down because of this rule.
+
+#### Scenario: A tram ride during a walk adds no distance
+- **WHEN** a walk started after the rule shipped contains a step of 3 km covered in 60 s
+- **THEN** that step adds nothing to the walk's distance, the live distance, rewards or personal stats, and nothing tells the player so
+
+#### Scenario: A short signal loss at walking pace still counts
+- **WHEN** a walk's next fix is 150 m away and 100 s later (1.5 m/s)
+- **THEN** the step counts as distance and the trail line stays connected across it
+
+#### Scenario: An old walk keeps its distance
+- **WHEN** a walk that started before the rule shipped is opened or recomputed
+- **THEN** its distance is the unfiltered sum of all its steps, exactly as before
+
 ### Requirement: Walk can be logged manually without live GPS tracking
 The system SHALL allow the player to record a walk that was not live-tracked, provided it started within the current or previous calendar day, and SHALL grant the identical reward (treats, XP, personal stats, achievements) a normally-finished tracked walk receives, with no reduced or "unverified" treatment. A manual log MAY optionally refresh the Home Range freshness of one route the player has previously walked with real GPS tracking, subject to a hard cap of at most 2 manual logs per calendar day, of which at most 1 may carry a route refresh.
 

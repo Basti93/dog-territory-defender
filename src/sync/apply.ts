@@ -20,7 +20,7 @@ import { setNearby } from './neighbourhoodStore';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
-import { cumulativeDistance } from '../utils/geometry';
+import { walkDistanceMeters } from '../utils/geometry';
 import type { ApiCell, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
@@ -154,7 +154,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
           startTime: full.startTime,
           treatsEarned: full.treatsEarned ?? 0,
           newGroundCellCount: full.newGroundCellIds.length,
-          distanceMeters: cumulativeDistance(full.locations),
+          distanceMeters: walkDistanceMeters(full),
           manual: full.startSource === 'manual-log',
         });
       }

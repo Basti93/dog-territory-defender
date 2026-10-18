@@ -6,7 +6,7 @@ Defines the lifetime stat tracking and one-off personal achievement system that 
 ## Requirements
 
 ### Requirement: Lifetime Stat Tracking
-The system SHALL track, across the player's full history, at minimum: total walks closed, lifetime distance walked, lifetime territory area claimed, the single biggest territory ever claimed, the single longest walk by distance, and total treats earned lifetime. These stats SHALL update incrementally at the moment the underlying event occurs (a walk closes, treats are earned — whether from a walk reward or from passive accrual, building upgrade) rather than being recomputed from full history on each read.
+The system SHALL track, across the player's full history, at minimum: total walks closed, lifetime distance walked, lifetime territory area claimed, the single biggest territory ever claimed, the single longest walk by distance, and total treats earned lifetime. These stats SHALL update incrementally at the moment the underlying event occurs (a walk closes, treats are earned — whether from a walk reward or from passive accrual, building upgrade) rather than being recomputed from full history on each read. A walk's distance follows `walk-lifecycle`'s `Walked Distance Counts Only Plausible Steps`; stored totals and records are never recomputed or lowered by a rule change.
 
 #### Scenario: Stat update on walk close
 - **WHEN** a walk is successfully closed into a territory

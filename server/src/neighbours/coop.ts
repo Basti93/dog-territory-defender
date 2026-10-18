@@ -1,7 +1,7 @@
 // Viertel-Runde: the weekly neighbourhood goal (design Decision 21). Server-computed, no loss state.
 import { and, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { NEIGHBOUR_CONFIG, coopGoalKm, coopPlayerShareKm } from '@game/economy/neighbourConfig';
-import { cumulativeDistance } from '@game/utils/geometry';
+import { walkDistanceMeters } from '@game/utils/geometry';
 import type { Location } from '@game/types';
 import type { CoopWeekResponse } from '@game/sync/apiContract';
 import type { Db } from '../db/client';
@@ -15,7 +15,7 @@ export const WEEK_KEYS = (weekStart: string) => ({ from: weekStart, to: addDays(
 /** Human km of the household in a local week: tracked, non-deleted walks (manual logs and generated walks excluded). */
 export async function humanKmInWeek(db: Db, hostId: string, weekStart: string, tz: string): Promise<number> {
   const rows = await db
-    .select({ route: walks.route })
+    .select({ route: walks.route, startTime: walks.startTime })
     .from(walks)
     .where(
       and(
@@ -27,7 +27,7 @@ export async function humanKmInWeek(db: Db, hostId: string, weekStart: string, t
         lt(walks.startTime, localToUtcMs(addDays(weekStart, 7), 0, tz))
       )
     );
-  return rows.reduce((s, r) => s + cumulativeDistance(r.route as Location[]), 0) / 1000;
+  return rows.reduce((s, r) => s + walkDistanceMeters({ startTime: r.startTime, locations: r.route as Location[] }), 0) / 1000;
 }
 
 export async function botKmInWeek(db: Db, hostId: string, weekStart: string): Promise<number> {

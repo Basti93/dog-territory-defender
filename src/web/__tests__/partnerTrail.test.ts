@@ -2,6 +2,7 @@ import type { PartnerPresence } from '../../sync/presenceStore';
 import { framePortraitNeighbours } from '../neighbourOverlay';
 import { PARTNER_TRAIL_FRAME_ID, partnerTrailFrameItem, partnerTrailPayload } from '../partnerTrail';
 import { mapHTML } from '../mapHTML';
+import { GAP_SPLIT_SCRIPT } from '../gapSplitScript';
 import { PARTNER_TRAIL_SCRIPT } from '../partnerTrailScript';
 import { portraitHTML } from '../portraitHTML';
 
@@ -45,7 +46,7 @@ describe('partner trail payload (RN side)', () => {
 
 describe('Alex\'s thread (WebView side)', () => {
   const load = () =>
-    new Function('L', `${PARTNER_TRAIL_SCRIPT}; return { ptRenderLive: ptRenderLive, ptDrawPortrait: ptDrawPortrait, ptClean: ptClean };`);
+    new Function('L', `${GAP_SPLIT_SCRIPT}; ${PARTNER_TRAIL_SCRIPT}; return { ptRenderLive: ptRenderLive, ptDrawPortrait: ptDrawPortrait, ptClean: ptClean };`);
 
   function leaflet() {
     const polylines: Array<{ pts: unknown; opts: Record<string, any>; _path: { style: Record<string, string> } }> = [];
@@ -105,6 +106,23 @@ describe('Alex\'s thread (WebView side)', () => {
     ptRenderLive(env.map, { points: [{ lat: 52, lon: 13 }, { lat: 52.1, lon: 13 }], name: 'Alex' }, group, { set: () => 8, clear: (h: unknown) => cleared.push(h) });
     expect(cleared).toEqual([7]);
     expect(env.map.removeLayer).toHaveBeenCalledWith(group);
+  });
+
+  it('live map: the thread is cut where a step fails the distance rule (no line across a jump)', () => {
+    const env = leaflet();
+    const { ptRenderLive } = load()(env.L);
+    const M = 1 / 111320; // degrees of latitude per metre
+    const points = [
+      { lat: 52, lon: 13, t: 0 },
+      { lat: 52 + 30 * M, lon: 13, t: 20_000 },
+      { lat: 52 + 5000 * M, lon: 13, t: 40_000 }, // a ride
+      { lat: 52 + 5030 * M, lon: 13, t: 60_000 },
+    ];
+    ptRenderLive(env.map, { points, name: 'Alex' }, null, null);
+    expect(env.polylines[0].pts).toEqual([
+      [[52, 13], [52 + 30 * M, 13]],
+      [[52 + 5000 * M, 13], [52 + 5030 * M, 13]],
+    ]);
   });
 
   it('live map: empty points clear it (and draw nothing); one point is just the paw head', () => {

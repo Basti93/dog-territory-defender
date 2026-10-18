@@ -1,5 +1,5 @@
 import { Walk } from '../types';
-import { cumulativeDistance } from '../utils/geometry';
+import { walkDistanceMeters } from '../utils/geometry';
 import { CELL_M } from '../utils/grid';
 import { DenEconomyState } from './denEconomy';
 import { formatNumber, t } from '../i18n';
@@ -207,7 +207,7 @@ export function getAchievementProgress(
  * needs its own numeric-threshold decision, not a silent implementer fix.
  */
 export function recordWalkClosed(stats: PersonalStatsState, walk: Walk, cellsPainted: number): RecordResult {
-  const distanceMeters = cumulativeDistance(walk.locations);
+  const distanceMeters = walkDistanceMeters(walk);
   const areaM2 = cellsPainted * CELL_M * CELL_M;
 
   const beforeWalks = stats.totalWalksClosed;

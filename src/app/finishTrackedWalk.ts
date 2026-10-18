@@ -1,5 +1,5 @@
 import { Walk } from '../types';
-import { cumulativeDistance } from '../utils/geometry';
+import { walkDistanceMeters } from '../utils/geometry';
 import { cellCentre, cellKey, MIN_CELLS_FOR_REWARD, NEW_GROUND_MIN_CELLS, newGroundCells, paintedCells, parseCellKey } from '../utils/grid';
 import { resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '../utils/territoryCluster';
 import { resolveTerritoryName } from '../utils/streetLookup';
@@ -190,7 +190,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     return;
   }
 
-  const distanceMeters = cumulativeDistance(finishedWalk.locations);
+  const distanceMeters = walkDistanceMeters(finishedWalk);
   try {
     const result = await awardWalkRewards(
       finishedWalk,

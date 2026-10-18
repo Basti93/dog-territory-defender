@@ -1,6 +1,6 @@
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { Walk } from '../../types';
-import { cumulativeDistance } from '../../utils/geometry';
+import { walkDistanceMeters } from '../../utils/geometry';
 import { cellForLocation, cellKey, splitTrailByNewGround } from '../../utils/grid';
 import { resolveWalkPortraitState } from '../WalkPortraitScreen';
 
@@ -82,7 +82,7 @@ describe('resolveWalkPortraitState (docs/decisions/walk-portrait/design.md Decis
 
 // tasks.md task 8.2's "full path" coverage: chains the same pure functions
 // WalkPortraitScreen.tsx itself calls (resolveWalkPortraitState,
-// splitTrailByNewGround, cumulativeDistance, and reading walk.treatsEarned)
+// splitTrailByNewGround, walkDistanceMeters, and reading walk.treatsEarned)
 // for each of the four required scenarios, confirming the right state AND
 // the right derived metadata together — not just each unit in isolation.
 // This project has no React component-renderer test setup (see
@@ -94,8 +94,8 @@ describe('Walk Portrait full path (tasks.md task 8.2)', () => {
     const walkRepository = createInMemoryWalkRepository();
     const locations = [
       { latitude: 48.1374, longitude: 11.5755, timestamp: 1000, accuracy: 5 },
-      { latitude: 48.1376, longitude: 11.5755, timestamp: 2000, accuracy: 5 },
-      { latitude: 48.1378, longitude: 11.5755, timestamp: 3000, accuracy: 5 },
+      { latitude: 48.1376, longitude: 11.5755, timestamp: 21000, accuracy: 5 },
+      { latitude: 48.1378, longitude: 11.5755, timestamp: 41000, accuracy: 5 },
     ];
     const walk = makeWalk({
       id: 'tracked-full-path',
@@ -115,7 +115,7 @@ describe('Walk Portrait full path (tasks.md task 8.2)', () => {
 
     const runs = splitTrailByNewGround(state.trailSource.locations, state.trailSource.newGroundCellIds);
     expect(runs.map((r) => r.color)).toEqual(['base', 'new-ground']);
-    expect(cumulativeDistance(state.trailSource.locations)).toBeGreaterThan(0);
+    expect(walkDistanceMeters(state.trailSource)).toBeGreaterThan(0);
     expect(stored.treatsEarned).toBe(12);
   });
 
@@ -137,7 +137,7 @@ describe('Walk Portrait full path (tasks.md task 8.2)', () => {
     expect(state.kind).toBe('trail');
     if (state.kind !== 'trail') throw new Error('expected trail state');
     expect(state.trailSource.id).toBe('route-full-path');
-    expect(cumulativeDistance(state.trailSource.locations)).toBeGreaterThanOrEqual(0);
+    expect(walkDistanceMeters(state.trailSource)).toBeGreaterThanOrEqual(0);
     expect(stored.treatsEarned).toBe(5); // sourced from the manual log's own record, not the route's
   });
 

@@ -5,7 +5,7 @@ import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import { dogDisplayName } from '../economy/denEconomy';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { StoredWalk, WalkRepository } from '../storage/WalkRepository';
-import { cumulativeDistance } from '../utils/geometry';
+import { splitAtGaps, walkDistanceMeters } from '../utils/geometry';
 import { splitTrailByNewGround } from '../utils/grid';
 import { log } from '../utils/log';
 import { dayAndTimeOfDayPhrase } from '../utils/manualWalkLog';
@@ -111,13 +111,16 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
     (async () => {
       const trail = trailSource.locations;
       const walkLatLngs = trail.map((loc) => [loc.latitude, loc.longitude]);
+      // No line across a jump, ride or long signal loss: draw the trail as runs cut where a step fails the distance rule.
+      const toLatLngs = (points: typeof trail) => points.map((p) => [p.latitude, p.longitude]);
+      const walkRuns = splitAtGaps(trail).map(toLatLngs);
       const newGroundRuns = splitTrailByNewGround(trail, trailSource.newGroundCellIds)
         .filter((run) => run.color === 'new-ground')
-        .map((run) => run.points.map((p) => [p.latitude, p.longitude]));
+        .flatMap((run) => splitAtGaps(run.points).map(toLatLngs));
       const cells = await homeRangeRepository.getCells();
       const raster = buildHomeRangeRasterPayload(cells, Date.now());
       webViewRef.current?.postMessage(
-        JSON.stringify({ type: 'RENDER_WALK', payload: { walkLatLngs, newGroundRuns, raster } })
+        JSON.stringify({ type: 'RENDER_WALK', payload: { walkLatLngs, walkRuns, newGroundRuns, raster } })
       );
     })();
   }, [isWebViewReady, state, homeRangeRepository]);
@@ -143,7 +146,7 @@ export function WalkPortraitScreen({ walk, walkRepository, homeRangeRepository, 
   }
 
   const trailSource = state.kind === 'trail' ? state.trailSource : null;
-  const distanceMeters = trailSource ? cumulativeDistance(trailSource.locations) : 0;
+  const distanceMeters = trailSource ? walkDistanceMeters(trailSource) : 0;
   const durationMs =
     trailSource && trailSource.locations.length > 1
       ? trailSource.locations[trailSource.locations.length - 1].timestamp - trailSource.locations[0].timestamp

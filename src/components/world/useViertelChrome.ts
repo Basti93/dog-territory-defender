@@ -5,7 +5,7 @@ import { TerritoryRepository } from '../../storage/TerritoryRepository';
 import { WalkRepository } from '../../storage/WalkRepository';
 import { streetsKnown } from '../../utils/grid';
 import { lastKnownCoords } from '../../utils/lastKnownLocation';
-import { evaluateSomewhereWild } from '../SomewhereWildCard';
+import { evaluateSomewhereWildShared } from '../SomewhereWildCard';
 import { emptyRangeNote, LatLon, MapNote, pickViertelNotes, statsSignParts, territoryHeading, TerritoryHeading } from './viertelChrome';
 
 export interface ViertelChromeData {
@@ -50,9 +50,10 @@ export function useViertelChrome({ homeRangeRepository, walkRepository, territor
     let alive = true;
     (async () => {
       const now = Date.now();
-      const [cells, walks, territories] = await Promise.all([
+      const [cells, closedWalks, lastWalkEnd, territories] = await Promise.all([
         homeRangeRepository.getCells(),
-        walkRepository.getWalks(),
+        walkRepository.countClosedWalks(),
+        walkRepository.getLastWalkEnd(),
         territoryRepository ? territoryRepository.getTerritories() : Promise.resolve([]),
       ]);
       let wild: LatLon | null;
@@ -60,7 +61,7 @@ export function useViertelChrome({ homeRangeRepository, walkRepository, territor
         wild = givenWildSpot;
       } else {
         try {
-          const evaluated = await evaluateSomewhereWild({ homeRangeRepository, walkRepository, dogName, now, territoryRepository });
+          const evaluated = await evaluateSomewhereWildShared({ homeRangeRepository, walkRepository, dogName, now, territoryRepository }, refreshKey ?? 0);
           wild = evaluated.card?.spot ?? null;
         } catch {
           wild = null; // offline lookups etc.: no pin, no note
@@ -69,19 +70,16 @@ export function useViertelChrome({ homeRangeRepository, walkRepository, territor
       const rangeEmpty = cells.length === 0;
       let fallbackCenter: LatLon | null = null;
       if (rangeEmpty) {
-        let lastWalk: (typeof walks)[number] | null = null;
-        for (const w of walks) if (w.locations.length > 0 && (!lastWalk || w.startTime > lastWalk.startTime)) lastWalk = w;
-        const end = lastWalk?.locations[lastWalk.locations.length - 1];
-        fallbackCenter = end ? { latitude: end.latitude, longitude: end.longitude } : await lastKnownCoords();
+        fallbackCenter = lastWalkEnd ?? (await lastKnownCoords());
       }
       if (!alive) return;
       const notes = pickViertelNotes({ cells, wildSpot: wild, now });
       if (rangeEmpty && fallbackCenter) notes.push(emptyRangeNote(fallbackCenter));
       setData({
         loaded: true,
-        territory: territoryHeading({ territories, cells, walks, now }),
+        territory: territoryHeading({ territories, cells, lastWalkEnd, now }),
         // corners: the named-corner data model does not exist yet (SHOW_CORNERS is scaffolding), so that part stays hidden.
-        statsParts: statsSignParts({ walks: walks.filter((w) => w.closed).length, streets: streetsKnown(cells.length), corners: 0 }),
+        statsParts: statsSignParts({ walks: closedWalks, streets: streetsKnown(cells.length), corners: 0 }),
         notes,
         wildSpot: wild,
         fallbackCenter,

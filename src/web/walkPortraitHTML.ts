@@ -88,6 +88,18 @@ ${MAP_TILE_LAYER_JS}
       if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
     }
 
+    /** The first \`count\` points of the runs laid end to end, as nested runs. */
+    function sliceRuns(flat, runLengths, count) {
+      var out = [];
+      var at = 0;
+      for (var r = 0; r < runLengths.length && at < count; r++) {
+        var take = Math.min(runLengths[r], count - at);
+        out.push(flat.slice(at, at + take));
+        at += runLengths[r];
+      }
+      return out;
+    }
+
     /**
      * Grows \`polyline\`'s coordinate array from its first point to all of
      * \`latlngs\` over \`durationMs\`, via requestAnimationFrame — the same
@@ -95,10 +107,13 @@ ${MAP_TILE_LAYER_JS}
      * walk (setLatLngs on every fix), just driven by a timer instead of GPS
      * callbacks. Calls \`onDone\` exactly once, when the full array is set.
      */
-    function animateGrowth(polyline, latlngs, durationMs, onDone) {
+    function animateGrowth(polyline, latlngs, durationMs, onDone, runLengths) {
       if (latlngs.length === 0) { if (onDone) onDone(); return; }
+      // runLengths (optional) = point counts of the continuous runs that make up \`latlngs\`; the polyline then gets nested
+      // runs, so no line is drawn across a gap (the distance rule, cut on the RN side by geometry.ts's splitAtGaps).
+      function shown(count) { return runLengths ? sliceRuns(latlngs, runLengths, count) : latlngs.slice(0, count); }
       if (latlngs.length === 1 || durationMs <= 0) {
-        polyline.setLatLngs(latlngs);
+        polyline.setLatLngs(shown(latlngs.length));
         if (onDone) onDone();
         return;
       }
@@ -108,7 +123,7 @@ ${MAP_TILE_LAYER_JS}
         var elapsed = ts - startTime;
         var frac = Math.min(1, elapsed / durationMs);
         var count = Math.max(1, Math.round(frac * latlngs.length));
-        polyline.setLatLngs(latlngs.slice(0, count));
+        polyline.setLatLngs(shown(count));
         if (frac < 1) {
           requestAnimationFrame(step);
         } else if (onDone) {
@@ -122,6 +137,10 @@ ${MAP_TILE_LAYER_JS}
       clearTrail();
 
       var walkLatLngs = payload.walkLatLngs || [];
+      // Continuous runs of the trail (cut at gaps); older payloads without them draw one run.
+      var walkRuns = payload.walkRuns || (walkLatLngs.length ? [walkLatLngs] : []);
+      var walkRunLengths = walkRuns.map(function (r) { return r.length; });
+      var walkFlat = [].concat.apply([], walkRuns);
       var newGroundRuns = payload.newGroundRuns || [];
       var raster = payload.raster;
 
@@ -159,7 +178,7 @@ ${MAP_TILE_LAYER_JS}
       }).addTo(map);
       var baseGrowth = { setLatLngs: function (pts) { basePolyline.setLatLngs(pts); baseStamps.setLatLngs(pts); } };
 
-      animateGrowth(baseGrowth, walkLatLngs, PHASE_A_MS, function () {
+      animateGrowth(baseGrowth, walkFlat, PHASE_A_MS, function () {
         // Phase B: colour in just the New Ground runs on top of the
         // already-fully-drawn base trail — these finish last regardless of
         // where in the walk they chronologically occurred.
@@ -194,7 +213,7 @@ ${MAP_TILE_LAYER_JS}
             }
           });
         }
-      });
+      }, walkRunLengths);
 
       reportToRN('WALK_PORTRAIT_RENDER_APPLIED', { pointCount: walkLatLngs.length, newGroundRunCount: newGroundRuns.length });
     }

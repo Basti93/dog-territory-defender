@@ -152,6 +152,30 @@ export async function evaluateSomewhereWild(
   return { card: null, wildClusterVariantState: nextVariantState };
 }
 
+/** How long a shared evaluation is reused: the same 20 min the foreground re-evaluation below waits. */
+const SHARED_EVALUATION_TTL_MS = 20 * 60 * 1000;
+
+const sharedEvaluations = new WeakMap<HomeRangeRepository, { key: string; at: number; promise: Promise<EvaluateSomewhereWildResult> }>();
+
+/**
+ * evaluateSomewhereWild, but once per data change: the Viertel chrome (WorldScene) re-runs on every mount, and each run
+ * may do street lookups over the network. Callers that only need the spot share one result per (repository, dog name,
+ * `dataVersion` = the refreshKey that bumps when a walk was finished) for SHARED_EVALUATION_TTL_MS; a failed evaluation
+ * is not remembered. The variant state is not threaded through here: use evaluateSomewhereWild for the card's own text.
+ */
+export function evaluateSomewhereWildShared(deps: EvaluateSomewhereWildDeps, dataVersion: number): Promise<EvaluateSomewhereWildResult> {
+  const key = `${deps.dogName ?? ''}|${dataVersion}`;
+  const cached = sharedEvaluations.get(deps.homeRangeRepository);
+  if (cached && cached.key === key && deps.now - cached.at < SHARED_EVALUATION_TTL_MS) return cached.promise;
+  const promise = evaluateSomewhereWild(deps);
+  const entry = { key, at: deps.now, promise };
+  sharedEvaluations.set(deps.homeRangeRepository, entry);
+  promise.catch(() => {
+    if (sharedEvaluations.get(deps.homeRangeRepository) === entry) sharedEvaluations.delete(deps.homeRangeRepository);
+  });
+  return promise;
+}
+
 // Decision 6: debounce foreground re-evaluation so a reverse-geocode network
 // call doesn't fire on every rapid app-switch — recompute at most this often
 // on a plain foreground transition. `refreshKey` (bumped by the caller right

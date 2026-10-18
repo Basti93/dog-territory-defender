@@ -1,3 +1,4 @@
+import { GAP_SPLIT_SCRIPT } from './gapSplitScript';
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
 import { PARTNER_TRAIL_CSS, PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
@@ -79,6 +80,7 @@ ${embedded ? EMBEDDED_TILE_SEAM_CSS : ''}
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
 ${NEIGHBOUR_OVERLAY_SCRIPT}
+${GAP_SPLIT_SCRIPT}
 ${PARTNER_TRAIL_SCRIPT}
 ${STITCH_PATCH_JS}
 ${MAP_NOTES_JS}
@@ -194,7 +196,8 @@ ${MAP_THEME_PROBE_JS}
         }
 
         if (locations.length > 1) {
-          const latLngs = locations.map((loc) => [loc.latitude, loc.longitude]);
+          // Cut where a step fails the distance rule (gapSplit): no straight line across a jump, ride or signal loss.
+          const latLngs = gapSplit(locations).map((run) => run.map((loc) => [loc.latitude, loc.longitude]));
           // Trampelpfad: worn dirt bed + paw stamps (zero-length-ish round dashes).
           const trailBed = L.polyline(latLngs, { color: '${TRAIL_BED.color}', weight: ${TRAIL_BED.weight}, opacity: ${TRAIL_BED.opacity}, lineCap: 'round', lineJoin: 'round' });
           const trailStamps = L.polyline(latLngs, { color: '${TRAIL_STAMPS.color}', weight: ${TRAIL_STAMPS.weight}, opacity: 1, dashArray: '${TRAIL_STAMPS.dashArray}', lineCap: 'round', lineJoin: 'round' });

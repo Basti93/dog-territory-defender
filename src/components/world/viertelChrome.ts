@@ -4,7 +4,6 @@
 
 import { Cell } from '../../storage/HomeRangeRepository';
 import { Territory, TerritoryId } from '../../storage/TerritoryRepository';
-import { Walk } from '../../types';
 import { cellCentre, cellForLocation, cellKey } from '../../utils/grid';
 import { calendarDayGap } from '../../utils/manualWalkLog';
 import { displayTerritoryName } from '../../utils/territoryDisplayName';
@@ -65,17 +64,11 @@ export function emptyRangeNote(center: LatLon): MapNote {
   return { text: t('viertel.note.explore'), lat: center.latitude, lon: center.longitude, anchor: 'center', kind: 'chalk' };
 }
 
-/** The territory the latest walk ended in; falls back to the territory of the most recently painted cell. */
-export function latestWalkTerritoryId(walks: Walk[], cells: Cell[]): TerritoryId | null {
+/** The territory the latest walk ended in (`lastWalkEnd`, see WalkRepository.getLastWalkEnd); falls back to the territory of the most recently painted cell. */
+export function latestWalkTerritoryId(lastWalkEnd: LatLon | null, cells: Cell[]): TerritoryId | null {
   const byKey = new Map(cells.map((c) => [cellKey(c.ix, c.iy), c]));
-  let latest: Walk | null = null;
-  for (const w of walks) {
-    if (w.locations.length === 0) continue;
-    if (!latest || w.startTime > latest.startTime) latest = w;
-  }
-  if (latest) {
-    const end = latest.locations[latest.locations.length - 1];
-    const cell = cellForLocation(end.latitude, end.longitude);
+  if (lastWalkEnd) {
+    const cell = cellForLocation(lastWalkEnd.latitude, lastWalkEnd.longitude);
     const id = byKey.get(cellKey(cell.ix, cell.iy))?.territoryId;
     if (id) return id;
   }
@@ -93,8 +86,8 @@ export interface TerritoryHeading {
 }
 
 /** Name and character title of the territory the latest walk was in; null when there is none. */
-export function territoryHeading(input: { territories: Territory[]; cells: Cell[]; walks: Walk[]; now: number }): TerritoryHeading | null {
-  const id = latestWalkTerritoryId(input.walks, input.cells);
+export function territoryHeading(input: { territories: Territory[]; cells: Cell[]; lastWalkEnd: LatLon | null; now: number }): TerritoryHeading | null {
+  const id = latestWalkTerritoryId(input.lastWalkEnd, input.cells);
   const territory = id ? input.territories.find((x) => x.id === id) : undefined;
   if (!territory) return null;
   const cellsByTerritory = new Map<TerritoryId, Cell[]>();

@@ -1,6 +1,5 @@
 import { Cell } from '../../../storage/HomeRangeRepository';
 import { Territory } from '../../../storage/TerritoryRepository';
-import { Walk } from '../../../types';
 import { cellCentre } from '../../../utils/grid';
 import { t } from '../../../i18n';
 import { emptyRangeNote, latestWalkTerritoryId, pickViertelNotes, statsSignParts, statsSignText, territoryHeading } from '../viertelChrome';
@@ -10,9 +9,9 @@ const HOUR = 60 * 60 * 1000;
 
 const cell = (ix: number, iy: number, lastRefreshed: number, territoryId: string | null = 't1'): Cell => ({ ix, iy, lastRefreshed, lastTracked: lastRefreshed, visits: 1, territoryId });
 const territory = (id: string, name: string, createdAt: number): Territory => ({ id, name, createdAt, walksHere: 1, treatsEarnedHere: 0 });
-const walkEndingIn = (ix: number, iy: number, startTime: number): Walk => {
+const endIn = (ix: number, iy: number): { latitude: number; longitude: number } => {
   const [latitude, longitude] = cellCentre(ix, iy);
-  return { id: `w${startTime}`, startTime, locations: [{ latitude, longitude, timestamp: startTime, accuracy: 5 }], closed: true, startSource: 'button' };
+  return { latitude, longitude };
 };
 
 describe('statsSignParts', () => {
@@ -54,24 +53,24 @@ describe('territoryHeading', () => {
   const cells = [cell(10, 10, NOW - HOUR, 't1'), cell(50, 50, NOW - 30 * HOUR, 't2')];
 
   it('is the territory of the latest walk, with its character title', () => {
-    const walks = [walkEndingIn(50, 50, NOW - 50 * HOUR), walkEndingIn(10, 10, NOW - 2 * HOUR)];
-    expect(latestWalkTerritoryId(walks, cells)).toBe('t1');
-    const heading = territoryHeading({ territories, cells, walks, now: NOW });
+    const lastWalkEnd = endIn(10, 10);
+    expect(latestWalkTerritoryId(lastWalkEnd, cells)).toBe('t1');
+    const heading = territoryHeading({ territories, cells, lastWalkEnd, now: NOW });
     expect(heading?.name).toBe('Hinterm Park');
     expect(heading?.title).toBe('Everyday'); // oldest territory takes the first title
   });
 
   it('falls back to the most recently painted territory without a usable walk', () => {
-    expect(latestWalkTerritoryId([], cells)).toBe('t1');
-    expect(latestWalkTerritoryId([walkEndingIn(999, 999, NOW)], cells)).toBe('t1');
+    expect(latestWalkTerritoryId(null, cells)).toBe('t1');
+    expect(latestWalkTerritoryId(endIn(999, 999), cells)).toBe('t1');
   });
 
   it('is null without territories', () => {
-    expect(territoryHeading({ territories: [], cells, walks: [], now: NOW })).toBeNull();
-    expect(territoryHeading({ territories, cells: [], walks: [], now: NOW })).toBeNull();
+    expect(territoryHeading({ territories: [], cells, lastWalkEnd: null, now: NOW })).toBeNull();
+    expect(territoryHeading({ territories, cells: [], lastWalkEnd: null, now: NOW })).toBeNull();
   });
 
   it('has no title for a single territory', () => {
-    expect(territoryHeading({ territories: [territories[0]], cells, walks: [], now: NOW })?.title).toBeNull();
+    expect(territoryHeading({ territories: [territories[0]], cells, lastWalkEnd: null, now: NOW })?.title).toBeNull();
   });
 });

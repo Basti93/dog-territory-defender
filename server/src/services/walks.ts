@@ -2,7 +2,7 @@
 // Mirrors src/app/finishTrackedWalk.ts using the shared pure functions (design Decisions 1, 3, 6).
 import { and, between, eq, isNull, sql } from 'drizzle-orm';
 import { MIN_CELLS_FOR_REWARD, newGroundCells, paintedCells, parseCellKey } from '@game/utils/grid';
-import { cumulativeDistance } from '@game/utils/geometry';
+import { walkDistanceMeters } from '@game/utils/geometry';
 import { bloomMultiplier, manualLogBloomMultiplier } from '@game/economy/formulas';
 import { BALANCE } from '@game/economy/balanceConfig';
 import type { Location } from '@game/types';
@@ -140,7 +140,7 @@ export async function ingestWalk(
     // A manual log paints nothing and always earns (identical to the app: closed, 0 distance, 0 cells).
     const painted = isManual ? new Set<string>() : paintedCells(req.locations);
     const qualifies = isManual || painted.size >= MIN_CELLS_FOR_REWARD;
-    const distanceMeters = cumulativeDistance(req.locations);
+    const distanceMeters = walkDistanceMeters({ startTime: req.startTime, locations: req.locations });
     const rangeRows = await dbx.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
     const rangeBefore: Cell[] = rangeRows.map((r) => ({
       ix: r.ix,

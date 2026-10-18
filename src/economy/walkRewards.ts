@@ -1,6 +1,6 @@
 import { Walk } from '../types';
 import { log } from '../utils/log';
-import { cumulativeDistance } from '../utils/geometry';
+import { walkDistanceMeters } from '../utils/geometry';
 import { paintedCells } from '../utils/grid';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
@@ -87,7 +87,7 @@ async function trailingAverageXp(
     // longer a stored per-walk area to read (see home-range's design.md;
     // the polygon this used to read, w.territory?.area, is deleted). A
     // manual-log walk's empty locations array correctly yields 0 cells here.
-    ...priorClosed.map((w) => xpAwardForWalk(cumulativeDistance(w.locations), paintedCells(w.locations).size)),
+    ...priorClosed.map((w) => xpAwardForWalk(walkDistanceMeters(w), paintedCells(w.locations).size)),
   ];
 
   if (samples.length < 5) {

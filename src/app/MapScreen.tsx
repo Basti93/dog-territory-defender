@@ -7,7 +7,7 @@ import { SomewhereWildCard, SomewhereWildSpot } from '../components/SomewhereWil
 import { Button, palette, spacing, textStyle, tokens } from '../ui';
 import { dogDisplayName } from '../economy/denEconomy';
 import { formatDistanceKm, t } from '../i18n';
-import { cumulativeDistance } from '../utils/geometry';
+import { walkDistanceMeters } from '../utils/geometry';
 import { Walk } from '../types';
 import { AppRepositories } from './repositories';
 import { ScreenFrame } from './ScreenFrame';
@@ -42,7 +42,7 @@ interface MapScreenProps {
 /** The live/idle map with its bottom controls. Hosts a WebView, so never FadeSlideIn-wrapped. */
 export function MapScreen(p: MapScreenProps) {
   const { walk, isTracking } = p;
-  const distance = walk ? cumulativeDistance(walk.locations) / 1000 : 0;
+  const distance = walk ? walkDistanceMeters(walk) / 1000 : 0;
   // Idle map: territory sign, numbers sign and handwritten notes (konzept section 3). Hidden while a walk is tracked.
   const viertelChrome = useViertelChrome({
     homeRangeRepository: p.repos.homeRangeRepository,
