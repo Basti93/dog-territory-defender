@@ -146,8 +146,8 @@ def render(path, w=1024, h=1024, samples=32, transparent=True):
     sc.eevee.taa_render_samples = samples
     sc.eevee.use_raytracing = True
     sc.eevee.use_fast_gi = True
-    sc.view_settings.view_transform = "AgX"  # AgX is the 5.x default; keeps pastels from clipping
-    sc.view_settings.exposure = 0.4
+    sc.view_settings.view_transform = sc.get("view_transform", "AgX")  # AgX is the 5.x default; keeps pastels from clipping
+    sc.view_settings.exposure = sc.get("exposure", 0.4)  # flat sign/paper assets set Standard + 0 to hit exact design colours
     r.filepath = path
     bpy.ops.render.render(write_still=True)
 

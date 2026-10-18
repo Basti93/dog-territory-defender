@@ -1232,6 +1232,150 @@
       "part": "zzz",
       "coat": null,
       "style": null
+    },
+    {
+      "file": "cream/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "cream",
+      "style": "a"
+    },
+    {
+      "file": "cream/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "cream",
+      "style": "b"
+    },
+    {
+      "file": "cream/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "cream",
+      "style": "sit-back"
+    },
+    {
+      "file": "golden/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "golden",
+      "style": "a"
+    },
+    {
+      "file": "golden/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "golden",
+      "style": "b"
+    },
+    {
+      "file": "golden/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "golden",
+      "style": "sit-back"
+    },
+    {
+      "file": "ginger/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "ginger",
+      "style": "a"
+    },
+    {
+      "file": "ginger/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "ginger",
+      "style": "b"
+    },
+    {
+      "file": "ginger/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "ginger",
+      "style": "sit-back"
+    },
+    {
+      "file": "chocolate/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "chocolate",
+      "style": "a"
+    },
+    {
+      "file": "chocolate/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "chocolate",
+      "style": "b"
+    },
+    {
+      "file": "chocolate/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "chocolate",
+      "style": "sit-back"
+    },
+    {
+      "file": "charcoal/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "charcoal",
+      "style": "a"
+    },
+    {
+      "file": "charcoal/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "charcoal",
+      "style": "b"
+    },
+    {
+      "file": "charcoal/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "charcoal",
+      "style": "sit-back"
+    },
+    {
+      "file": "grey/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "grey",
+      "style": "a"
+    },
+    {
+      "file": "grey/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "grey",
+      "style": "b"
+    },
+    {
+      "file": "grey/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "grey",
+      "style": "sit-back"
+    },
+    {
+      "file": "white/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "white",
+      "style": "a"
+    },
+    {
+      "file": "white/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "white",
+      "style": "b"
+    },
+    {
+      "file": "white/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "white",
+      "style": "sit-back"
+    },
+    {
+      "file": "tricolour/pose-walk-back-a.png",
+      "part": "poseWalkBack",
+      "coat": "tricolour",
+      "style": "a"
+    },
+    {
+      "file": "tricolour/pose-walk-back-b.png",
+      "part": "poseWalkBack",
+      "coat": "tricolour",
+      "style": "b"
+    },
+    {
+      "file": "tricolour/pose-sit-back.png",
+      "part": "poseSitBack",
+      "coat": "tricolour",
+      "style": "sit-back"
     }
   ]
 }

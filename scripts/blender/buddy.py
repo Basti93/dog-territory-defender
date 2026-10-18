@@ -271,6 +271,7 @@ def build_extras():
         patch(Mk, on(HC, HR, ph, e, 0.97), (0.3, 0.34, 0.42), HC, HR, "mark", None, head=True, k=MK, rot=(0, 0, math.radians(ph)))
 
     build_lying()
+    build_back()
 
 
 def build_lying():
@@ -308,6 +309,82 @@ def build_lying():
         n.matrix_world = YAW @ EXTRA @ tx @ BASE[o.name]
         OBJS.append(n)
     EXTRA = Matrix.Identity(4)
+
+
+# ---------- seen from behind (gate walk + "looking back" sit) ----------
+
+def rz(deg, pivot=(0, 0, 0)):
+    p = Vector(pivot)
+    return Matrix.Translation(p) @ Matrix.Rotation(math.radians(deg), 4, "Z") @ Matrix.Translation(-p)
+
+
+def _near(o, loc, tol=0.02):
+    return (BASE[o.name].translation - Vector(loc)).length < tol
+
+
+def clone(o, mw, part):
+    n = o.copy()
+    bpy.context.scene.collection.objects.link(n)
+    n["part"], n["nofit"] = part, True
+    n.matrix_world = mw @ BASE[o.name]
+    OBJS.append(n)
+    return n
+
+
+def free_ell(part, loc, rad, key, mw):
+    o = common.sph(loc, 1.0, M[key], scale=tuple(rad))
+    o["part"], o["only"], o["nofit"] = part, "", True
+    o.matrix_world = mw @ o.matrix_world
+    OBJS.append(o)
+    return o
+
+
+BACK_POSES = ("walk-back-a", "walk-back-b", "sit-back")
+BACK_PART = {"walk-back-a": ("poseWalkBack", "a"), "walk-back-b": ("poseWalkBack", "b"), "sit-back": ("poseSitBack", "sit-back")}
+FACE_AWAY = -90          # dog faces -X; this turns it to face away from the camera (+Y)
+
+
+def build_back():
+    """Walk-back a/b: dog trotting away (hind paws alternate, head glances sideways); sit-back: sitting with its back
+    to us, head turned over the shoulder looking at the viewer. All nofit, copies of the sitting parts re-posed."""
+    ORIG = list(OBJS)
+    body = [o for o in ORIG if o["part"] == "body"]
+    legs = [o for o in ORIG if o["part"] == "front-legs"]
+    head = [o for o in ORIG if o["part"] in ("head", "ear-left-floppy", "ear-right-floppy")]
+    tail = [o for o in ORIG if o["part"] == "tail-curly"]
+    eyes = [o for o in ORIG if o["part"] == "eyes-open"]
+    tail_m = lambda ang: rz(ang, TAIL_BASE)            # turn the curl so it shows from behind
+
+    for name, near_back, bob, hy in (("a", True, 0.0, 22), ("b", False, 0.05, -22)):
+        P = f"pose-walk-back-{name}"
+        G = Matrix.Translation((0.0, 0.0, 0.0)) @ rz(FACE_AWAY + (8 if near_back else -8))
+        for o in body:
+            if _near(o, (0.35, 0, 1.25)) or _near(o, (0.5, 0, 2.2)):           # torso + back patch
+                clone(o, G @ Matrix.Translation((0, 0, bob)), P)
+            for s in (-1, 1):
+                if _near(o, (0.75, s * 0.68, 0.8)) or (s < 0 and _near(o, (0.8, -0.85, 0.85))):
+                    back = (s < 0) == near_back          # this haunch is the one pushed back (planted)
+                    off = Vector((0.18, 0, 0.0)) if back else Vector((-0.28, 0, 0.26))
+                    clone(o, G @ Matrix.Translation(off + Vector((0, 0, bob))), P)
+        for s in (-1, 1):
+            back = (s < 0) == near_back
+            loc = (1.62, s * 0.68, 0.19) if back else (1.5, s * 0.68, 0.62)
+            free_ell(P, loc, (0.5, 0.31, 0.2), "coat", G @ Matrix.Translation((0, 0, bob)))
+        hm = G @ Matrix.Translation((0, 0, bob)) @ rz(hy, HC)
+        for o in head:
+            clone(o, hm, P)
+        for o in tail:
+            clone(o, G @ Matrix.Translation((0, 0, bob)) @ tail_m(75), P)
+
+    P = "pose-sit-back"
+    G = rz(FACE_AWAY + 14)
+    for o in body + legs:
+        clone(o, G, P)
+    for o in tail:
+        clone(o, G @ tail_m(70), P)
+    hm = Matrix.Translation((0.55, -0.55, 0.12)) @ G @ rz(150, HC)
+    for o in head + eyes:
+        clone(o, hm, P)
 
 
 def set_coat(coat):
@@ -422,6 +499,7 @@ def gold_previews(out, ground):
 def sheet(out, coats):
     import contact_sheet
     names = [f"_preview-{c}" for c in coats] + [f"{c}/pose-lying" for c in coats]
+    names += [f"{c}/pose-{nm}" for nm in BACK_POSES for c in coats]
     contact_sheet.make(out, names, os.path.join(out, "_contact-sheet.png"), tile=256, cols=len(coats))
 
 
@@ -433,6 +511,7 @@ def main(argv):
     coats = arg("--coats", ",".join(COATS)).split(",")
     preview_only = "--preview-only" in argv
     only_marks = "--only-markings" in argv
+    only_back = "--only-back" in argv      # render just the from-behind poses and merge them into manifest.json
     w = h = int(arg("--size", 512))
     samples = 16 if fast else 32
     import time
@@ -471,6 +550,11 @@ def main(argv):
                 holdout(False)
             print(f"[buddy] {coat} markings {time.time() - t0:.0f}s", flush=True)
             continue
+        if only_back:
+            for nm in BACK_POSES:
+                rnd(f"{coat}/pose-{nm}.png", [f"pose-{nm}"], coat, *BACK_PART[nm])
+            print(f"[buddy] {coat} back poses {time.time() - t0:.0f}s", flush=True)
+            continue
         if preview_only:
             show(base, coat); common.render(os.path.join(out, f"_preview-{coat}.png"), w, h, samples); continue
         for p, part in (("body", "body"), ("head", "head"), ("front-legs", "frontLegs")):
@@ -491,6 +575,8 @@ def main(argv):
         for st in ("a", "b"):
             rnd(f"{coat}/front-legs-walk-{st}.png", [f"front-legs-walk-{st}"], coat, "frontLegs", f"walk-{st}")
         rnd(f"{coat}/pose-lying.png", ["pose-lying"], coat, "poseLying", "lying")
+        for nm in BACK_POSES:
+            rnd(f"{coat}/pose-{nm}.png", [f"pose-{nm}"], coat, *BACK_PART[nm])
         show(base, coat)
         common.render(os.path.join(out, f"_preview-{coat}.png"), w, h, samples)
         if "--variants" in argv:  # extra check renders: happy + sleepy faces
@@ -499,6 +585,16 @@ def main(argv):
             show([b for b in base if b not in ("eyes-open", "tail-curly", "ear-left-floppy")] + ["mouth-happy", "eyes-open", "ear-left-pointy", "tail-straight"], coat)
             common.render(os.path.join(out, f"_preview-{coat}-happy.png"), w, h, samples)
         print(f"[buddy] {coat} done {time.time() - t0:.0f}s", flush=True)
+    if only_back:
+        mp = os.path.join(out, "manifest.json")
+        with open(mp) as f:
+            man = json.load(f)
+        new = {e["file"] for e in entries}
+        man["files"] = [e for e in man["files"] if e["file"] not in new] + entries
+        with open(mp, "w") as f:
+            json.dump(man, f, indent=2)
+        sheet(out, coats)
+        return
     if only_marks:
         if "golden" in coats:
             gold_previews(out, ground)

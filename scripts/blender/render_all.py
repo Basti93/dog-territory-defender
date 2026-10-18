@@ -8,6 +8,7 @@ import bpy
 import common
 import assets
 import contact_sheet
+import scene_props  # noqa: F401  (registers the scene props + textures)
 
 
 # Output px per asset (on-screen use, keeps decoded memory low); anything else uses the registry size.
@@ -36,6 +37,11 @@ def main():
     if "--sheet-only" in argv:
         contact_sheet.make(out, list(assets.ASSETS), os.path.join(out, "_contact-sheet.png"))
         return
+    for name, fn in assets.TEXTURES.items():
+        if only and not any(name == o or name.startswith(o) for o in only):
+            continue
+        scene_props.write_texture(name, fn(), out)
+        print(f"[art] {name} (texture)")
     for name, (fn, w, h, cam, fill, opaque) in assets.ASSETS.items():
         if only and not any(name == o or name.startswith(o) for o in only):
             continue
@@ -52,7 +58,7 @@ def main():
         common.render(os.path.join(out, name + ".png"), w, h, samples=16 if fast else 64, transparent=not opaque)
         print(f"[art] {name} {time.time() - t:.1f}s")
     if not only:
-        contact_sheet.make(out, list(assets.ASSETS), os.path.join(out, "_contact-sheet.png"))
+        contact_sheet.make(out, list(assets.ASSETS) + list(assets.TEXTURES), os.path.join(out, "_contact-sheet.png"), cols=6)
 
 
 main()

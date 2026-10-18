@@ -37,3 +37,4 @@ stacking all layers: no gaps at joins, no baked-in shadows.
 - `markings-patch|socks|mask.png`: overlay only, stack above `head` (and `front-legs`), below eyes/ears. Colour is coat-dependent (darker tone on light coats, cream on dark; socks cream except cream/white/tricolour).
 - `pose-lying.png`: full single sprite (sphinx, head on paws, eyes closed, floppy ears + curly tail baked in), same groundY. Replaces all layers for the sleepy mood.
 - `front-legs-walk-a.png` / `front-legs-walk-b.png`: swap-in for `front-legs` (near leg forward / back), same shoulder position.
+- `pose-walk-back-a.png` / `pose-walk-back-b.png`: full sprites, dog trotting away (seen from behind), alternate for the gate walk. `pose-sit-back.png`: sitting with its back to us, looking back over the shoulder. Same canvas and groundY; replace all layers.
