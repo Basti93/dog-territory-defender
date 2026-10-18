@@ -70,7 +70,13 @@ var HR_WILD_CONTOUR_THRESHOLD = ${WILD_CONTOUR_THRESHOLD};
 // design.md Decision 2 specified 0.28 as a flat floor alpha; real on-device
 // testing (rendering-spike.html) found that too faint to read against map
 // tiles, so it's raised here — deviation logged, not silently changed.
-var HR_FILL_ALPHA = 0.6;
+// Fill alpha ramps with wildness: HR_FILL_ALPHA on fresh ground down to
+// HR_FILL_ALPHA_WILD at the wild end, so the Range reads as a soft green field
+// on the paler HOT tiles. Muted layer (HR_MUTED_FILL_ALPHA) stays lower still.
+var HR_FILL_ALPHA = 0.55;
+var HR_FILL_ALPHA_WILD = 0.35;
+var HR_OUTLINE_WEIGHT = 2;
+var HR_OUTLINE_OPACITY = 0.8;
 var HR_OUTSIDE_SENTINEL = 255;
 var HR_FRESH_HEX = '#2ECC71';
 var HR_WILD_HEX = '#DCE8BE';
@@ -339,7 +345,7 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
       var outR = Math.round(rgb[0] + (46 - rgb[0]) * veinMix);
       var outG = Math.round(rgb[1] + (204 - rgb[1]) * veinMix);
       var outB = Math.round(rgb[2] + (113 - rgb[2]) * veinMix);
-      var alpha = Math.round(HR_FILL_ALPHA * occV * 255);
+      var alpha = Math.round((HR_FILL_ALPHA + (HR_FILL_ALPHA_WILD - HR_FILL_ALPHA) * wildV) * occV * 255);
 
       // Flip vertically: array row 0 is the southernmost row (smallest iy),
       // but image row 0 is drawn at the north edge of the Leaflet bounds.
@@ -373,7 +379,7 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
   for (i = 0; i < segments.length; i++) {
     var a = hrLocalToLatLon(segments[i][0][0], segments[i][0][1], minIx, minIy);
     var b = hrLocalToLatLon(segments[i][1][0], segments[i][1][1], minIx, minIy);
-    L.polyline([a, b], { color: HR_FRESH_HEX, weight: 1.5, opacity: 0.5, interactive: false }).addTo(layerGroup);
+    L.polyline([a, b], { color: HR_FRESH_HEX, weight: HR_OUTLINE_WEIGHT, opacity: HR_OUTLINE_OPACITY, interactive: false }).addTo(layerGroup);
   }
 
   // ---- Wild-ground contour (openspec/changes/somewhere-wild): a second
@@ -541,7 +547,7 @@ function renderHomeRangePortrait(canvas, payload) {
       var outR = Math.round(rgb[0] + (46 - rgb[0]) * veinMix);
       var outG = Math.round(rgb[1] + (204 - rgb[1]) * veinMix);
       var outB = Math.round(rgb[2] + (113 - rgb[2]) * veinMix);
-      var alpha = Math.round(HR_FILL_ALPHA * occV * 255);
+      var alpha = Math.round((HR_FILL_ALPHA + (HR_FILL_ALPHA_WILD - HR_FILL_ALPHA) * wildV) * occV * 255);
 
       // Same vertical flip as renderHomeRangeToMap's fill loop: array row 0
       // is the southernmost row, but image/canvas row 0 must be the north
@@ -560,8 +566,8 @@ function renderHomeRangePortrait(canvas, payload) {
   // deliberately no second wild-ground contour pass and no marker.
   var segments = hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD);
   ctx.strokeStyle = HR_FRESH_HEX;
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = HR_OUTLINE_WEIGHT;
+  ctx.globalAlpha = HR_OUTLINE_OPACITY;
   for (i = 0; i < segments.length; i++) {
     var a = segments[i][0];
     var b = segments[i][1];

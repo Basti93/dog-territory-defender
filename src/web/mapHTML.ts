@@ -1,6 +1,6 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { tokens } from '../ui/tokens';
-import { MAP_MARKER_CSS, MAP_THEME_CSS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
+import { DOGHOUSE_HTML, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 export const mapHTML = `
 <!DOCTYPE html>
@@ -26,8 +26,10 @@ ${HOME_RANGE_RENDERER_SCRIPT}
 
     const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
 ${MAP_TILE_LAYER_JS}
+${MAP_CLOUDS_JS}
 
     let trailPolyline = null;
+    let doghouseMarker = null;
     let currentMarker = null;
     let hasCentered = false;
     // The Home Range layer group (Bloom fill + Range outline), replacing
@@ -45,6 +47,10 @@ ${MAP_TILE_LAYER_JS}
         map.removeLayer(trailPolyline);
         trailPolyline = null;
       }
+      if (doghouseMarker) {
+        map.removeLayer(doghouseMarker);
+        doghouseMarker = null;
+      }
       if (currentMarker) {
         map.removeLayer(currentMarker);
         currentMarker = null;
@@ -59,6 +65,7 @@ ${MAP_TILE_LAYER_JS}
     }
 
     reportToRN('WEBVIEW_LOADED', { hasRNBridge: !!window.ReactNativeWebView, leafletLoaded: typeof L !== 'undefined' });
+${MAP_THEME_PROBE_JS}
 
     function handleMessage(e) {
       try {
@@ -112,7 +119,25 @@ ${MAP_TILE_LAYER_JS}
           // Drawn-path look: cream under-stroke + green main stroke, rounded.
           const trailUnder = L.polyline(latLngs, { color: '${tokens.white}', weight: 10, opacity: 0.95, lineCap: 'round', lineJoin: 'round' });
           const trailMain = L.polyline(latLngs, { color: '${tokens.green}', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' });
-          trailPolyline = L.layerGroup([trailUnder, trailMain]).addTo(map);
+          // Paw-dot overlay: zero-length round dashes every 14px read as paw prints along the route.
+          const trailDots = L.polyline(latLngs, { color: '${tokens.brown}', weight: 6, opacity: 0.9, dashArray: '0 14', lineCap: 'round', lineJoin: 'round' });
+          trailPolyline = L.layerGroup([trailUnder, trailMain, trailDots]).addTo(map);
+        }
+
+        // Doghouse at the walk's start point; cleared when the trail is empty.
+        if (locations.length > 0) {
+          const start = [locations[0].latitude, locations[0].longitude];
+          if (!doghouseMarker) {
+            doghouseMarker = L.marker(start, {
+              icon: L.divIcon({ className: 'doghouse-marker', html: ${JSON.stringify(DOGHOUSE_HTML)}, iconSize: [40, 40], iconAnchor: [20, 36] }),
+              interactive: false
+            }).addTo(map);
+          } else {
+            doghouseMarker.setLatLng(start);
+          }
+        } else if (doghouseMarker) {
+          map.removeLayer(doghouseMarker);
+          doghouseMarker = null;
         }
       }
 
