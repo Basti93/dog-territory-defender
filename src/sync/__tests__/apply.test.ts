@@ -205,6 +205,25 @@ describe('member.joined', () => {
     await applyEvents([joined('p-me', 'Sam', 1)], 1, repos, ctx());
     expect((await repos.sync.getState()).lastMemberJoined).toBeNull();
     await applyEvents([joined('p-lisa', 'Lisa', 2)], 2, repos, ctx());
-    expect((await repos.sync.getState()).lastMemberJoined).toEqual({ playerName: 'Lisa', at: 77 });
+    expect((await repos.sync.getState()).lastMemberJoined).toEqual({ playerName: 'Lisa', at: 77, playerId: 'p-lisa' });
+  });
+});
+
+describe('member.updated', () => {
+  it('replaces the partner name in sync state, last event wins, idempotent on replay', async () => {
+    const repos = makeRepos();
+    await applySnapshot(snapshot(), repos, ctx());
+    const renamed = (name: string, seq: number): ApiEvent => ({
+      seq,
+      kind: 'member.updated',
+      actorPlayerId: 'p-lisa',
+      createdAt: 90,
+      payload: { player: { id: 'p-lisa', displayName: name, joinedAt: 2 } },
+    });
+    await applyEvents([renamed('Lisa K.', 8), renamed('Lisi', 9)], 9, repos, ctx());
+    await applyEvents([renamed('Lisa K.', 8), renamed('Lisi', 9)], 9, repos, ctx());
+    const state = await repos.sync.getState();
+    expect(state.players).toEqual({ 'p-me': 'Sam', 'p-lisa': 'Lisi' });
+    expect(state.lastMemberJoined).toBeNull(); // a rename is not "joined"
   });
 });

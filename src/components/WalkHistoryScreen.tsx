@@ -25,9 +25,11 @@ interface WalkHistoryScreenProps {
   onClose: () => void;
   /** Opens that walk's Walk Portrait (docs/decisions/walk-portrait) — every row, regardless of startSource or reward-qualifying status, is tappable to this. */
   onSelectWalk: (walk: StoredWalk) => void;
+  /** A walk was deleted locally. App.tsx uses it to tell the household (`walk.delete`); the Range keeps the ground either way. */
+  onWalkDeleted?: (walkId: string) => void;
 }
 
-export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSelectWalk }: WalkHistoryScreenProps) {
+export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSelectWalk, onWalkDeleted }: WalkHistoryScreenProps) {
   const [walks, setWalks] = useState<StoredWalk[] | null>(null);
 
   useEffect(() => {
@@ -48,6 +50,7 @@ export function WalkHistoryScreen({ buddyAppearance, repository, onClose, onSele
         style: 'destructive',
         onPress: async () => {
           await repository.deleteWalk(walk.id);
+          onWalkDeleted?.(walk.id);
           setWalks((prev) => (prev ? prev.filter((w) => w.id !== walk.id) : prev));
         },
       },

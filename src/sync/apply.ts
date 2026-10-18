@@ -10,6 +10,7 @@
 //  - den state:    server wins when its revision is newer; local-only fields stay
 //  - dog name:     server wins when it has one
 //  - member.joined: remembered for a one-off Doorstep line
+//  - member.updated: a rename; the new name replaces the old in sync state (Doorstep reads names from there)
 
 import type { DenEconomyState } from '../economy/denEconomy';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
@@ -53,7 +54,7 @@ interface Batch {
   den: ApiDenState | null;
   dogName: string | null;
   players: Record<string, string>;
-  memberJoined: { playerName: string; at: number } | null;
+  memberJoined: { playerName: string; at: number; playerId: string } | null;
 }
 
 /** Overlays the server-owned fields onto the local state; per-device fields (backfill flags, manual-log counters, cliffhanger) stay. */
@@ -217,8 +218,11 @@ export async function applyEvents(
       case 'member.joined':
         batch.players[event.payload.player.id] = event.payload.player.displayName;
         if (event.payload.player.id !== ctx.playerId) {
-          batch.memberJoined = { playerName: event.payload.player.displayName, at: event.createdAt };
+          batch.memberJoined = { playerName: event.payload.player.displayName, at: event.createdAt, playerId: event.payload.player.id };
         }
+        break;
+      case 'member.updated':
+        batch.players[event.payload.player.id] = event.payload.player.displayName;
         break;
     }
   }

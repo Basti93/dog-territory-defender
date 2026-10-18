@@ -110,6 +110,7 @@ export default function App() {
   });
 
   const manualLog = useManualWalkLog(repos, {
+    sync: syncEngine,
     screenOpen: screen === 'logMissedWalk',
     onRangeChanged: bumpRangeRefresh,
     onLogged: (outcome) => {
@@ -295,6 +296,7 @@ export default function App() {
             repository={repos.walkRepository}
             homeRangeRepository={repos.homeRangeRepository}
             onSelectWalk={nav.viewWalk}
+            onWalkDeleted={(id) => void syncEngine.enqueueWalkDelete(id).catch(() => undefined)}
             onClose={() => {
               bumpRangeRefresh();
               nav.close();

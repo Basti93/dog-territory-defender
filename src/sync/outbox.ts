@@ -28,7 +28,10 @@ export function planFailure(
   return { nextAttemptAt: now + backoffDelayMs(attempts), deadAt: null };
 }
 
-/** The walk's id is the idempotency key, so enqueueing the same walk twice is a no-op. */
+/**
+ * The walk's id is the idempotency key, so enqueueing the same walk twice is a no-op.
+ * A manual log ("Log a walk we missed") goes up with no locations, plus the optional route it refreshed.
+ */
 export async function enqueueWalkUpload(
   sync: SyncRepository,
   walk: Walk,
@@ -38,8 +41,9 @@ export async function enqueueWalkUpload(
   const payload: WalkUploadRequest = {
     id: walk.id,
     startTime: walk.startTime,
-    startSource: 'button',
+    startSource: walk.startSource,
     locations: walk.locations,
+    ...(walk.startSource === 'manual-log' && walk.refreshedRouteWalkId ? { refreshRouteWalkId: walk.refreshedRouteWalkId } : {}),
     ...(territoryNameHint ? { territoryNameHint } : {}),
   };
   await sync.enqueue({ id: walk.id, kind: 'walk.upload', payload, createdAt: now });
@@ -47,6 +51,10 @@ export async function enqueueWalkUpload(
 
 export async function enqueueEconomyCommand(sync: SyncRepository, command: CommandBody, now: number): Promise<void> {
   await sync.enqueue({ id: newClientId(), kind: 'command', payload: command, createdAt: now });
+}
+
+export function renameCommand(name: string): CommandBody {
+  return { kind: 'player.rename', name };
 }
 
 export function upgradeCommand(building: BuildingKey): CommandBody {

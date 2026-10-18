@@ -35,12 +35,12 @@ export interface SyncState {
   lastSyncAt: number | null;
   /** serverTime - deviceTime at the last response. */
   clockOffsetMs: number;
-  /** playerId -> display name, from snapshots and member.joined events (walk events carry only ids). */
+  /** playerId -> display name, from snapshots and member.joined / member.updated events (walk events carry only ids). */
   players: Record<string, string>;
   /** Founding-import idempotency key, set before the first import attempt so a retry replays instead of conflicting. */
   importId: string | null;
   /** Latest "X joined the pack" event, for the one-off Doorstep line. */
-  lastMemberJoined: { playerName: string; at: number } | null;
+  lastMemberJoined: { playerName: string; at: number; /** Absent in state saved before renames existed. */ playerId?: string } | null;
 }
 
 export const EMPTY_SYNC_STATE: SyncState = { cursor: 0, denRev: 0, lastSyncAt: null, clockOffsetMs: 0, players: {}, importId: null, lastMemberJoined: null };

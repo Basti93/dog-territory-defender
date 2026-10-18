@@ -31,28 +31,32 @@ export interface HouseholdLineInput {
   walks: StoredWalk[];
   myPlayerId: string | null;
   dogName: string | null;
-  lastMemberJoined: { playerName: string; at: number } | null;
+  lastMemberJoined: { playerName: string; at: number; playerId?: string } | null;
+  /** playerId -> CURRENT display name (sync state). Wins over the name stored on a walk, so a rename shows up on old walks too. */
+  players?: Record<string, string>;
   now: number;
 }
 
 /** 0-2 plain strings for the Doorstep away strip. Empty when not joined. */
 export function resolveHouseholdLines(input: HouseholdLineInput): string[] {
   const { walks, myPlayerId, dogName, lastMemberJoined, now } = input;
+  const players = input.players ?? {};
+  const nameOf = (playerId: string | undefined, stored: string | undefined) => (playerId && players[playerId]) || stored;
   if (!myPlayerId) return [];
   const dog = dogDisplayName(dogName);
   const lines: string[] = [];
 
   // The most recent partner walk within the window.
   const partnerWalk = walks
-    .filter((w) => w.playerId && w.playerId !== myPlayerId && w.playerName)
+    .filter((w) => w.playerId && w.playerId !== myPlayerId && nameOf(w.playerId, w.playerName))
     .sort((a, b) => b.startTime - a.startTime)[0];
   if (partnerWalk) {
     const part = walkDayPart(partnerWalk.startTime, now);
-    if (part) lines.push(t(`household.walk.${part}`, { player: partnerWalk.playerName ?? '', dog }));
+    if (part) lines.push(t(`household.walk.${part}`, { player: nameOf(partnerWalk.playerId, partnerWalk.playerName) ?? '', dog }));
   }
 
   if (lastMemberJoined && now - lastMemberJoined.at <= HOUSEHOLD_NEWS_WINDOW_MS) {
-    lines.push(t('household.joined', { player: lastMemberJoined.playerName, dog }));
+    lines.push(t('household.joined', { player: nameOf(lastMemberJoined.playerId, lastMemberJoined.playerName) ?? '', dog }));
   }
   return lines;
 }

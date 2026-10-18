@@ -23,7 +23,7 @@ import { newClientId } from './ids';
 import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
 import { INVITE_CODE_LENGTH } from './syncConfig';
 import { applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult } from './apply';
-import { enqueueEconomyCommand, enqueueWalkUpload, planFailure } from './outbox';
+import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
 export interface SyncEngineDeps {
@@ -86,8 +86,15 @@ export interface SyncEngine {
   leave(): Promise<void>;
   /** Queues an economy command (no-op when not joined) and kicks off a sync without waiting for it. */
   enqueueCommand(command: CommandBody): Promise<void>;
-  /** Queues a finished tracked walk for upload (no-op when not joined or for manual logs, which the server does not accept in M1). */
+  /** Queues a finished tracked walk or a manual log for upload (no-op when not joined). */
   enqueueWalk(walk: Walk, territoryNameHint: string | null): Promise<void>;
+  /**
+   * Renames this player in the household: the new (trimmed, <= maxRenameLength) name is saved locally at once
+   * and sent as `player.rename`. Returns false when not joined or the name is empty.
+   */
+  renamePlayer(name: string): Promise<boolean>;
+  /** Queues `walk.delete` for a walk deleted from History (no-op when not joined). The server keeps the walk's cells. */
+  enqueueWalkDelete(walkId: string): Promise<void>;
   /** Push then pull. Coalesces overlapping calls; never throws. `force` ignores retry backoff. */
   syncNow(options?: { force?: boolean }): Promise<void>;
 }
@@ -278,6 +285,18 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     reportApplied(await applySnapshot(snapshot, applyRepos, ctx));
   }
 
+  /** Another phone of the same player may have renamed them: keep this phone's identity name in step with sync state. */
+  async function adoptServerName(identity: SyncIdentity): Promise<void> {
+    const { players } = await deps.sync.getState();
+    const serverName = players[identity.playerId];
+    if (!serverName || serverName === identity.playerName) return;
+    // Our own rename still waiting in the outbox wins until the server has it.
+    const pendingRename = (await deps.sync.getPending()).some((i) => i.kind === 'command' && (i.payload as CommandBody).kind === 'player.rename');
+    if (pendingRename) return;
+    await deps.settings.saveSyncIdentity({ ...identity, playerName: serverName });
+    notify();
+  }
+
   async function runOnce(force: boolean): Promise<void> {
     const identity = await deps.settings.getSyncIdentity();
     if (!identity) return;
@@ -287,6 +306,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       const drained = await push(client, force);
       if (!drained) return;
       await pull(client, identity);
+      await adoptServerName(identity);
       await deps.sync.saveState({ lastSyncAt: now() });
     } catch (err) {
       if (err instanceof ApiError && err.kind === 'unauthorized') unauthorized = true;
@@ -400,10 +420,30 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     },
 
     async enqueueWalk(walk, territoryNameHint) {
-      if (walk.startSource !== 'button') return;
       const identity = await deps.settings.getSyncIdentity();
       if (!identity) return;
       await enqueueWalkUpload(deps.sync, walk, territoryNameHint, now());
+      notify();
+      void syncNow();
+    },
+
+    async renamePlayer(rawName) {
+      const name = rawName.trim().slice(0, API_LIMITS.maxRenameLength).trim();
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity || name.length === 0) return false;
+      const state = await deps.sync.getState();
+      await deps.settings.saveSyncIdentity({ ...identity, playerName: name });
+      await deps.sync.saveState({ players: { ...state.players, [identity.playerId]: name } });
+      await enqueueEconomyCommand(deps.sync, renameCommand(name), now());
+      notify();
+      void syncNow();
+      return true;
+    },
+
+    async enqueueWalkDelete(walkId) {
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity) return;
+      await enqueueEconomyCommand(deps.sync, { kind: 'walk.delete', walkId }, now());
       notify();
       void syncNow();
     },

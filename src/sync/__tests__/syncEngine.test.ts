@@ -33,6 +33,74 @@ describe('backoff policy', () => {
   });
 });
 
+describe('player rename', () => {
+  it('saves the trimmed name locally at once, sends player.rename, and ignores empty names', async () => {
+    const repos = await joined();
+    const command = jest.fn(async () => ({ clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 }));
+    const engine = makeEngine(repos, { command, events: async () => emptyEvents });
+    expect(await engine.renamePlayer('   ')).toBe(false);
+    expect(await engine.renamePlayer('  Sam B.  ')).toBe(true);
+    expect((await repos.settings.getSyncIdentity())?.playerName).toBe('Sam B.');
+    expect((await engine.getStatus()).playerName).toBe('Sam B.');
+    expect((await repos.sync.getState()).players['p-me']).toBe('Sam B.');
+    await engine.syncNow();
+    expect(command).toHaveBeenCalledWith(expect.objectContaining({ command: { kind: 'player.rename', name: 'Sam B.' } }));
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+
+  it('is a no-op when not joined', async () => {
+    const engine = makeEngine(makeRepos(), {});
+    expect(await engine.renamePlayer('Sam')).toBe(false);
+  });
+
+  it('adopts a rename done on another phone of the same player, unless one of ours is still queued', async () => {
+    const repos = await joined();
+    await repos.sync.saveState({ players: { 'p-me': 'Sam' } });
+    const events = jest.fn(async () => ({
+      events: [
+        { seq: 8, kind: 'member.updated' as const, actorPlayerId: 'p-me', createdAt: 5, payload: { player: { id: 'p-me', displayName: 'Bas', joinedAt: 1 } } },
+      ],
+      cursor: 8,
+      hasMore: false,
+      serverTime: 2_000,
+    }));
+    await makeEngine(repos, { events }).syncNow();
+    expect((await repos.settings.getSyncIdentity())?.playerName).toBe('Bas');
+  });
+});
+
+describe('manual logs and walk deletes', () => {
+  it('uploads a manual log with no locations and the refreshed route', async () => {
+    const repos = await joined();
+    const uploadWalk = jest.fn(async () => uploadOk());
+    const engine = makeEngine(repos, { uploadWalk, events: async () => emptyEvents });
+    const manual: Walk = { id: 'manual-1700000000001', startTime: 1_000, locations: [], closed: true, startSource: 'manual-log', refreshedRouteWalkId: 'route-1' };
+    await repos.walks.saveWalk(manual);
+    await engine.enqueueWalk(manual, null);
+    await engine.syncNow();
+    expect(uploadWalk).toHaveBeenCalledWith({
+      id: 'manual-1700000000001',
+      startTime: 1_000,
+      startSource: 'manual-log',
+      locations: [],
+      refreshRouteWalkId: 'route-1',
+    });
+    expect((await repos.walks.getWalk(manual.id))?.syncedAt).not.toBeNull();
+  });
+
+  it('queues walk.delete for a History delete, only when joined', async () => {
+    const repos = await joined();
+    const command = jest.fn(async () => ({ clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 }));
+    await makeEngine(repos, { command, events: async () => emptyEvents }).enqueueWalkDelete('w-del');
+    await makeEngine(repos, { command, events: async () => emptyEvents }).syncNow();
+    expect(command).toHaveBeenCalledWith(expect.objectContaining({ command: { kind: 'walk.delete', walkId: 'w-del' } }));
+
+    const unjoined = makeRepos();
+    await makeEngine(unjoined, {}).enqueueWalkDelete('w-del');
+    expect(await unjoined.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+});
+
 describe('outbox retry', () => {
   it('keeps the walk queued with backoff when offline, then delivers it once the server is back', async () => {
     const repos = await joined();

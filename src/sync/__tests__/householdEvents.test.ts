@@ -53,7 +53,15 @@ describe('resolveHouseholdLines', () => {
   it('is empty when not joined and adds a one-off pack line for a recent new member', () => {
     expect(resolveHouseholdLines({ ...base, myPlayerId: null, walks: [partnerWalk(at(2026, 10, 18, 8))] })).toEqual([]);
     const lines = resolveHouseholdLines({ ...base, walks: [], lastMemberJoined: { playerName: 'Lisa', at: NOW - 1000 } });
-    expect(lines).toEqual(["Lisa joined Rex's pack."]);
+    expect(lines).toEqual(["Lisa just joined Rex's pack. Welcome!"]);
     expect(resolveHouseholdLines({ ...base, walks: [], lastMemberJoined: { playerName: 'Lisa', at: NOW - HOUSEHOLD_NEWS_WINDOW_MS - 1 } })).toEqual([]);
+  });
+
+  it('uses the current name from sync state, so a rename shows on walks and the join line saved earlier', () => {
+    const players = { 'p-lisa': 'Lisi' };
+    expect(resolveHouseholdLines({ ...base, players, walks: [partnerWalk(at(2026, 10, 18, 8))] })).toEqual(['Lisi was out with Rex this morning.']);
+    expect(
+      resolveHouseholdLines({ ...base, players, walks: [], lastMemberJoined: { playerName: 'Lisa', at: NOW - 1000, playerId: 'p-lisa' } })
+    ).toEqual(["Lisi just joined Rex's pack. Welcome!"]);
   });
 });

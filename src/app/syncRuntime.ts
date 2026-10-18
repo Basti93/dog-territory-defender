@@ -41,6 +41,7 @@ export async function loadHouseholdLines(dogName: string | null): Promise<string
     myPlayerId: identity.playerId,
     dogName,
     lastMemberJoined: state.lastMemberJoined,
+    players: state.players,
     now: Date.now(),
   });
 }

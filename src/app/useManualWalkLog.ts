@@ -25,6 +25,8 @@ export function useManualWalkLog(
     /** True while the Log a Missed Walk screen is open. */
     screenOpen: boolean;
     onRangeChanged: () => void;
+    /** Household sync: the finished log (and the route it refreshed) is queued for upload. Never blocks the local result. */
+    sync?: { enqueueWalk: (walk: Walk, territoryNameHint: string | null) => Promise<void> };
     /** Success: treats/level changed, celebration to show, return to the Doorstep. */
     onLogged: (outcome: WalkRewardsOutcome) => void;
   }
@@ -122,15 +124,21 @@ export function useManualWalkLog(
       // Combined second patch write (walk-portrait design.md Decision 6):
       // which route (if any) this log refreshed, plus its treatsEarned.
       // Never user-visible.
+      const finishedLog: Walk = {
+        ...manualWalk,
+        ...(refreshApplied && refreshRouteWalkId ? { refreshedRouteWalkId: refreshRouteWalkId } : {}),
+        treatsEarned: result.celebration.treatsEarned,
+      };
       try {
-        await walkRepository.saveWalk({
-          ...manualWalk,
-          ...(refreshApplied && refreshRouteWalkId ? { refreshedRouteWalkId: refreshRouteWalkId } : {}),
-          treatsEarned: result.celebration.treatsEarned,
-        });
+        await walkRepository.saveWalk(finishedLog);
       } catch (err) {
         log('STORAGE_WALK_TREATS_PATCH_ERROR', { id: manualWalk.id, error: String(err) });
       }
+      // The server applies the same flat reward, the household-wide daily quota and the optional route
+      // refresh; its Den state replaces ours on the next pull.
+      await deps.sync?.enqueueWalk(finishedLog, null).catch((err) =>
+        log('SYNC_ENQUEUE_ERROR', { id: finishedLog.id, error: String(err) })
+      );
     } catch (err) {
       console.error('Failed to log missed walk:', err);
       log('WALK_MANUAL_LOG_ERROR', { id: manualWalk.id, error: String(err) });
