@@ -143,6 +143,24 @@ const en: Record<string, string> = {
   "doorstep.statsBadges": "Stats & Badges",
   "doorstep.denTease": "{treats} / {cap} treats · Upgrade for {cost}",
 
+  // ---- world scene (the yard: gate, bench, mailbox, bowl, building signs)
+  "world.gate": "Go for a walk",
+  "world.gateLabel": "Gate: go for a walk",
+  "world.toNeighbourhood": "to the neighbourhood",
+  "world.backToYard": "back to the yard",
+  "world.neighbourhoodLabel": "The neighbourhood: open the map",
+  "world.album": "Album",
+  "world.albumLabel": "Bench: past walks",
+  "world.post": "Mail",
+  "world.postLabel": "Mailbox: settings and more",
+  "world.bowlSign": "{count} of {cap} treats",
+  "world.bowlLabel": "Bowl: {count} of {cap} treats",
+  "world.upgradePossible": "Upgrade possible",
+  "world.upgradeFor": "Upgrade for {cost}",
+  "world.buildingSign": "{name} · Lv {level}",
+  "world.buildingLabel": "{name}, level {level}",
+  "world.panelClose": "Close",
+
   // ---- doorstep menu
   "menu.debugLog": "Debug Log",
   "menu.logMissedWalk": "Log a walk we missed",

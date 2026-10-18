@@ -21,68 +21,27 @@ import {
   tokens,
 } from '../ui';
 import { buildingArtOrBest } from '../art/artAssets';
-import { ART_TIER_4_FROM_LEVEL, YARD_ORDER, YardBuildingKey, YardScene, artTierForLevel, yardHeightFor } from './den/YardScene';
+import { YARD_ORDER, YardBuildingKey, YardScene, artTierForLevel, yardHeightFor } from './den/YardScene';
 import { useWildExtra } from './den/useWildExtra';
-import { weirdUpgradeLine } from './weirdCopy';
 import type { SessionKind } from './DoorstepScreen';
+import { BUILDING_DISPLAY, BUILDING_ORDER, cheapestAffordableUpgrade, effectText, useDen } from '../app/useDen';
 import type { SettingsRepository } from '../storage/SettingsRepository';
 
 import { BALANCE, BuildingKey } from '../economy/balanceConfig';
 import {
   upgradeCost,
   storageCap,
-  passiveTreatsPerHour,
-  buddyPayout,
   buddyTreatsPerWalk,
   cumulativeXpForLevel,
 } from '../economy/formulas';
-import { DenEconomyState, dogDisplayName, getBuildingLevel, getUpgradeTease, upgradeBuilding } from '../economy/denEconomy';
-import { ACHIEVEMENTS, AchievementId, recordBuildingUpgrade } from '../economy/personalStats';
+import { dogDisplayName, getBuildingLevel } from '../economy/denEconomy';
+import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 import { territoryMass, territoryRate } from '../economy/territoryEconomy';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { streetsKnown } from '../utils/grid';
-import * as haptics from '../feedback/haptics';
-import { play } from '../feedback/sounds';
 import { formatNumber, t, tPlural } from '../i18n';
-
-// nameKey/subKey are i18n keys, resolved with t() at render time.
-const BUILDING_DISPLAY: Record<BuildingKey, { nameKey: string; subKey: string; art: 'doghouse' | 'bakery' | 'garden' }> = {
-  doghouse: { nameKey: 'den.building.doghouse.name', subKey: 'den.building.doghouse.sub', art: 'doghouse' },
-  bakery: { nameKey: 'den.building.bakery.name', subKey: 'den.building.bakery.sub', art: 'bakery' },
-  sniffGarden: { nameKey: 'den.building.sniffGarden.name', subKey: 'den.building.sniffGarden.sub', art: 'garden' },
-};
-
-const BUILDING_ORDER: BuildingKey[] = ['doghouse', 'bakery', 'sniffGarden'];
-
-// How long Buddy stays excited after an upgrade (fun review: settle in ~3s).
-const EXCITED_AFTER_UPGRADE_MS = 3000;
-
-/**
- * `level` is the building's own level being described (either its current
- * level, or level+1 for the "Next:" preview) — `state` supplies the other
- * context (Buddy's level, the other buildings' levels) needed now that
- * storage/passive/Sniff-Garden all read Buddy's Level too (see
- * docs/decisions/virtual-dog-companion/design.md).
- */
-function effectText(building: BuildingKey, level: number, state: DenEconomyState): string {
-  switch (building) {
-    case 'doghouse':
-      return t('den.effect.storage', { count: formatNumber(storageCap(level, state.level, state.bakeryLevel, state.sniffGardenLevel)) });
-    case 'bakery':
-      return t('den.effect.passive', { rate: formatNumber(passiveTreatsPerHour(level, state.level), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
-    case 'sniffGarden': {
-      const withGarden = buddyTreatsPerWalk(state.level, level);
-      const withoutGarden = buddyPayout(state.level);
-      const extra = withGarden - withoutGarden;
-      if (extra < 1) {
-        return t('den.effect.sniffWarmup');
-      }
-      return tPlural('den.effect.sniffExtra', extra);
-    }
-  }
-}
 
 interface DenScreenProps {
   repository: DenEconomyRepository;
@@ -123,10 +82,7 @@ export function DenScreen({
   onUpgraded,
 }: DenScreenProps) {
   const insets = useSafeAreaInsets();
-  const [state, setState] = useState<DenEconomyState | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [showOverflowNotice, setShowOverflowNotice] = useState(false);
-  const [achievementNotices, setAchievementNotices] = useState<AchievementId[]>([]);
   const [rangeCellCount, setRangeCellCount] = useState<number | null>(null);
   // docs/decisions/territories/design.md Decision 6's permanent footer
   // line — this screen's own fetch, independent of whatever App.tsx last
@@ -134,34 +90,19 @@ export function DenScreen({
   const [territoryIncomeRate, setTerritoryIncomeRate] = useState<number | null>(null);
   // Captured once so the float-up keeps its amount after App clears its copy.
   const [accrualPop] = useState(Math.floor(accruedSinceLastVisit));
-  const [upgrade, setUpgrade] = useState<{ building: BuildingKey; n: number } | null>(null);
-  const [excited, setExcited] = useState(false);
-  const excitedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Building tapped in the yard: Buddy hops toward it and its card is highlighted below.
   const [selected, setSelected] = useState<BuildingKey | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const cardY = useRef<Partial<Record<BuildingKey, number>>>({});
   const { height: screenHeight } = useWindowDimensions();
   const wildExtra = useWildExtra({ settingsRepository, sessionKind });
-  // Rare sweet-weird note after a late-stage upgrade (copy: weird.upgrade.*).
-  const [weirdNote, setWeirdNote] = useState<string | null>(null);
-
-  useEffect(() => {
-    onAccrualShown?.();
-    // Once per mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (excitedTimer.current) clearTimeout(excitedTimer.current);
-    },
-    []
-  );
-
-  useEffect(() => {
-    repository.getState().then((s) => {
-      setState(s);
+  const { state, message, achievementNotices, setAchievementNotices, upgrade, excited, weirdNote, handleUpgrade, tease } = useDen({
+    repository,
+    personalStatsRepository,
+    onTreatsChanged,
+    onUpgraded,
+    onUpgradeApplied: wildExtra.playLevelUp,
+    onLoaded: (s) => {
       if (s.treats >= storageCap(s.doghouseLevel, s.level, s.bakeryLevel, s.sniffGardenLevel)) {
         setShowOverflowNotice(true);
       }
@@ -170,8 +111,14 @@ export function DenScreen({
           setTerritoryIncomeRate(territoryRate(territoryMass(mass.cellCount, mass.visitsSum), s.level));
         });
       }
-    });
-  }, [repository, homeRangeRepository]);
+    },
+  });
+
+  useEffect(() => {
+    onAccrualShown?.();
+    // Once per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!homeRangeRepository) return;
@@ -195,16 +142,10 @@ export function DenScreen({
     );
   }
 
-  const tease = getUpgradeTease(state);
   const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
 
   // Buddy sniffs toward the cheapest upgrade he can afford right now, if any.
-  const cheapestAffordable = BUILDING_ORDER.map((b) => {
-    const lvl = getBuildingLevel(state, b);
-    return lvl >= BALANCE.maxBuildingLevel ? null : { building: b, cost: upgradeCost(b, lvl + 1) };
-  })
-    .filter((c): c is { building: BuildingKey; cost: number } => c !== null && c.cost <= state.treats)
-    .sort((a, b) => a.cost - b.cost)[0];
+  const cheapestAffordable = cheapestAffordableUpgrade(state);
   const curiousTarget: YardBuildingKey | null = selected ?? cheapestAffordable?.building ?? null;
   const sceneMood: BuddyMood = excited ? 'excited' : curiousTarget ? 'curious' : 'idle';
 
@@ -212,39 +153,6 @@ export function DenScreen({
     setSelected(building);
     const y = cardY.current[building];
     if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
-  };
-
-  const handleUpgrade = async (building: BuildingKey) => {
-    const result = upgradeBuilding(state, building);
-    if ('error' in result) {
-      setMessage(
-        result.error === 'max-level'
-          ? t('den.maxLevelMessage', { name: t(BUILDING_DISPLAY[building].nameKey) })
-          : t('den.notEnoughTreats')
-      );
-      return;
-    }
-    setMessage(null);
-    play('upgrade');
-    haptics.success();
-    setUpgrade((prev) => ({ building, n: (prev?.n ?? 0) + 1 }));
-    setExcited(true);
-    if (excitedTimer.current) clearTimeout(excitedTimer.current);
-    excitedTimer.current = setTimeout(() => setExcited(false), EXCITED_AFTER_UPGRADE_MS);
-    setState(result);
-    const newLevel = getBuildingLevel(result, building);
-    setWeirdNote(newLevel >= ART_TIER_4_FROM_LEVEL ? weirdUpgradeLine(building, newLevel) : null);
-    wildExtra.playLevelUp();
-    onTreatsChanged(result.treats);
-    await repository.saveState(result);
-    onUpgraded?.(building);
-
-    const personalStats = await personalStatsRepository.getState();
-    const { newlyUnlocked } = recordBuildingUpgrade(personalStats, state, result);
-    if (newlyUnlocked.length > 0) {
-      await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
-      setAchievementNotices((prev) => [...prev, ...newlyUnlocked]);
-    }
   };
 
   const dog = dogDisplayName(state.dogName);

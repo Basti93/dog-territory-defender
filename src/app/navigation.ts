@@ -35,8 +35,6 @@ export function screenKey(screen: Screen): string | null {
   switch (screen) {
     case 'history':
       return 'history';
-    case 'den':
-      return 'den';
     case 'debugLog':
       return 'debug-log';
     case 'settings':
@@ -46,6 +44,7 @@ export function screenKey(screen: Screen): string | null {
     case 'logMissedWalk':
       return 'log-missed-walk';
     case 'doorstep':
+    case 'den':
     case 'map':
     case 'territories':
       return null;

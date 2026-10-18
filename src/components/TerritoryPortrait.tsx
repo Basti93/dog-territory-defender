@@ -27,6 +27,8 @@ interface TerritoryPortraitProps {
   onEmptyChange?: (isEmpty: boolean) => void;
   /** Portrait height in px (default 160). The Doorstep passes a smaller value so Buddy fits above Start Walk. */
   height?: number;
+  /** Screen-reader label for the tappable portrait (the world scene names it "The neighbourhood"). */
+  accessibilityLabel?: string;
 }
 
 /**
@@ -41,7 +43,7 @@ interface TerritoryPortraitProps {
  * "network-dependency consequence" note): falls back to a neutral,
  * non-error line. Never a broken-image icon, never technical error text.
  */
-export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160 }: TerritoryPortraitProps) {
+export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel }: TerritoryPortraitProps) {
   const webViewRef = useRef<WebView>(null);
   const [isWebViewReady, setIsWebViewReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
   }
 
   return (
-    <TouchableOpacity style={[styles.container, { minHeight: height }]} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity style={[styles.container, { minHeight: height }]} onPress={onPress} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
       {dataUrl ? (
         <Image source={{ uri: dataUrl }} resizeMode="contain" style={[styles.image, { height }]} />
       ) : failed ? (

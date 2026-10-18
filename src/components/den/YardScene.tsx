@@ -211,7 +211,7 @@ export function yardWalkGeometry(layout: YardLayout, width: number): YardBuddyGe
   return { baseCx, bottom: layout.buddy.bottom, size: layout.buddy.size, spots, centers, range };
 }
 
-interface YardBuilding {
+export interface YardBuilding {
   key: YardBuildingKey;
   level: number;
 }
@@ -327,7 +327,7 @@ export function YardScene({
   );
 }
 
-function BuildingSprite({
+export function BuildingSprite({
   building,
   size,
   left,

@@ -57,6 +57,8 @@ interface YardBuddyProps {
   /** Bumps on every building tap. */
   tap: { building: BuildingSpot; n: number } | null;
   rng?: () => number;
+  /** Called after Buddy's own tap reaction (the world scene starts the walk from here). */
+  onPress?: () => void;
 }
 
 interface BehaviourView {
@@ -81,7 +83,7 @@ const DOGHOUSE_HIDDEN_MS = 1500;
 const DOGHOUSE_FADE_MS = 500;
 const POP_HAPPY_MS = 2400;
 
-export function YardBuddy({ appearance, name, mood, curiousFacing, replayKey, geometry, butterflies, tap, rng = Math.random }: YardBuddyProps) {
+export function YardBuddy({ appearance, name, mood, curiousFacing, replayKey, geometry, butterflies, tap, rng = Math.random, onPress }: YardBuddyProps) {
   const v = useRef({
     x: new Animated.Value(0),
     opacity: new Animated.Value(1),
@@ -328,6 +330,7 @@ export function YardBuddy({ appearance, name, mood, curiousFacing, replayKey, ge
           walkHops={view.walk?.hops}
           walkHopMs={view.walk?.hopMs}
           rng={rng}
+          onPress={onPress}
         />
       </Animated.View>
       {view.fx === 'dig' && (

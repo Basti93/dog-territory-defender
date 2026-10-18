@@ -75,7 +75,8 @@ React Native / Expo app, no backend yet — everything runs and persists locally
 - **src/app** — the composition behind `App.tsx`: repositories + startup side effects, navigation (`Screen`, `useNavigation`), and the hooks for the walk session, first launch, once-per-launch effects and manual walk log
 - **src/buddy** — Buddy's appearance model, palette, image skin (default) and vector skin (fallback); pure TS, no screens
 - **src/components/buddy** — `BuddyAvatar` rig, `BuddyAppearancePicker` and the pure mood/trick logic
-- **src/components/den** — the Den yard scene (hero of the Den screen) and its building sprites
+- **src/components/den** — yard pieces (Buddy's wander life, building sprites, Wild Extras) reused by the world scene; the old Den yard scene is kept for tests
+- **src/components/world** — `WorldScene`: the one-scene home (sky, Viertel portrait, fence + gate, yard with buildings, bench, bowl, mailbox), its pure `sceneLayout`/`timeOfDay` helpers and the building sign panel
 - **src/ui** — clay UI kit (Screen, Card, Button, Chip, ListRow…), game-feel primitives and design `tokens`; see its README
 - **src/i18n** — English/German dictionaries (flat keys, `{name}` placeholders, `.one`/`.other` plurals), `t()`/`tPlural()`, locale store (`useLocale`) and `Intl` formatters; language is chosen in Settings (System/Deutsch/English), persisted by `SettingsRepository`. Glossary at the top of `de.ts`
 - **src/art** — typed registry of pre-rendered sprites (`artOr` falls back to a drawn placeholder)

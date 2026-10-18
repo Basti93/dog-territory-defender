@@ -22,9 +22,8 @@ import { SomewhereWildSpot } from './src/components/SomewhereWildCard';
 import { TerritoriesScreen } from './src/components/TerritoriesScreen';
 import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
 import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
-import { DenScreen } from './src/components/DenScreen';
 import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
-import { DoorstepScreen } from './src/components/DoorstepScreen';
+import { WorldScene } from './src/components/world/WorldScene';
 import { CelebrationScreen } from './src/components/CelebrationScreen';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
@@ -54,8 +53,6 @@ export default function App() {
   const bumpRangeRefresh = () => setHomeRangeRefreshKey((k) => k + 1);
   const [treats, setTreats] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
-  // The Den shows the "while you were away" treat float-up once per launch.
-  const [denAccrualShown, setDenAccrualShown] = useState(false);
   // "Somewhere Wild": the marker and the card are both driven from this single
   // piece of state, so they always agree on the same spot.
   const [wildSpot, setWildSpot] = useState<SomewhereWildSpot | null>(null);
@@ -221,28 +218,32 @@ export default function App() {
   const fadeKey = screenKey(screen);
   switch (screen) {
     case 'doorstep':
+    case 'den':
+      // One scene with three heights (redesign step 1). 'den' is an alias that lands on the same
+      // scene with the next-upgrade panel open (notification taps), then settles back to 'doorstep'.
       return (
         <ScreenFrame fadeKey={fadeKey}>
-          <DoorstepScreen
+          <WorldScene
             dogName={dogName}
             treats={treats ?? 0}
             level={level ?? 1}
-            accruedDelta={launch.accruedDelta}
             pendingDenAchievements={launch.pendingDenAchievements}
             session={launch.doorstepSession}
             greeting={launch.doorstepGreeting}
             awayStripLines={launch.awayStripLines}
             denEconomyRepository={repos.denEconomyRepository}
+            personalStatsRepository={repos.personalStatsRepository}
             homeRangeRepository={repos.homeRangeRepository}
             walkRepository={repos.walkRepository}
+            settingsRepository={repos.settingsRepository}
             buddyAppearance={buddyAppearance}
             buddyAppearanceLoaded={buddyAppearanceLoaded}
             buddyMood={launch.buddyMood}
             playGreeting={launch.playBuddyGreeting}
             onBuddyGreetingStarted={launch.onBuddyGreetingStarted}
-            territoryRepository={repos.territoryRepository}
-            territoryIncomeRate={launch.territoryIncomeRate}
             onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
+            onTreatsChanged={setTreats}
+            onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
             onStartWalk={() => {
               nav.goTo('map');
               walkSession.startWalk();
@@ -250,12 +251,10 @@ export default function App() {
             updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
             walkActive={walkSession.isTracking}
             onOpenMap={() => nav.goTo('map')}
-            onOpenDen={() => nav.goTo('den')}
             onOpenHistory={() => nav.goTo('history')}
-            onOpenStats={() => nav.goTo('stats')}
-            onOpenDebugLog={() => nav.goTo('debugLog')}
-            onOpenLogMissedWalk={() => nav.goTo('logMissedWalk')}
             onOpenSettings={() => nav.goTo('settings')}
+            openDenPanel={screen === 'den'}
+            onDenPanelHandled={nav.goDoorstep}
           />
         </ScreenFrame>
       );
@@ -301,26 +300,6 @@ export default function App() {
               bumpRangeRefresh();
               nav.close();
             }}
-          />
-        </ScreenFrame>
-      );
-    case 'den':
-      return (
-        <ScreenFrame fadeKey={fadeKey}>
-          <DenScreen
-            repository={repos.denEconomyRepository}
-            personalStatsRepository={repos.personalStatsRepository}
-            homeRangeRepository={repos.homeRangeRepository}
-            buddyAppearance={buddyAppearance}
-            settingsRepository={repos.settingsRepository}
-            sessionKind={launch.doorstepSession?.kind}
-            accruedSinceLastVisit={denAccrualShown ? 0 : launch.accruedDelta}
-            onAccrualShown={() => setDenAccrualShown(true)}
-            pendingAchievements={launch.pendingDenAchievements}
-            onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
-            onClose={nav.close}
-            onTreatsChanged={setTreats}
-            onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
           />
         </ScreenFrame>
       );

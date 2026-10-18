@@ -196,6 +196,10 @@ interface ExtraSources {
   poseLying: Src;
   walkA: Src;
   walkB: Src;
+  /** Whole-Buddy sprites seen from behind (the yard gate scene); they replace the layered rig. */
+  sitBack: Src;
+  walkBackA: Src;
+  walkBackB: Src;
 }
 
 const EXTRAS: Record<string, ExtraSources> = {
@@ -206,6 +210,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/cream/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/cream/pose-lying.png'),
+    sitBack: require('../../assets/buddy/cream/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/cream/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/cream/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/cream/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/cream/front-legs-walk-b.png'),
   },
@@ -216,6 +223,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/golden/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/golden/pose-lying.png'),
+    sitBack: require('../../assets/buddy/golden/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/golden/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/golden/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/golden/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/golden/front-legs-walk-b.png'),
   },
@@ -226,6 +236,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/ginger/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/ginger/pose-lying.png'),
+    sitBack: require('../../assets/buddy/ginger/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/ginger/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/ginger/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/ginger/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/ginger/front-legs-walk-b.png'),
   },
@@ -236,6 +249,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/chocolate/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/chocolate/pose-lying.png'),
+    sitBack: require('../../assets/buddy/chocolate/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/chocolate/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/chocolate/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/chocolate/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/chocolate/front-legs-walk-b.png'),
   },
@@ -246,6 +262,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/charcoal/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/charcoal/pose-lying.png'),
+    sitBack: require('../../assets/buddy/charcoal/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/charcoal/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/charcoal/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/charcoal/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/charcoal/front-legs-walk-b.png'),
   },
@@ -256,6 +275,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/grey/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/grey/pose-lying.png'),
+    sitBack: require('../../assets/buddy/grey/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/grey/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/grey/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/grey/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/grey/front-legs-walk-b.png'),
   },
@@ -266,6 +288,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/white/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/white/pose-lying.png'),
+    sitBack: require('../../assets/buddy/white/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/white/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/white/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/white/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/white/front-legs-walk-b.png'),
   },
@@ -276,6 +301,9 @@ const EXTRAS: Record<string, ExtraSources> = {
       mask: require('../../assets/buddy/tricolour/markings-mask.png'),
     },
     poseLying: require('../../assets/buddy/tricolour/pose-lying.png'),
+    sitBack: require('../../assets/buddy/tricolour/pose-sit-back.png'),
+    walkBackA: require('../../assets/buddy/tricolour/pose-walk-back-a.png'),
+    walkBackB: require('../../assets/buddy/tricolour/pose-walk-back-b.png'),
     walkA: require('../../assets/buddy/tricolour/front-legs-walk-a.png'),
     walkB: require('../../assets/buddy/tricolour/front-legs-walk-b.png'),
   },
@@ -307,4 +335,11 @@ export function buddyImageSources(appearance: BuddyAppearance): Partial<Record<B
     frontLegsWalkB: extras.walkB,
     ...COMMON,
   };
+}
+
+/** Whole-sprite back poses for the yard gate (same canvas/ground line as the layered Buddy). */
+export function buddyBackPoseSources(appearance: BuddyAppearance): { sitBack: Src; walkBackA: Src; walkBackB: Src } {
+  const a = normalizeAppearance(appearance);
+  const extras = EXTRAS[a.coat] ?? EXTRAS[defaultBuddyAppearance().coat];
+  return { sitBack: extras.sitBack, walkBackA: extras.walkBackA, walkBackB: extras.walkBackB };
 }

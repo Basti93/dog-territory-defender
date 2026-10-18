@@ -157,6 +157,24 @@ const de: Record<string, string> = {
   "doorstep.statsBadges": "Statistik & Abzeichen",
   "doorstep.denTease": "{treats} / {cap} Leckerlis · Ausbau für {cost}",
 
+  // ---- world scene (the yard: gate, bench, mailbox, bowl, building signs)
+  "world.gate": "Gassi gehen",
+  "world.gateLabel": "Tor: Gassi gehen",
+  "world.toNeighbourhood": "zum Viertel",
+  "world.backToYard": "zurück zum Hof",
+  "world.neighbourhoodLabel": "Das Viertel: Karte öffnen",
+  "world.album": "Album",
+  "world.albumLabel": "Bank: vergangene Runden",
+  "world.post": "Post",
+  "world.postLabel": "Briefkasten: Einstellungen und mehr",
+  "world.bowlSign": "{count} von {cap} Leckerlis",
+  "world.bowlLabel": "Napf: {count} von {cap} Leckerlis",
+  "world.upgradePossible": "Ausbau möglich",
+  "world.upgradeFor": "Ausbauen für {cost}",
+  "world.buildingSign": "{name} · Lv {level}",
+  "world.buildingLabel": "{name}, Stufe {level}",
+  "world.panelClose": "Schließen",
+
   // ---- doorstep menu
   "menu.debugLog": "Debug-Protokoll",
   "menu.logMissedWalk": "Verpasste Runde nachtragen",

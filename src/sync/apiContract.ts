@@ -20,8 +20,12 @@ export const API_PATHS = {
   commands: '/v1/commands',
   events: '/v1/events',
   nearby: '/v1/nearby',
+  gifts: '/v1/gifts', // GET list; POST /v1/gifts/:id/open (see giftOpenPath)
+  coopWeek: '/v1/coop/week',
   import: '/v1/households/import',
 } as const;
+
+export const giftOpenPath = (giftId: string) => `/v1/gifts/${encodeURIComponent(giftId)}/open`;
 
 export const API_LIMITS = {
   /** Max GPS fixes in one uploaded walk. */
@@ -252,7 +256,12 @@ export type CommandBody =
    */
   | { kind: 'walk.delete'; walkId: string }
   /** Changes the caller's own display name (trimmed, 1..maxRenameLength). Emits `member.updated`. */
-  | { kind: 'player.rename'; name: string };
+  | { kind: 'player.rename'; name: string }
+  /**
+   * Opens a neighbour gift (POST /v1/gifts/:id/open wraps this). First opener wins; a second open is
+   * ok with no further credit. The gift's treat sprinkle goes straight into the Den (no reward formulas).
+   */
+  | { kind: 'gift.open'; giftId: string };
 
 export interface CommandRequest {
   /** Client-generated UUID, the idempotency key. Replay returns the stored result. */
@@ -285,7 +294,44 @@ export type EventKind =
   | 'den.updated'
   | 'dog.updated'
   | 'member.joined'
-  | 'member.updated';
+  | 'member.updated'
+  // Track B (Nachbarhunde). Payload is a line KEY plus params, never copy; the app renders it via i18n.
+  | 'neighbour.sniffed'
+  | 'neighbour.gift'
+  | 'neighbour.reaction'
+  | 'neighbour.invitation'
+  | 'coop.progress';
+
+/** i18n keys of the 12 neighbour lines (src/i18n `neighbours.line.*`). */
+export const NEIGHBOUR_LINE_KEYS = [
+  'neighbours.line.sniffCorner',
+  'neighbours.line.stickLeft',
+  'neighbours.line.mailboxLaps',
+  'neighbours.line.benchRated',
+  'neighbours.line.invitation',
+  'neighbours.line.followedPath',
+  'neighbours.line.coopDone',
+  'neighbours.line.collarGift',
+  'neighbours.line.wave',
+  'neighbours.line.thanksCome',
+  'neighbours.line.moonHello',
+  'neighbours.line.sockLeft',
+] as const;
+export type NeighbourLineKey = (typeof NEIGHBOUR_LINE_KEYS)[number];
+
+export interface NeighbourEventPayload {
+  /** Proper name of the dog ("Momo"); null for the whole-neighbourhood co-op line. Also available as {bot} in params. */
+  botName: string | null;
+  /** Opaque bot id (matches NearbyItem.id), null for co-op. */
+  botId: string | null;
+  line: NeighbourLineKey;
+  /** Interpolation values for the line: always `bot`, plus `at` (invitation time "18:00") or `km` (co-op). */
+  params: Record<string, string | number>;
+  /** neighbour.gift only: the gift to open (GET /v1/gifts). */
+  giftId?: string;
+  /** neighbour.reaction only: cells with paw prints (presentation only, capped). */
+  pawCells?: Array<{ ix: number; iy: number }>;
+}
 
 export interface EventPayloads {
   'walk.added': { walk: ApiWalkMeta; cellsPainted: number };
@@ -296,6 +342,11 @@ export interface EventPayloads {
   'dog.updated': { dog: ApiDog };
   'member.joined': { player: ApiPlayer };
   'member.updated': { player: ApiPlayer };
+  'neighbour.sniffed': NeighbourEventPayload;
+  'neighbour.gift': NeighbourEventPayload;
+  'neighbour.reaction': NeighbourEventPayload;
+  'neighbour.invitation': NeighbourEventPayload;
+  'coop.progress': NeighbourEventPayload;
 }
 
 export type ApiEvent = {
@@ -319,21 +370,74 @@ export interface EventsResponse {
 
 // ----------------------------------------------------------------- nearby
 
-/** Always `[]` in M1; item shape is fixed now so Track B adds no breaking change. */
+/**
+ * GET /v1/nearby?radiusM=<1..10000, default 5000>&include=cells. `[]` while NEIGHBOURS_ENABLED is off or no
+ * neighbours exist yet. Bots are simulated: `generated` is always true and the card must say so.
+ */
 export interface NearbyItem {
+  /** Opaque (the bot household id). */
   id: string;
   kind: 'bot';
+  generated: true;
+  /** Archetype slug: momo, pfote, bruno, keks, lotte, nebel (art/trait lookup). */
+  archetype: string;
   dogName: string;
+  /** Our own appearance enums (src/buddy/buddyAppearance.ts). */
   appearance: Record<string, unknown>;
+  /** i18n key of the one-line trait, e.g. `neighbours.dog.momo.trait`. */
   traitKey: string;
+  /** Coarse distance band: `near` (<1 km), `around` (<2 km), `further`. */
   areaLabel: string;
+  /** `today` | `yesterday` | `this-week` | `earlier` | `none`. */
   lastActiveBucket: string;
+  /** Distinct days this neighbour was met (plain state; never a comparison number). */
   metCount: number;
+  /** Synthetic dotted Range, only with include=cells; capped (NEIGHBOUR_CONFIG.nearby.maxCellsPerBot). */
   rangeCells?: Array<{ ix: number; iy: number }>;
 }
 
 export interface NearbyResponse {
   items: NearbyItem[];
+}
+
+// ------------------------------------------------------------ gifts / co-op
+
+export interface ApiGift {
+  id: string;
+  botId: string;
+  botName: string;
+  /** Cosmetic id from the finite catalog (collars, sticks, yard doodads), or null (sprinkle only). */
+  cosmeticId: string | null;
+  /** Treats credited when opened (5% of an average walk), or null. */
+  sprinkleTreats: number | null;
+  createdAt: number;
+  /** null = still wrapped. Gifts never expire. */
+  openedAt: number | null;
+}
+
+/** GET /v1/gifts: newest first. Opened gifts double as the household's cosmetic inventory. */
+export interface GiftsResponse {
+  gifts: ApiGift[];
+}
+
+/**
+ * GET /v1/coop/week: the Viertel-Runde. Deliberately one ratio and one total, no human/bot split
+ * (no comparison numbers), and no loss state.
+ */
+export interface CoopWeekResponse {
+  /** False before the first Viertel-Runde (W3) or while neighbours are off. */
+  active: boolean;
+  /** Monday of the ISO week in the household timezone, YYYY-MM-DD. */
+  weekStart: string | null;
+  goalKm: number;
+  totalKm: number;
+  /** 0..1 */
+  ratio: number;
+  completed: boolean;
+  /** Yard decoration earned this week, if completed. */
+  rewardId: string | null;
+  /** Every yard decoration the household has earned (the Den yard shows them). */
+  yardDecorations: string[];
 }
 
 // ----------------------------------------------------------- founding import

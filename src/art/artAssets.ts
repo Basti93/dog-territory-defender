@@ -21,6 +21,21 @@ export type ArtKey =
   | 'icon-den'
   | 'doorstep-sky'
   | 'celebration-burst'
+  // Yard scene props (redesign step 1).
+  | 'fence-segment'
+  | 'fence-post-end'
+  | 'gate-closed'
+  | 'gate-open'
+  | 'bench'
+  | 'bench-empty'
+  | 'bowl'
+  | 'bowl-empty'
+  | 'sign-small'
+  | 'sign-medium'
+  | 'sign-wide'
+  | 'doormat'
+  | 'pennant'
+  | 'postcard-blank'
   // Wild Extras props (weird streak). Registry lines land with the PNGs; until then YardExtras draws fallbacks.
   | 'prop-ufo'
   | 'prop-beam'
@@ -97,6 +112,20 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'prop-firefly': require('../../assets/art/prop-firefly.png'),
   'prop-lightbulb': require('../../assets/art/prop-lightbulb.png'),
   'prop-question': require('../../assets/art/prop-question.png'),
+  'fence-segment': require('../../assets/art/fence-segment.png'),
+  'fence-post-end': require('../../assets/art/fence-post-end.png'),
+  'gate-closed': require('../../assets/art/gate-closed.png'),
+  'gate-open': require('../../assets/art/gate-open.png'),
+  'bench': require('../../assets/art/bench.png'),
+  'bench-empty': require('../../assets/art/bench-empty.png'),
+  'bowl': require('../../assets/art/bowl.png'),
+  'bowl-empty': require('../../assets/art/bowl-empty.png'),
+  'sign-small': require('../../assets/art/sign-small.png'),
+  'sign-medium': require('../../assets/art/sign-medium.png'),
+  'sign-wide': require('../../assets/art/sign-wide.png'),
+  'doormat': require('../../assets/art/doormat.png'),
+  'pennant': require('../../assets/art/pennant.png'),
+  'postcard-blank': require('../../assets/art/postcard-blank.png'),
 };
 
 export function hasArt(key: ArtKey): boolean {

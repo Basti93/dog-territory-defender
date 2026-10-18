@@ -17,13 +17,14 @@ describe('screenAfterClose', () => {
 describe('screenKey', () => {
   it('never fades WebView-hosting screens', () => {
     expect(screenKey('doorstep')).toBeNull();
+    expect(screenKey('den')).toBeNull(); // alias of the world scene, which hosts the portrait WebView
     expect(screenKey('map')).toBeNull();
     expect(screenKey('territories')).toBeNull();
   });
 
   it('gives every other screen a distinct FadeSlideIn key', () => {
     const keys = ALL_SCREENS.map(screenKey).filter((k): k is string => k !== null);
-    expect(keys).toHaveLength(6);
+    expect(keys).toHaveLength(5);
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
