@@ -45,6 +45,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withoutPushCapability.js",
       [
         "expo-location",
         {
