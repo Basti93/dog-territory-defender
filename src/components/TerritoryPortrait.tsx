@@ -5,6 +5,8 @@ import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { portraitHTML } from '../web/portraitHTML';
+import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
+import { useNearby } from '../sync/useNearby';
 import { log } from '../utils/log';
 import { ArtImage, palette, shadows, textStyle } from '../ui';
 import { t } from '../i18n';
@@ -29,6 +31,8 @@ interface TerritoryPortraitProps {
   height?: number;
   /** Screen-reader label for the tappable portrait (the world scene names it "The neighbourhood"). */
   accessibilityLabel?: string;
+  /** Draw the Nachbarhund Ranges (dotted, under ours) and widen the frame to hold the nearest ones. Only the whole-Range portrait sets this. */
+  showNeighbours?: boolean;
 }
 
 /**
@@ -43,12 +47,13 @@ interface TerritoryPortraitProps {
  * "network-dependency consequence" note): falls back to a neutral,
  * non-error line. Never a broken-image icon, never technical error text.
  */
-export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel }: TerritoryPortraitProps) {
+export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel, showNeighbours = false }: TerritoryPortraitProps) {
   const webViewRef = useRef<WebView>(null);
   const [isWebViewReady, setIsWebViewReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [hasCells, setHasCells] = useState<boolean | null>(null);
+  const nearby = useNearby();
 
   useEffect(() => {
     if (suppliedCells) {
@@ -73,7 +78,15 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
     const renderFromCells = (cells: Cell[]) => {
       const raster = buildHomeRangeRasterPayload(cells, Date.now());
       if (!raster) return;
-      webViewRef.current?.postMessage(JSON.stringify({ type: 'RENDER_PORTRAIT', payload: { raster } }));
+      const payload: { raster: typeof raster; neighbours?: unknown; frame?: unknown } = { raster };
+      if (showNeighbours) {
+        const framed = framePortraitNeighbours(raster, neighbourOverlayPayload(nearby).items);
+        if (framed.frame) {
+          payload.neighbours = framed.items;
+          payload.frame = framed.frame;
+        }
+      }
+      webViewRef.current?.postMessage(JSON.stringify({ type: 'RENDER_PORTRAIT', payload }));
     };
 
     if (suppliedCells) {
@@ -81,7 +94,7 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
       return;
     }
     homeRangeRepository?.getCells().then(renderFromCells);
-  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells]);
+  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells, showNeighbours, nearby]);
 
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
     try {

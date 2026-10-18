@@ -51,12 +51,15 @@ export interface SyncState {
 export interface NeighbourLineEntry {
   line: string;
   botName: string | null;
+  /** The speaking dog (NearbyItem.id); null for the co-op line. Absent in lines saved before the profile card existed. */
+  botId?: string | null;
   params: Record<string, string | number>;
   at: number;
   seq: number;
 }
 
-export const NEIGHBOUR_LINES_KEPT = 5;
+/** Enough that each of the six dogs usually still has its last two lines for the profile card. */
+export const NEIGHBOUR_LINES_KEPT = 12;
 
 export const EMPTY_SYNC_STATE: SyncState = { cursor: 0, denRev: 0, lastSyncAt: null, clockOffsetMs: 0, players: {}, importId: null, lastMemberJoined: null };
 

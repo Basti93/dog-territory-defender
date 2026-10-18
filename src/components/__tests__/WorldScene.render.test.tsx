@@ -14,6 +14,9 @@ import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkReposito
 import { advance, flush, imagesIn, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { pickSceneNotes, WorldScene, WorldSceneProps } from '../world/WorldScene';
 import * as sounds from '../../feedback/sounds';
+import type { ApiGift, CoopWeekResponse, NearbyItem } from '../../sync/apiContract';
+import { setNearby } from '../../sync/nearbyStore';
+import type { NeighbourhoodSource } from '../../sync/neighbourhood';
 
 jest.mock('../../feedback/sounds', () => ({
   ...jest.requireActual('../../feedback/sounds'),
@@ -27,6 +30,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.useRealTimers();
+  setNearby([]);
 });
 
 // Level-2 costs from balanceConfig: doghouse 60, sniff garden 72, bakery 96.
@@ -346,5 +350,127 @@ describe('pickSceneNotes', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onStartWalk).not.toHaveBeenCalled();
     await unmountAndExpectNoTimers(view);
+  });
+});
+
+// ---- Nachbarhunde (slice M3) ----
+const momo: NearbyItem = {
+  id: 'b1',
+  kind: 'bot',
+  generated: true,
+  archetype: 'momo',
+  dogName: 'Momo',
+  appearance: { coat: 'cream', markings: 'none', earStyle: 'floppy', tailStyle: 'curly', size: 'medium', accentColour: 'cream' },
+  traitKey: 'neighbours.dog.momo.trait',
+  areaLabel: 'near',
+  lastActiveBucket: 'today',
+  metCount: 1,
+  rangeCells: [{ ix: 1, iy: 1 }],
+};
+const gift = (over: Partial<ApiGift> = {}): ApiGift => ({ id: 'g1', botId: 'b1', botName: 'Pfote', cosmeticId: 'stick-oak', sprinkleTreats: 3, createdAt: 1, openedAt: null, ...over });
+const coopWeek = (over: Partial<CoopWeekResponse> = {}): CoopWeekResponse => ({
+  active: true,
+  weekStart: '2026-10-12',
+  goalKm: 20,
+  totalKm: 8.6,
+  ratio: 0.43,
+  completed: false,
+  rewardId: null,
+  yardDecorations: [],
+  ...over,
+});
+const source = (over: Partial<NeighbourhoodSource> = {}): NeighbourhoodSource => ({
+  neighbourLines: async () => [],
+  listGifts: async () => [],
+  openGift: async () => true,
+  coopWeek: async () => null,
+  ...over,
+});
+const sniffLine = { line: 'neighbours.line.sniffCorner', botName: 'Momo', botId: 'b1', params: { bot: 'Momo' }, at: Date.now() - 60_000, seq: 4 };
+
+describe('WorldScene neighbours', () => {
+  it('pins the neighbour line on the fence; tapping it opens the dog card with its last lines and the note is gone', async () => {
+    setNearby([momo]);
+    const { view } = await setup({
+      neighbourhood: source({
+        neighbourLines: async () => [sniffLine, { ...sniffLine, line: 'neighbours.line.wave', seq: 3, at: Date.now() - 9e6 }],
+      }),
+    });
+    const note = await screen.findByRole('button', { name: 'Momo had a good sniff at your corner today.' });
+    expect(screen.getByText('Hello Rex!')).toBeOnTheScreen(); // Buddy's bubble keeps the greeting
+    expect(screen.queryByTestId('neighbour-card')).toBeNull();
+    await fireEvent.press(note);
+    expect(screen.getByTestId('neighbour-card')).toBeOnTheScreen();
+    expect(screen.getByText(t('neighbours.dog.momo.trait'))).toBeOnTheScreen();
+    expect(screen.getByText(t('neighbours.badge'))).toBeOnTheScreen();
+    expect(screen.getByText('Momo is waving at you from the corner.')).toBeOnTheScreen();
+    expect(screen.getAllByText('Momo had a good sniff at your corner today.')).toHaveLength(1); // in the card only
+    await fireEvent.press(screen.getAllByRole('button', { name: t('neighbours.card.close') })[1]);
+    expect(screen.queryByTestId('neighbour-card')).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a note without a known dog (co-op line) is just dismissed, and shows no card', async () => {
+    const coop = { line: 'neighbours.line.coopDone', botName: null, botId: null, params: { km: 40 }, at: Date.now() - 1000, seq: 5 };
+    const { view } = await setup({ neighbourhood: source({ neighbourLines: async () => [coop] }) });
+    const note = await screen.findByRole('button', { name: /walked 40 km together/ });
+    await fireEvent.press(note);
+    expect(screen.queryByTestId('neighbour-card')).toBeNull();
+    expect(screen.queryByText(/walked 40 km together/)).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('shows no neighbour note without neighbours, and the OTA card keeps the paper slot', async () => {
+    const a = await setup();
+    expect(screen.queryByText(/sniff/)).toBeNull();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({ updateCard: { onApply: jest.fn(), onLater: jest.fn() }, neighbourhood: source({ neighbourLines: async () => [sniffLine] }) });
+    expect(screen.getByText(t('update.ready'))).toBeOnTheScreen();
+    expect(screen.queryByText(/sniff/)).toBeNull();
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('a parcel with a Post! sign waits by the mailbox while a gift is unopened; tapping goes to the Post list', async () => {
+    const { view, onOpenSettings } = await setup({ neighbourhood: source({ listGifts: async () => [gift()] }) });
+    const parcel = await screen.findAllByRole('button', { name: t('neighbours.parcel.label') });
+    expect(screen.getByText(t('neighbours.parcel.sign'))).toBeOnTheScreen();
+    await fireEvent.press(parcel[0]);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('no parcel when there are no gifts or all are opened', async () => {
+    const a = await setup({ neighbourhood: source({ listGifts: async () => [gift({ openedAt: 5 })] }) });
+    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({ neighbourhood: source() });
+    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('the Viertel-Runde sign shows one percentage while the co-op is active, and is hidden otherwise', async () => {
+    const a = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek() }) });
+    expect(await screen.findByText('Neighbourhood Round: 43%')).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek({ active: false, ratio: 0 }) }) });
+    expect(screen.queryByText(/Neighbourhood Round/)).toBeNull();
+    await unmountAndExpectNoTimers(b.view);
+    const c = await setup({ neighbourhood: source({ coopWeek: async () => coopWeek({ completed: true, ratio: 1 }) }) });
+    expect(await screen.findByText(t('neighbours.coop.done'))).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(c.view);
+  });
+});
+
+describe('pickSceneNotes with a neighbour note', () => {
+  const nb = { key: 'neighbour-4', text: 'Momo sniffed.', botId: 'b1', at: 1 };
+  const line = { text: 'a', kind: 'household' as const };
+  it('takes the paper slot next to the household/greeting bubble', () => {
+    expect(pickSceneNotes([line, { text: 'b', kind: 'household' }], null, false, new Set(), null, nb).map((n) => n.key)).toEqual(['line-0', 'neighbour-4']);
+    expect(pickSceneNotes([], 'Hi', false, new Set(), null, nb).map((n) => n.key)).toEqual(['greeting', 'neighbour-4']);
+    expect(pickSceneNotes([], null, false, new Set(), null, nb)).toEqual([{ key: 'neighbour-4', kind: 'neighbour', text: 'Momo sniffed.', botId: 'b1' }]);
+  });
+  it('waits for the OTA card, and stays gone once dismissed', () => {
+    expect(pickSceneNotes([line], null, true, new Set(), null, nb).map((n) => n.key)).toEqual(['update', 'line-0']);
+    expect(pickSceneNotes([line], null, false, new Set(['neighbour-4']), null, nb).map((n) => n.key)).toEqual(['line-0']);
   });
 });

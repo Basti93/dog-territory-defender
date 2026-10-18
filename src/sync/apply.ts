@@ -251,6 +251,7 @@ export async function applyEvents(
         batch.neighbourLines.push({
           line: event.payload.line,
           botName: event.payload.botName,
+          botId: event.payload.botId,
           params: event.payload.params,
           at: event.createdAt,
           seq: event.seq,

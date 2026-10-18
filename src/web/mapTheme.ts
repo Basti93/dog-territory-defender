@@ -89,6 +89,8 @@ export const MAP_MARKER_CSS = `
     .wild-pin { background: url("${svgUrl(WILD_PIN_SVG)}") center / contain no-repeat; }
     /* "Unsere Ecken": small wood sign (SHOW_CORNERS). Leaflet owns the outer divIcon element; styling is on the inner div. */
     .corner-sign { display: inline-block; transform: translate(-50%, 0); white-space: nowrap; font-family: Fredoka, Nunito, system-ui, sans-serif; font-weight: 600; font-size: 13px; line-height: 1.1; color: ${tokens.text}; background: ${MATERIAL.woodSign}; border: 3px solid ${MATERIAL.woodEdge}; border-radius: 10px; box-shadow: 0 3px 0 ${MATERIAL.woodBottom}; padding: 3px 10px; }
+    /* Nachbarhund name sign (SHOW_NEIGHBOURS): smaller than a corner sign, tappable. Styling on the inner div; Leaflet owns the outer divIcon. */
+    .neighbour-sign { display: inline-block; transform: translate(-50%, -50%); white-space: nowrap; font-family: Fredoka, Nunito, system-ui, sans-serif; font-weight: 600; font-size: 12px; line-height: 1.1; color: ${tokens.text}; background: ${MATERIAL.woodSign}; border: 2px solid ${MATERIAL.woodEdge}; border-radius: 8px; box-shadow: 0 2px 0 ${MATERIAL.woodBottom}; padding: 3px 9px; }
     .doghouse { width: 100%; height: 100%; background: url("${svgUrl(DOGHOUSE_SVG)}") center / contain no-repeat; filter: drop-shadow(0 2px 3px ${rgba(tokens.text, 0.3)}); }
     .map-clouds { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 260; overflow: hidden; }
     .map-cloud { position: absolute; background: url("${svgUrl(CLOUD_SVG)}") center / contain no-repeat; animation: cloud-drift linear infinite; }

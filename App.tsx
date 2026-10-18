@@ -231,6 +231,7 @@ export default function App() {
         openDenPanel={screen === 'den' && !homecoming}
         onDenPanelHandled={nav.goDoorstep}
         homecoming={homecoming}
+        neighbourhood={syncEngine}
       />
   );
 
@@ -381,6 +382,7 @@ export default function App() {
           onWildSpotChange={setWildSpot}
           onTapWildSpot={(spot) => setPanToSpot({ ...spot, requestId: Date.now() })}
           onOpenTerritories={() => nav.goTo('territories')}
+          neighbourhood={syncEngine}
           onBackToDoorstep={nav.goDoorstep}
           onFinishWalk={walkSession.finishWalk}
           onCancelWalk={walkSession.cancelWalk}

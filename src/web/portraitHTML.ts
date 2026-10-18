@@ -1,4 +1,5 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_FILTER, MAP_TILE_HOST_SUFFIX, MAP_TILE_URL, MAP_TINT_ALPHA, MAP_TINT_COLOR } from './mapTheme';
 import { tokens } from '../ui/tokens';
 
@@ -60,8 +61,11 @@ export const portraitHTML = `
   <div id="map"></div>
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
+${NEIGHBOUR_OVERLAY_SCRIPT}
 
     var TILE_TIMEOUT_MS = 8000;
+    // Roughly the width (pt) the captured image is shown at; sizes the neighbour stitches/signs in canvas pixels.
+    var PORTRAIT_DISPLAY_PT = 340;
     var TILE_SIZE = 256;
     // Small fixed margin (tasks.md task 2.5) so the shape doesn't crop
     // flush to the portrait's edge — an implementer-level polish number,
@@ -110,13 +114,15 @@ ${HOME_RANGE_RENDERER_SCRIPT}
       });
     }
 
-    function handleRenderPortrait(raster) {
+    // neighbours (optional): Nachbarhund items drawn below our patches; frame (optional): a larger origin/w/h box
+    // that holds them (the tile canvas uses it, our own overlay stays at the raster's own bounds).
+    function handleRenderPortrait(raster, neighbours, frame) {
       // #map is never attached to a visible pane, so Leaflet may not have
       // picked up its real CSS size yet — invalidateSize() forces Leaflet
       // to re-read clientWidth/clientHeight before getBoundsZoom relies on
       // them (mirrors mapHTML.ts's own invalidateSize() call sites).
       map.invalidateSize();
-      var bounds = boundsForRaster(raster);
+      var bounds = boundsForRaster(frame || raster);
       var zoom = Math.min(19, Math.max(0, map.getBoundsZoom(bounds, false, [0, 0])));
 
       var topLeftPixel = map.project(bounds.getNorthWest(), zoom);
@@ -179,6 +185,13 @@ ${HOME_RANGE_RENDERER_SCRIPT}
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.restore();
 
+          // Neighbour patches go on first so our own patches always sit on top of any overlap.
+          function toCanvas(lat, lon) {
+            var p = map.project(L.latLng(lat, lon), zoom);
+            return { x: p.x - topLeftPixel.x, y: p.y - topLeftPixel.y };
+          }
+          if (neighbours && neighbours.length) hrDrawNeighbourPatches(ctx, neighbours, toCanvas, canvas.width / PORTRAIT_DISPLAY_PT);
+
           // Composite the felt patches + stitched seam (renderHomeRangePortrait,
           // this script's own math-only function, shared verbatim with the
           // interactive map) on top of the tiles just drawn above.
@@ -197,6 +210,8 @@ ${HOME_RANGE_RENDERER_SCRIPT}
             overlayBottomRightPx.x - overlayTopLeftPx.x,
             overlayBottomRightPx.y - overlayTopLeftPx.y
           );
+
+          if (neighbours && neighbours.length) hrDrawNeighbourSigns(ctx, neighbours, toCanvas, canvas.width / PORTRAIT_DISPLAY_PT);
 
           // Attribution travels with the captured image (ODbL).
           ctx.save();
@@ -233,7 +248,7 @@ ${HOME_RANGE_RENDERER_SCRIPT}
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === 'RENDER_PORTRAIT') {
-          handleRenderPortrait(msg.payload.raster);
+          handleRenderPortrait(msg.payload.raster, msg.payload.neighbours, msg.payload.frame);
         }
       } catch (error) {
         reportToRN('PORTRAIT_FAILED', {});

@@ -1,4 +1,5 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
+import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
 import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 /**
@@ -56,6 +57,7 @@ ${MAP_MARKER_CSS}
   <div id="map"></div>
   <script>
 ${HOME_RANGE_RENDERER_SCRIPT}
+${NEIGHBOUR_OVERLAY_SCRIPT}
 ${STITCH_PATCH_JS}
 
     const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
@@ -78,6 +80,8 @@ ${CORNER_SIGN_JS}
     let wildSpotMarker = null;
     // "Unsere Ecken": named corner signs (SHOW_CORNERS), one layer group.
     let cornersLayerGroup = null;
+    // Nachbarhunde (SHOW_NEIGHBOURS): dotted soft patches under ours plus tappable name signs.
+    let neighbourLayerGroup = null;
 
     function reset() {
       if (trailPolyline) {
@@ -183,17 +187,20 @@ ${MAP_THEME_PROBE_JS}
       // in-progress walk's cells overlaid as fresh paint, well before
       // they're persisted.
       if (type === 'SHOW_HOME_RANGE') {
-        const { raster, fitBounds } = payload;
+        const { raster, fitBounds, frame } = payload;
         homeRangeLayerGroup = renderHomeRangeToMap(map, raster, homeRangeLayerGroup);
 
         if (fitBounds && raster) {
-          const origin = raster.origin;
+          // frame (optional): a larger origin/w/h box that also holds the nearest neighbour Ranges.
+          const origin = (frame || raster).origin;
+          const fh = (frame || raster).h;
+          const fw = (frame || raster).w;
           const south = origin[1] * HR_D_LAT_DEG;
-          const north = (origin[1] + raster.h) * HR_D_LAT_DEG;
-          const midRow = origin[1] + Math.floor(raster.h / 2);
+          const north = (origin[1] + fh) * HR_D_LAT_DEG;
+          const midRow = origin[1] + Math.floor(fh / 2);
           const dLon = hrDLonForRow(midRow);
           const west = origin[0] * dLon;
-          const east = (origin[0] + raster.w) * dLon;
+          const east = (origin[0] + fw) * dLon;
           setTimeout(() => {
             map.invalidateSize();
             map.fitBounds([[south, west], [north, east]].map((p) => L.latLng(p[0], p[1])), { maxZoom: 18, padding: [20, 20] });
@@ -266,6 +273,16 @@ ${MAP_THEME_PROBE_JS}
           });
         }
         reportToRN('SHOW_CORNERS_APPLIED', { count: corners.length });
+      }
+
+      // Nachbarhunde: payload { items: [{ id, name, cells: [{ ix, iy }], label: { ix, iy } }] } (neighbourOverlay.ts).
+      // An empty/missing list clears. Tapping a name sign posts { type: 'NEIGHBOUR_TAPPED', id } to React Native.
+      if (type === 'SHOW_NEIGHBOURS') {
+        const nbItems = (payload && payload.items) || [];
+        neighbourLayerGroup = hrRenderNeighbours(map, nbItems, neighbourLayerGroup, function (id) {
+          if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'NEIGHBOUR_TAPPED', id: id }));
+        });
+        reportToRN('SHOW_NEIGHBOURS_APPLIED', { count: nbItems.length, patches: neighbourLayerGroup ? neighbourLayerGroup.nbStats.patches : 0 });
       }
 
       // Heimkehr beat 1: payload { segments?: [[[lat, lon], [lat, lon]], ...] } (new-ground streets, drawn coral).

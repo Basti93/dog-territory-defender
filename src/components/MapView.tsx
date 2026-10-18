@@ -10,6 +10,10 @@ import { paintedCells } from '../utils/grid';
 import { palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { t } from '../i18n';
+import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
+import type { NeighbourhoodSource } from '../sync/neighbourhood';
+import { useNeighbourhood } from '../sync/useNeighbourhood';
+import { NeighbourCard } from './world/NeighbourCard';
 
 interface MapViewProps {
   locations: Location[];
@@ -31,6 +35,8 @@ interface MapViewProps {
    * Territories) — mirrors this component's other optional-prop-gated bits.
    */
   onOpenTerritories?: () => void;
+  /** Household sync's neighbour source (the sync engine). Omitted = no profile lines on the Nachbarhund card. */
+  neighbourhood?: NeighbourhoodSource;
 }
 
 export function MapView({
@@ -42,6 +48,7 @@ export function MapView({
   wildSpot,
   panToSpot,
   onOpenTerritories,
+  neighbourhood,
 }: MapViewProps) {
   const webViewRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
@@ -54,14 +61,22 @@ export function MapView({
   // storage on every fix would not be.
   const persistedCellsRef = useRef<Cell[]>([]);
 
+  // Nachbarhunde: their dotted Ranges come from the in-memory nearby cache; a tap on a name sign opens the profile card.
+  const hood = useNeighbourhood(neighbourhood, 'lines');
+  const [cardBotId, setCardBotId] = useState<string | null>(null);
+
   const post = (type: string, payload: unknown) => {
     webViewRef.current?.postMessage(JSON.stringify({ type, payload }));
   };
 
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
     try {
-      const { tag, data } = JSON.parse(event.nativeEvent.data);
-      log(tag, data);
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'NEIGHBOUR_TAPPED' && typeof msg.id === 'string') {
+        setCardBotId(msg.id);
+        return;
+      }
+      log(msg.tag, msg.data);
     } catch (err) {
       log('WEBVIEW_MESSAGE_PARSE_ERROR', { error: String(err), raw: event.nativeEvent.data });
     }
@@ -70,7 +85,9 @@ export function MapView({
   const postHomeRange = (fitBounds: boolean) => {
     const liveOverlay = isTracking && locations.length > 0 ? cellIdsToCoords(paintedCells(locations)) : [];
     const raster = buildHomeRangeRasterPayload(persistedCellsRef.current, Date.now(), liveOverlay);
-    post('SHOW_HOME_RANGE', { raster, fitBounds });
+    // While idle the fit also holds the nearest neighbour Ranges (so they are in view when the map opens).
+    const frame = raster && fitBounds ? framePortraitNeighbours(raster, neighbourOverlayPayload(hood.nearby).items).frame : null;
+    post('SHOW_HOME_RANGE', { raster, fitBounds, frame });
   };
 
   // Messages posted before the WebView finishes loading its page are silently
@@ -101,7 +118,13 @@ export function MapView({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, isTracking, locations.length === 0, homeRangeRepository, homeRangeRefreshKey]);
+  }, [isReady, isTracking, locations.length === 0, homeRangeRepository, homeRangeRefreshKey, hood.nearby]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    post('SHOW_NEIGHBOURS', neighbourOverlayPayload(hood.nearby));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, hood.nearby]);
 
   useEffect(() => {
     if (!isReady || !currentLocation) return;
@@ -161,6 +184,10 @@ export function MapView({
       {/* Territories list screen entry point (docs/decisions/territories,
           design.md Decision 8) — the map screen's own chrome, floating over
           the WebView so it never competes with the map's bottom controls. */}
+      {(() => {
+        const item = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
+        return item ? <NeighbourCard item={item} lines={hood.linesFor(item.id)} onClose={() => setCardBotId(null)} /> : null;
+      })()}
       {onOpenTerritories && (
         <TouchableOpacity style={styles.territoriesButton} onPress={onOpenTerritories} activeOpacity={0.85}>
           <Text style={[textStyle('small'), { color: tokens.text }]}>{t('map.territories')}</Text>

@@ -35,8 +35,6 @@ export interface HouseholdLineInput {
   lastMemberJoined: { playerName: string; at: number; playerId?: string } | null;
   /** playerId -> CURRENT display name (sync state). Wins over the name stored on a walk, so a rename shows up on old walks too. */
   players?: Record<string, string>;
-  /** Newest first. At most ONE neighbour line is shown per launch, ranked below partner and personal lines. */
-  neighbourLines?: NeighbourLineEntry[];
   now: number;
 }
 
@@ -61,7 +59,45 @@ export function resolveHouseholdLines(input: HouseholdLineInput): string[] {
   if (lastMemberJoined && now - lastMemberJoined.at <= HOUSEHOLD_NEWS_WINDOW_MS) {
     lines.push(t('household.joined', { player: nameOf(lastMemberJoined.playerId, lastMemberJoined.playerName) ?? '', dog }));
   }
-  const neighbour = (input.neighbourLines ?? []).find((n) => now - n.at <= HOUSEHOLD_NEWS_WINDOW_MS && t(n.line) !== n.line);
-  if (neighbour) lines.push(t(neighbour.line, { ...neighbour.params, bot: neighbour.botName ?? '' }));
   return lines;
+}
+
+/** One neighbour line worded for display, with the dog it is about (null for the whole-neighbourhood co-op line). */
+export interface NeighbourNote {
+  /** Stable per event, so a dismissed note stays dismissed. */
+  key: string;
+  text: string;
+  botId: string | null;
+  at: number;
+}
+
+/** The line text, or null when this app has no copy for the key (a newer server). */
+export function wordNeighbourLine(entry: NeighbourLineEntry): string | null {
+  if (t(entry.line) === entry.line) return null;
+  return t(entry.line, { ...entry.params, bot: entry.botName ?? '' });
+}
+
+/**
+ * The ONE neighbour note for the fence: the newest line inside the 48 h window that this app can word.
+ * Lower priority than partner news (those keep Buddy's speech bubble). Silence is fine.
+ */
+export function resolveNeighbourNote(neighbourLines: NeighbourLineEntry[] | undefined, now: number): NeighbourNote | null {
+  for (const entry of [...(neighbourLines ?? [])].sort((a, b) => b.seq - a.seq)) {
+    if (now - entry.at > HOUSEHOLD_NEWS_WINDOW_MS) continue;
+    const text = wordNeighbourLine(entry);
+    if (text) return { key: `neighbour-${entry.seq}`, text, botId: entry.botId ?? null, at: entry.at };
+  }
+  return null;
+}
+
+/** The last `limit` lines about one dog (newest first) that this app can word; no age limit. */
+export function linesAboutBot(neighbourLines: NeighbourLineEntry[] | undefined, botId: string, limit = 2): string[] {
+  const out: string[] = [];
+  for (const entry of [...(neighbourLines ?? [])].sort((a, b) => b.seq - a.seq)) {
+    if (entry.botId !== botId) continue;
+    const text = wordNeighbourLine(entry);
+    if (text) out.push(text);
+    if (out.length >= limit) break;
+  }
+  return out;
 }

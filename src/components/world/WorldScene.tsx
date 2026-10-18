@@ -13,6 +13,10 @@ import { currentTitleForLevel } from '../../economy/milestones';
 import { AchievementId } from '../../economy/personalStats';
 import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
+import type { NeighbourNote } from '../../sync/householdEvents';
+import { coopSignText } from '../../sync/neighbourhood';
+import type { NeighbourhoodSource } from '../../sync/neighbourhood';
+import { useNeighbourhood } from '../../sync/useNeighbourhood';
 import type { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import type { PersonalStatsRepository } from '../../storage/PersonalStatsRepository';
 import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
@@ -32,6 +36,7 @@ import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProject
 import { bowlAtCap, chimneyAnchor } from './bakeryRules';
 import { BuildingPanel } from './BuildingPanel';
 import { Homecoming } from './Homecoming';
+import { NeighbourCard } from './NeighbourCard';
 import type { HomecomingWalk } from './homecomingPlan';
 import {
   BOTTOM_ROW_H,
@@ -103,22 +108,31 @@ export interface WorldSceneProps {
   territoryIncomeRate?: number;
   /** A walk just ended: the Heimkehr plays over the scene (camera to the Viertel, then the yard) until `onDone`. */
   homecoming?: { walk: HomecomingWalk; onDone: () => void } | null;
+  /** The sync engine: neighbour lines, the gift parcel and the Viertel-Runde sign. Omitted (tests, not joined) = no neighbours. */
+  neighbourhood?: NeighbourhoodSource;
 }
 
-type NoteKind = 'update' | 'line';
+type NoteKind = 'update' | 'line' | 'neighbour';
 interface Note {
   key: string;
   kind: NoteKind;
   text: string;
+  /** neighbour notes: the dog the line is about (tap opens its card); null for the co-op line. */
+  botId?: string | null;
 }
 
-/** Pure: at most two notes at once. The OTA update card comes first, then the welcome-back line, then the away-strip lines in their given order; the greeting only fills an otherwise empty yard. */
+/**
+ * Pure: at most two notes at once. The OTA update card comes first, then the welcome-back line, then the away-strip lines
+ * in their given order; the greeting only fills an otherwise empty yard. A neighbour note (max one) takes the paper
+ * slot on the fence unless the OTA card holds it; Buddy's speech bubble always keeps the household/greeting line.
+ */
 export function pickSceneNotes(
   awayStripLines: AwayStripLine[],
   greeting: string | null,
   hasUpdateCard: boolean,
   dismissed: ReadonlySet<string>,
-  welcomeBack: string | null = null
+  welcomeBack: string | null = null,
+  neighbour: NeighbourNote | null = null
 ): Note[] {
   const all: Note[] = [];
   if (hasUpdateCard) all.push({ key: 'update', kind: 'update', text: t('update.ready') });
@@ -129,7 +143,13 @@ export function pickSceneNotes(
     all.push({ key: `line-${i}`, kind: 'line', text: line.text });
   });
   if (all.length === 0 && greeting) all.push({ key: 'greeting', kind: 'line', text: greeting });
-  return all.filter((n) => !dismissed.has(n.key)).slice(0, MAX_NOTES);
+  const visible = all.filter((n) => !dismissed.has(n.key));
+  if (!neighbour || dismissed.has(neighbour.key)) return visible.slice(0, MAX_NOTES);
+  const update = visible.find((n) => n.kind === 'update');
+  if (update) return visible.slice(0, MAX_NOTES); // the neighbour waits until the update card is gone
+  const bubble = visible.find((n) => n.kind === 'line');
+  const note: Note = { key: neighbour.key, kind: 'neighbour', text: neighbour.text, botId: neighbour.botId };
+  return bubble ? [bubble, note] : [note];
 }
 
 let sleepyYawnPlayed = false;
@@ -171,6 +191,7 @@ export function WorldScene(props: WorldSceneProps) {
     homecoming = null,
     accruedDelta = 0,
     territoryIncomeRate = 0,
+    neighbourhood,
   } = props;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -368,9 +389,14 @@ export function WorldScene(props: WorldSceneProps) {
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const dismiss = (key: string) => setDismissed((prev) => new Set(prev).add(key));
   const welcomeText = welcome ? t('world.welcomeBack', { n: formatNumber(welcome.n) }) : null;
-  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText);
+  const hood = useNeighbourhood(neighbourhood);
+  const [cardBotId, setCardBotId] = useState<string | null>(null);
+  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note);
   const bubbleNote = notes.find((n) => n.kind === 'line');
   const paperNote = notes.find((n) => n !== bubbleNote);
+  const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
+  const parcelWaiting = hood.unopenedGifts.length > 0;
+  const coopText = coopSignText(hood.coop);
 
   const sky = skyTintForDate(new Date());
 
@@ -396,6 +422,7 @@ export function WorldScene(props: WorldSceneProps) {
   const buddyMoodNow: BuddyMood = den.excited || greetingPlaying ? 'excited' : curiousTarget ? 'curious' : buddyMood;
   const curiousFacing = curiousTarget === 'doghouse' ? 'left' : 'right';
   const gardenStage3 = artTierForLevel(levels.sniffGarden) >= 3;
+  const showsTerritorySign = state.territoryIncomeRevealed && Math.round(territoryIncomeRate) >= 1;
   const cap = projection.cap;
   const shownTreats = projection.projected;
   const treatCount = formatNumber(Math.floor(shownTreats));
@@ -605,6 +632,20 @@ export function WorldScene(props: WorldSceneProps) {
                       </WoodSign>
                     </View>
                   </PaperNote>
+                ) : paperNote.kind === 'neighbour' ? (
+                  <Pressable
+                    onPress={() => {
+                      // A note about a dog opens its card; either way it has been read.
+                      if (paperNote.botId && hood.nearby.some((n) => n.id === paperNote.botId)) setCardBotId(paperNote.botId);
+                      dismiss(paperNote.key);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={paperNote.text}
+                  >
+                    <PaperNote>
+                      <Text style={[textStyle('small'), styles.noteText]}>{paperNote.text}</Text>
+                    </PaperNote>
+                  </Pressable>
                 ) : (
                   <Pressable onPress={() => dismiss(paperNote.key)} accessibilityRole="button" accessibilityLabel={paperNote.text}>
                     <PaperNote>
@@ -664,6 +705,17 @@ export function WorldScene(props: WorldSceneProps) {
                 {t('world.post')}
               </WoodSign>
             </View>
+            {/* A gift from a neighbour dog waits by the mailbox; tapping opens the Post list where it is unwrapped. */}
+            {parcelWaiting && (
+              <View pointerEvents="box-none" style={[styles.abs, { right: 0, top: 14, alignItems: 'center', zIndex: 2, transform: [{ rotate: '4deg' }] }]}>
+                <WoodSign size="small" onPress={onOpenSettings} accessibilityLabel={t('neighbours.parcel.label')} textStyleOverride={SMALL_SIGN_TEXT} style={styles.parcelSign}>
+                  {t('neighbours.parcel.sign')}
+                </WoodSign>
+                <Pressable onPress={onOpenSettings} accessibilityRole="button" accessibilityLabel={t('neighbours.parcel.label')}>
+                  <Parcel />
+                </Pressable>
+              </View>
+            )}
           </View>
 
           {/* Treats flying from the bakery chimney into the bowl. */}
@@ -729,10 +781,20 @@ export function WorldScene(props: WorldSceneProps) {
               {title ? `${dog} · ${title}` : t('doorstep.dogLevel', { dog, level })}
             </WoodSign>
           </View>
-          {state.territoryIncomeRevealed && Math.round(territoryIncomeRate) >= 1 && (
+          {showsTerritorySign && (
             <View pointerEvents="none" style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '-3deg' }] }]}>
               <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
                 {t('world.territorySign', { n: formatNumber(Math.round(territoryIncomeRate)) })}
+              </WoodSign>
+            </View>
+          )}
+          {coopText && (
+            <View
+              pointerEvents="none"
+              style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4 + (showsTerritorySign ? 64 : 0), width: 190, alignItems: 'flex-start', transform: [{ rotate: '-2deg' }] }]}
+            >
+              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT} accessibilityLabel={coopText}>
+                {coopText}
               </WoodSign>
             </View>
           )}
@@ -758,6 +820,7 @@ export function WorldScene(props: WorldSceneProps) {
               onPress={onOpenMap}
               dog={dog}
               height={layout.viertelH - 72}
+              showNeighbours
             />
           </View>
         </Animated.View>
@@ -793,6 +856,8 @@ export function WorldScene(props: WorldSceneProps) {
         />
       )}
 
+      {cardItem && <NeighbourCard item={cardItem} lines={hood.linesFor(cardItem.id)} onClose={() => setCardBotId(null)} />}
+
       {isUp && !homecoming && (
         <View pointerEvents="box-none" style={[styles.backWrap, { bottom: insets.bottom + spacing.lg }]}>
           <WoodSign size="medium" onPress={scrollToYard} accessibilityLabel={t('world.backToYard')} textStyleOverride={SMALL_SIGN_TEXT}>
@@ -810,11 +875,13 @@ function WorldPortrait({
   onPress,
   dog,
   height,
+  showNeighbours,
 }: {
   homeRangeRepository: HomeRangeRepository;
   onPress: () => void;
   dog: string;
   height: number;
+  showNeighbours?: boolean;
 }) {
   const [empty, setEmpty] = useState(false);
   return empty ? (
@@ -829,6 +896,7 @@ function WorldPortrait({
         onEmptyChange={setEmpty}
         height={height}
         accessibilityLabel={t('world.neighbourhoodLabel')}
+        showNeighbours={showNeighbours}
       />
     </View>
   );
@@ -838,6 +906,17 @@ function WorldPortrait({
 function ArtDecor({ art, style }: { art: ArtKey; style: React.ComponentProps<typeof DecorImage>['style'] }) {
   const source = artOr(art, null);
   return source ? <DecorImage source={source} resizeMode="contain" style={style} /> : null;
+}
+
+/** A small wrapped parcel drawn with Views (no art yet): kraft box, cream ribbon, a little bow. */
+function Parcel() {
+  return (
+    <View style={styles.parcel}>
+      <View style={styles.parcelRibbonV} />
+      <View style={styles.parcelRibbonH} />
+      <View style={styles.parcelBow} />
+    </View>
+  );
 }
 
 function Cloud({ left, top, w, night }: { left: number; top: number; w: number; night: boolean }) {
@@ -883,5 +962,10 @@ const styles = StyleSheet.create({
   upgradeLabel: { alignItems: 'center' },
   upgradeTitle: { color: material.ink, textAlign: 'center' },
   upgradeNext: { color: material.muted, textAlign: 'center' },
+  parcel: { width: 48, height: 38, borderRadius: 6, backgroundColor: mix(material.woodLight, material.pathBrown, 0.5), borderWidth: 2, borderColor: material.woodRim, borderBottomWidth: 4, borderBottomColor: material.woodDark, alignItems: 'center', justifyContent: 'center' },
+  parcelRibbonV: { position: 'absolute', top: 0, bottom: 0, width: 8, backgroundColor: material.yarn },
+  parcelRibbonH: { position: 'absolute', left: 0, right: 0, height: 7, backgroundColor: material.yarn },
+  parcelBow: { position: 'absolute', top: -7, width: 16, height: 9, borderRadius: 6, backgroundColor: tokens.warm, borderWidth: 1, borderColor: material.woodDark },
+  parcelSign: { marginBottom: 6 },
   updateButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, justifyContent: 'center' },
 });

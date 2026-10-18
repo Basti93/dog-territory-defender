@@ -17,12 +17,13 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import { log } from '../utils/log';
 import { ApiClient, ApiError, createApiClient, normalizeBaseUrl } from './apiClient';
-import type { ApiDenState, CommandBody, CommandErrorCode, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
+import type { ApiDenState, ApiGift, CommandBody, CommandErrorCode, CoopWeekResponse, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
 import { API_LIMITS } from './apiContract';
 import { newClientId } from './ids';
 import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
 import { INVITE_CODE_LENGTH } from './syncConfig';
 import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult } from './apply';
+import type { NeighbourhoodSource } from './neighbourhood';
 import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
@@ -79,7 +80,7 @@ export interface JoinInput {
   deviceLabel: string;
 }
 
-export interface SyncEngine {
+export interface SyncEngine extends NeighbourhoodSource {
   getStatus(): Promise<SyncStatus>;
   subscribe(listener: () => void): () => void;
   setCallbacks(callbacks: SyncCallbacks): void;
@@ -350,6 +351,21 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     }
   }
 
+  /** Runs one read/open call for the neighbours: `fallback` when not joined or when anything fails (neighbours are optional). */
+  async function withClient<T>(fallback: T, run: (client: ApiClient) => Promise<T>): Promise<T> {
+    const identity = await deps.settings.getSyncIdentity();
+    if (!identity) return fallback;
+    try {
+      return await run(makeClient(identity.serverUrl, identity.token));
+    } catch (err) {
+      if (err instanceof ApiError && err.kind === 'unauthorized') {
+        unauthorized = true;
+        notify();
+      }
+      return fallback;
+    }
+  }
+
   async function syncNow(options?: { force?: boolean }): Promise<void> {
     if (inFlight) {
       runAgain = true;
@@ -444,6 +460,8 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     async leave() {
       await deps.settings.saveSyncIdentity(null);
       await deps.sync.clear();
+      applyNearby({ items: [] }); // the neighbours belong to the household we just left
+      nearbyLoaded = false;
       unauthorized = false;
       notify();
     },
@@ -483,6 +501,25 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       await enqueueEconomyCommand(deps.sync, { kind: 'walk.delete', walkId }, now());
       notify();
       void syncNow();
+    },
+
+    async neighbourLines() {
+      return (await deps.sync.getState()).neighbourLines ?? [];
+    },
+
+    listGifts: () => withClient<ApiGift[]>([], async (client) => (await client.gifts()).gifts),
+
+    coopWeek: () => withClient<CoopWeekResponse | null>(null, (client) => client.coopWeek()),
+
+    async openGift(giftId) {
+      return withClient(false, async (client) => {
+        // A fresh clientId per tap is safe: the server lets the first opener win and a second open credits nothing.
+        const response = await client.openGift(giftId, newClientId());
+        if (!response.ok) return false;
+        const applied = await applyServerDenState(applyRepos, response.den);
+        if (applied) callbacks.onDenChanged?.(applied);
+        return true;
+      });
     },
 
     syncNow,

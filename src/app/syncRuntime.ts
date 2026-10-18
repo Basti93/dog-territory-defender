@@ -53,7 +53,6 @@ export async function loadHouseholdLines(dogName: string | null): Promise<string
     myPlayerId: identity.playerId,
     dogName,
     lastMemberJoined: state.lastMemberJoined,
-    neighbourLines: state.neighbourLines,
     players: state.players,
     now: Date.now(),
   });

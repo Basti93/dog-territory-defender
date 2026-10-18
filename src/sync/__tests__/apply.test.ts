@@ -248,7 +248,7 @@ describe('neighbour events (Track B)', () => {
     await applyEvents(events, 2, repos, ctx());
     const lines = (await repos.sync.getState()).neighbourLines!;
     expect(lines.map((l) => l.seq)).toEqual([2, 1]);
-    expect(lines[0]).toMatchObject({ line: 'neighbours.line.stickLeft', botName: 'Momo', at: 200 });
+    expect(lines[0]).toMatchObject({ line: 'neighbours.line.stickLeft', botName: 'Momo', botId: 'b1', at: 200 });
   });
 
   it('applyNearby stores the bot ranges in memory', () => {

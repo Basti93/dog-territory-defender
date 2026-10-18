@@ -20,8 +20,12 @@ import { HouseholdCard } from './HouseholdCard';
 import type { SettingsRepository } from '../storage/SettingsRepository';
 import { LogShippingSwitch } from './LogShippingSwitch';
 import { isRestoreAllowed } from '../sync/restoreGuard';
+import type { ApiGift } from '../sync/apiContract';
 import type { SyncEngine } from '../sync/syncEngine';
 import { useSyncStatus } from '../sync/useSyncStatus';
+import { giftOpenedLine } from '../sync/neighbourhood';
+import { useNeighbourhood } from '../sync/useNeighbourhood';
+import { GiftsSection } from './GiftsSection';
 
 // This app's first Settings screen (docs/decisions/walk-reminder/design.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
@@ -89,6 +93,13 @@ export function SettingsScreen({
   const [aboutStatus, setAboutStatus] = useState<string | null>(null);
   useLocale(); // re-render when the language switches
   const syncStatus = useSyncStatus(syncEngine);
+  // Parcels from the neighbour dogs wait at the top of the Post list.
+  const hood = useNeighbourhood(syncEngine);
+  const [giftLine, setGiftLine] = useState<string | null>(null);
+  const openGift = async (gift: ApiGift) => {
+    setGiftLine((await hood.openGift(gift)) ? giftOpenedLine(gift) : t('neighbours.gift.retry'));
+  };
+  const giftsVisible = hood.unopenedGifts.length > 0 || giftLine !== null;
   // Restoring an old file over live synced state would fork the household's history.
   // Until the status has loaded, an engine-equipped screen keeps Restore off rather than flash it on.
   const restoreAllowed = !syncEngine || (syncStatus !== null && isRestoreAllowed(syncStatus.joined));
@@ -255,7 +266,8 @@ export function SettingsScreen({
       <PaperHeader title={t('menu.settings')} onBack={onClose} />
 
       <PaperSheet>
-        <PaperSection title={t('post.dog')} first>
+        <GiftsSection gifts={hood.unopenedGifts} line={giftLine} onOpen={openGift} first />
+        <PaperSection title={t('post.dog')} first={!giftsVisible}>
           <PaperRow title={dog} />
           <PaperRow
             title={t('settings.changeLook', { dog })}
