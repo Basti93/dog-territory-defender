@@ -14,6 +14,8 @@ export type { TypeName } from './theme';
 export { useAppFonts, font, fonts, resolveFont } from './fonts';
 export type { FontRole } from './fonts';
 export { ArtImage } from './ArtImage';
+export { DecorImage } from './DecorImage';
+export type { DecorImageProps } from './DecorImage';
 export type { ArtImageProps } from './ArtImage';
 export { Screen } from './Screen';
 export type { ScreenProps } from './Screen';

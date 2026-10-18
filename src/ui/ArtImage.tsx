@@ -25,13 +25,17 @@ export function ArtImage({ art, size = 32, width, height, style }: ArtImageProps
       />
     );
   }
+  // Sprites are decoration (a press wrapper such as PressableScale handles touches), so the
+  // image sits in a pointerEvents="none" View and an absolutely-positioned sprite can never steal a tap.
   return (
-    <Image
-      source={source}
-      resizeMode="contain"
-      style={[{ width: w, height: h }, style]}
-      accessibilityElementsHidden
-      importantForAccessibility="no"
-    />
+    <View pointerEvents="none" style={[{ width: w, height: h }, style as StyleProp<ViewStyle>]}>
+      <Image
+        source={source}
+        resizeMode="contain"
+        style={{ width: w, height: h }}
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+    </View>
   );
 }

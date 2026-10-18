@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
@@ -8,7 +8,7 @@ import { BuddyMood } from '../buddy/buddyMood';
 import { YardBuddy, YardBuddyGeometry } from './YardBuddy';
 import { YardButterflies } from './YardButterflies';
 import { SpotId, clampX } from './yardLife';
-import { ArtImage, Badge, PressableScale, palette } from '../../ui';
+import { ArtImage, Badge, DecorImage, PressableScale, palette } from '../../ui';
 import { t } from '../../i18n';
 
 // The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
@@ -230,10 +230,10 @@ export function YardScene({
   };
   return (
     <View style={[styles.scene, { height }]}>
-      {sky && <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
+      {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
       {ground && (
         // Native ratio, contain (never crop the horizon); the hill bleeds past both side edges and the bottom.
-        <Image source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, top: g.top }]} />
+        <DecorImage source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, top: g.top }]} />
       )}
       {/* Draw order: side buildings, Buddy, then the doghouse last so it stays tappable. */}
       {buildings.filter((b) => b.key !== 'doghouse').map(renderSprite)}

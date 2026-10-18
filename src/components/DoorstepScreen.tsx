@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Image, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
@@ -8,7 +8,7 @@ import { buddyFeetInset } from '../buddy/imageSkin';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyMood } from './buddy/buddyMood';
 import { play } from '../feedback/sounds';
-import { ArtImage, Button, Card, FadeSlideIn, ListRow, PressableScale, Screen, palette, radii, shadows, spacing, textStyle } from '../ui';
+import { ArtImage, Button, DecorImage, Card, FadeSlideIn, ListRow, PressableScale, Screen, palette, radii, shadows, spacing, textStyle } from '../ui';
 import { artOr, buildingArt } from '../art/artAssets';
 import { artTierForLevel } from './den/YardScene';
 
@@ -525,14 +525,10 @@ function DoorstepScene({ appearance, mood, dog, doghouseLevel, menuButton, child
   const doghouse = buildingArt('doghouse', artTierForLevel(doghouseLevel));
   return (
     <View style={[styles.scene, { height: insets.top + SCENE_HEIGHT }]}>
-      {sky && <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
+      {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
       {ground && (
         // Backdrop: cover-fit so the grass bleeds past both edges.
-        <Image
-          source={ground}
-          resizeMode="cover"
-          style={[styles.ground, { width: width + 40, height: 140 }]}
-        />
+        <DecorImage source={ground} resizeMode="cover" style={[styles.ground, { width: width + 40, height: 140 }]} />
       )}
       <View
         style={[
@@ -643,8 +639,10 @@ const styles = StyleSheet.create({
   },
   ground: { position: 'absolute', bottom: -24, left: -20 },
   doghouse: { position: 'absolute' },
-  buddy: { position: 'absolute' },
+  // Layering (decorative layers are pointerEvents="none"; interactive ones sit last): Buddy above the doghouse, header row (gear) above both.
+  buddy: { position: 'absolute', zIndex: 1 },
   sceneTop: {
+    zIndex: 2,
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: spacing.lg,

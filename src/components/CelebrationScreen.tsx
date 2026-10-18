@@ -12,6 +12,7 @@ import {
   Card,
   Chip,
   Confetti,
+  DecorImage,
   Screen,
   palette,
   spacing,
@@ -133,9 +134,8 @@ export function CelebrationScreen({
   return (
     <View style={styles.container}>
       {burstArt ? (
-        <Animated.Image
-          source={burstArt}
-          resizeMode="contain"
+        <Animated.View
+          pointerEvents="none"
           style={[
             styles.burst,
             {
@@ -143,18 +143,16 @@ export function CelebrationScreen({
               transform: [{ scale: burst.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
             },
           ]}
-        />
+        >
+          <Image source={burstArt} resizeMode="contain" style={StyleSheet.absoluteFill} />
+        </Animated.View>
       ) : null}
 
       <Screen scroll style={styles.screen} contentStyle={styles.content}>
         {/* Buddy on a grass strip. */}
         <View style={[styles.stage, { width: stageWidth }]}>
           {ground && (
-            <Image
-              source={ground}
-              resizeMode="contain"
-              style={[styles.ground, { width: groundWidth, height: groundHeight }]}
-            />
+            <DecorImage source={ground} resizeMode="contain" style={[styles.ground, { width: groundWidth, height: groundHeight }]} />
           )}
           <BuddyAvatar appearance={buddyAppearance} size={170} mood="excited" excitedSettleMs={null} name={dog} />
         </View>
