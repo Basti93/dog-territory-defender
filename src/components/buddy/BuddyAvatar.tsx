@@ -1,6 +1,6 @@
 // Animated Buddy rig. This file only POSITIONS and ANIMATES parts; a
 // BuddySkin (src/buddy/buddySkin.ts) draws them. All motion is transform or
-// opacity on the native driver. Animated nodes (11): root, tail, body, head,
+// opacity on the native driver. Animated nodes (12): root, lying, tail, body, head,
 // earLeft, earRight, eyesOpen, eyesClosed, mouthHappy, zzz, caption.
 //
 // Lifecycle rule: every Animated handle and timer started by the mood effect
@@ -14,8 +14,10 @@ import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { BuddySkin, vectorSkin } from '../../buddy/buddySkin';
 import { imageSkinFor } from '../../buddy/imageSkin';
 import { tokens } from '../../ui/tokens';
-import { BuddyMood, BuddyTrick, nextTrickDelayMs, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
+import { BuddyMood, BuddyTrick, nextTrickDelayMs, partsForMood, pickTrick, randomDelayMs, tapCaption } from './buddyMood';
 import { t } from '../../i18n';
+import * as haptics from '../../feedback/haptics';
+import { play } from '../../feedback/sounds';
 
 export interface BuddyAvatarProps {
   appearance: BuddyAppearance;
@@ -107,6 +109,8 @@ export function BuddyAvatar({
   const [tapping, setTapping] = useState(false);
   const [tapTick, setTapTick] = useState(0);
   const [settled, setSettled] = useState(false);
+  // Which near-leg frame shows during a hop-walk; changes only at hop boundaries (null = plain front-legs).
+  const [walkFrame, setWalkFrame] = useState<'a' | 'b' | null>(null);
   const [captionText, setCaptionText] = useState<string | null>(null);
   const tapCount = useRef(0);
   const tapTimer = useRef<Timer | null>(null);
@@ -159,6 +163,11 @@ export function BuddyAvatar({
     return {
       body: P.body(args),
       frontLegs: P.frontLegs(args),
+      // Alternate near-leg frames, stacked under the same pivot and swapped by opacity (no remount flicker).
+      walkA: P.frontLegsWalkA?.(args) ?? null,
+      walkB: P.frontLegsWalkB?.(args) ?? null,
+      markings: P.markings?.(args) ?? null,
+      poseLying: P.poseLying?.(args) ?? null,
       tail: P.tail(args),
       head: P.head(args),
       eyesOpen: P.eyesOpen(args),
@@ -207,6 +216,12 @@ export function BuddyAvatar({
         { scaleY: v.squash },
         { translateY: -geo.ground },
         { rotate: deg(Animated.add(v.spin, v.shake)) as unknown as string },
+      ],
+      // Lying pose: same slow breathing about the ground line, without the layered rig's curl/trick scaling.
+      lying: [
+        { translateY: geo.ground },
+        { scaleY: v.breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.03] }) },
+        { translateY: -geo.ground },
       ],
       body: [
         { translateY: geo.ground },
@@ -270,13 +285,14 @@ export function BuddyAvatar({
 
     const m = effectiveMood;
     const sleepy = m === 'sleepy';
+    const lying = partsForMood(m, skin) === 'lying'; // baked pose: no curl, tilt, blink or head sink
     const joyful = m === 'happy' || m === 'excited';
-    to(v.settle, sleepy ? 1 : 0, 500);
-    to(v.tilt, m === 'curious' ? 12 : sleepy ? 7 : 0, 400);
-    to(v.headBob, sleepy ? 0.015 * size : 0, 400);
+    to(v.settle, sleepy && !lying ? 1 : 0, 500);
+    to(v.tilt, m === 'curious' ? 12 : sleepy && !lying ? 7 : 0, 400);
+    to(v.headBob, sleepy && !lying ? 0.015 * size : 0, 400);
     to(v.earBase, m === 'curious' || m === 'excited' ? -10 : 0, 300);
     to(v.tongue, joyful ? 1 : 0, 150);
-    to(v.lid, sleepy ? 1 : 0, 300);
+    to(v.lid, sleepy && !lying ? 1 : 0, 300);
     to(v.trickPose, 0, 200);
     to(v.shiftX, 0, 300);
 
@@ -326,8 +342,12 @@ export function BuddyAvatar({
         ]),
         timing(v.squash, 1, ms * 0.25),
       ]);
+    setWalkFrame(null);
     if (walkHops && walkHopMs) {
       run(Animated.sequence(Array.from({ length: walkHops }, () => stride(walkHopMs))));
+      // Alternate the near-leg frame at each hop start (state changes once per hop, never per frame).
+      for (let k = 0; k < walkHops; k++) later(() => setWalkFrame(k % 2 === 0 ? 'a' : 'b'), k * walkHopMs);
+      later(() => setWalkFrame(null), walkHops * walkHopMs);
     }
 
     if (m === 'idle' || m === 'curious') {
@@ -416,12 +436,14 @@ export function BuddyAvatar({
           Animated.sequence([timing(v.z, 1, 2600, Easing.linear), timing(v.z, 0, 1, Easing.linear)])
         )
       );
-      // slow blink: eyes open for a moment, then drift shut
-      chain(
-        () => run(Animated.sequence([timing(v.lid, 0, 700), Animated.delay(900), timing(v.lid, 1, 800)])),
-        4000,
-        8000
-      );
+      // slow blink: eyes open for a moment, then drift shut (layered art only; the lying sprite has closed eyes)
+      if (!lying) {
+        chain(
+          () => run(Animated.sequence([timing(v.lid, 0, 700), Animated.delay(900), timing(v.lid, 1, 800)])),
+          4000,
+          8000
+        );
+      }
     }
 
     return () => {
@@ -460,9 +482,13 @@ export function BuddyAvatar({
         out.start();
       }, CAPTION_HOLD_MS);
     }
+    play('bark');
+    haptics.pop();
     onPress?.();
   };
 
+  const isLying = partsForMood(effectiveMood, skin) === 'lying';
+  const haveWalkFrames = !!(parts.walkA && parts.walkB);
   const eyesOpenOpacity = v.lid.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
   const flipped = facing !== skin.nativeFacing;
   const headX = flipped ? 1 - geo.neckX : geo.neckX;
@@ -492,20 +518,36 @@ export function BuddyAvatar({
           }}
         />
         <Animated.View style={[styles.box, { transform: styles.root as never }]}>
-          <Animated.View style={[styles.box, { transform: styles.tail as never }]}>{parts.tail}</Animated.View>
-          <Animated.View style={[styles.box, { transform: styles.body as never }]}>
-            {parts.body}
-            {parts.frontLegs}
-          </Animated.View>
-          <Animated.View style={[styles.box, { transform: styles.head as never }]}>
-            <Animated.View style={[styles.box, { transform: styles.earRight as never }]}>{parts.earRight}</Animated.View>
-            {parts.head}
-            {/* Open eyes fade out exactly as the closed eyes fade in, so no pupils show through a blink or sleepy eyes. */}
-            <Animated.View style={[styles.box, { opacity: eyesOpenOpacity }]}>{parts.eyesOpen}</Animated.View>
-            <Animated.View style={[styles.box, { opacity: v.lid }]}>{parts.eyesClosed}</Animated.View>
-            <Animated.View style={[styles.box, { opacity: v.tongue }]}>{parts.mouthHappy}</Animated.View>
-            <Animated.View style={[styles.box, { transform: styles.earLeft as never }]}>{parts.earLeft}</Animated.View>
-          </Animated.View>
+          {isLying ? (
+            <Animated.View style={[styles.box, { transform: styles.lying as never }]}>{parts.poseLying}</Animated.View>
+          ) : (
+            <>
+              <Animated.View style={[styles.box, { transform: styles.tail as never }]}>{parts.tail}</Animated.View>
+              <Animated.View style={[styles.box, { transform: styles.body as never }]}>
+                {parts.body}
+                {haveWalkFrames ? (
+                  <>
+                    <View style={[styles.box, { opacity: walkFrame === null ? 1 : 0 }]}>{parts.frontLegs}</View>
+                    <View style={[styles.box, { opacity: walkFrame === 'a' ? 1 : 0 }]}>{parts.walkA}</View>
+                    <View style={[styles.box, { opacity: walkFrame === 'b' ? 1 : 0 }]}>{parts.walkB}</View>
+                  </>
+                ) : (
+                  parts.frontLegs
+                )}
+              </Animated.View>
+              <Animated.View style={[styles.box, { transform: styles.head as never }]}>
+                <Animated.View style={[styles.box, { transform: styles.earRight as never }]}>{parts.earRight}</Animated.View>
+                {parts.head}
+                {/* Markings sit above head (mask, eye patch) and below eyes and ears. They ride the head group. */}
+                {parts.markings}
+                {/* Open eyes fade out exactly as the closed eyes fade in, so no pupils show through a blink or sleepy eyes. */}
+                <Animated.View style={[styles.box, { opacity: eyesOpenOpacity }]}>{parts.eyesOpen}</Animated.View>
+                <Animated.View style={[styles.box, { opacity: v.lid }]}>{parts.eyesClosed}</Animated.View>
+                <Animated.View style={[styles.box, { opacity: v.tongue }]}>{parts.mouthHappy}</Animated.View>
+                <Animated.View style={[styles.box, { transform: styles.earLeft as never }]}>{parts.earLeft}</Animated.View>
+              </Animated.View>
+            </>
+          )}
         </Animated.View>
       </View>
       {effectiveMood === 'sleepy' && (

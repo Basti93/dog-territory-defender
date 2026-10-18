@@ -35,6 +35,10 @@ into `assets/buddy/<coat>/` and `assets/buddy/common/`, plus `manifest.json` (ev
 pivots in 0..1 canvas coords) and `_preview-<coat>.png` (all parts stacked, for eyeballing). One scene, one fixed
 orthographic camera (75 deg tilt, dog yawed 32 deg toward camera, facing LEFT); each part is rendered with the others
 hidden so layers stack exactly. Run: `Blender -b --python scripts/blender/render_buddy.py -- [--fast] [--coats golden,cream]
-[--preview-only] [--variants] [--size 768] [--out dir]`. Full set (8 coats, 108 PNGs at 512px/32 samples) takes ~2 min.
+[--preview-only] [--variants] [--size 768] [--out dir]`. Full set (8 coats, 148 files incl. markings, walk legs and lying pose at 512px/32 samples) takes ~2 min.
 Medium size only; coat colours mirror `BUDDY_PALETTE` (keep in sync by hand).
 Last tuned 2026-10-18: blush forward, blunter snout.
+Extras (per coat): `markings-{patch,socks,mask}.png` are thin shells (blob intersected with an inflated copy of the surface) rendered with
+body/head/legs as Holdout materials, so they are occluded correctly and stack exactly; `pose-lying.png` re-poses copies of the head/tail and
+builds a sphinx body; `front-legs-walk-{a,b}.png` swing the near leg about the shoulder. These are `nofit` so the canvas is unchanged. Golden
+review composites `_preview-golden-{markings-*,walk-a,walk-b,lying}.png` (alpha-stacked from the real PNGs, red line = groundY). Full run ~65 s.

@@ -2,6 +2,7 @@
 // the component owns timing, this file owns decisions.
 import type { GreetingFlavor, SessionKind } from '../DoorstepScreen';
 import { t } from '../../i18n';
+import type { BuddySkin } from '../../buddy/buddySkin';
 
 export type BuddyMood = 'idle' | 'happy' | 'excited' | 'sleepy' | 'curious';
 export type BuddyTrick = 'sit' | 'stretch' | 'shake';
@@ -75,4 +76,12 @@ export const TAP_CAPTION_COUNT = 4;
 export function tapCaption(tapIndex: number, name?: string | null): string {
   const n = ((tapIndex % TAP_CAPTION_COUNT) + TAP_CAPTION_COUNT) % TAP_CAPTION_COUNT;
   return t(`buddy.tapCaption.${n + 1}`, { name: name && name.trim() ? name.trim() : 'Buddy' });
+}
+
+/**
+ * Which art a mood draws: the single `poseLying` sprite (sleepy, when the skin has one) or the
+ * layered parts. Pure so it can be tested; BuddyAvatar uses it to decide what to mount.
+ */
+export function partsForMood(mood: BuddyMood, skin: Pick<BuddySkin, 'parts'>): 'lying' | 'layered' {
+  return mood === 'sleepy' && skin.parts.poseLying ? 'lying' : 'layered';
 }

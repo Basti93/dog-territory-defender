@@ -138,6 +138,42 @@
       }
     },
     {
+      "file": "cream/markings-patch.png",
+      "part": "markings",
+      "coat": "cream",
+      "style": "patch"
+    },
+    {
+      "file": "cream/markings-socks.png",
+      "part": "markings",
+      "coat": "cream",
+      "style": "socks"
+    },
+    {
+      "file": "cream/markings-mask.png",
+      "part": "markings",
+      "coat": "cream",
+      "style": "mask"
+    },
+    {
+      "file": "cream/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "cream",
+      "style": "walk-a"
+    },
+    {
+      "file": "cream/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "cream",
+      "style": "walk-b"
+    },
+    {
+      "file": "cream/pose-lying.png",
+      "part": "poseLying",
+      "coat": "cream",
+      "style": "lying"
+    },
+    {
       "file": "golden/body.png",
       "part": "body",
       "coat": "golden",
@@ -248,6 +284,42 @@
         "x": 0.6689,
         "y": 0.6626
       }
+    },
+    {
+      "file": "golden/markings-patch.png",
+      "part": "markings",
+      "coat": "golden",
+      "style": "patch"
+    },
+    {
+      "file": "golden/markings-socks.png",
+      "part": "markings",
+      "coat": "golden",
+      "style": "socks"
+    },
+    {
+      "file": "golden/markings-mask.png",
+      "part": "markings",
+      "coat": "golden",
+      "style": "mask"
+    },
+    {
+      "file": "golden/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "golden",
+      "style": "walk-a"
+    },
+    {
+      "file": "golden/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "golden",
+      "style": "walk-b"
+    },
+    {
+      "file": "golden/pose-lying.png",
+      "part": "poseLying",
+      "coat": "golden",
+      "style": "lying"
     },
     {
       "file": "ginger/body.png",
@@ -362,6 +434,42 @@
       }
     },
     {
+      "file": "ginger/markings-patch.png",
+      "part": "markings",
+      "coat": "ginger",
+      "style": "patch"
+    },
+    {
+      "file": "ginger/markings-socks.png",
+      "part": "markings",
+      "coat": "ginger",
+      "style": "socks"
+    },
+    {
+      "file": "ginger/markings-mask.png",
+      "part": "markings",
+      "coat": "ginger",
+      "style": "mask"
+    },
+    {
+      "file": "ginger/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "ginger",
+      "style": "walk-a"
+    },
+    {
+      "file": "ginger/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "ginger",
+      "style": "walk-b"
+    },
+    {
+      "file": "ginger/pose-lying.png",
+      "part": "poseLying",
+      "coat": "ginger",
+      "style": "lying"
+    },
+    {
       "file": "chocolate/body.png",
       "part": "body",
       "coat": "chocolate",
@@ -472,6 +580,42 @@
         "x": 0.6689,
         "y": 0.6626
       }
+    },
+    {
+      "file": "chocolate/markings-patch.png",
+      "part": "markings",
+      "coat": "chocolate",
+      "style": "patch"
+    },
+    {
+      "file": "chocolate/markings-socks.png",
+      "part": "markings",
+      "coat": "chocolate",
+      "style": "socks"
+    },
+    {
+      "file": "chocolate/markings-mask.png",
+      "part": "markings",
+      "coat": "chocolate",
+      "style": "mask"
+    },
+    {
+      "file": "chocolate/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "chocolate",
+      "style": "walk-a"
+    },
+    {
+      "file": "chocolate/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "chocolate",
+      "style": "walk-b"
+    },
+    {
+      "file": "chocolate/pose-lying.png",
+      "part": "poseLying",
+      "coat": "chocolate",
+      "style": "lying"
     },
     {
       "file": "charcoal/body.png",
@@ -586,6 +730,42 @@
       }
     },
     {
+      "file": "charcoal/markings-patch.png",
+      "part": "markings",
+      "coat": "charcoal",
+      "style": "patch"
+    },
+    {
+      "file": "charcoal/markings-socks.png",
+      "part": "markings",
+      "coat": "charcoal",
+      "style": "socks"
+    },
+    {
+      "file": "charcoal/markings-mask.png",
+      "part": "markings",
+      "coat": "charcoal",
+      "style": "mask"
+    },
+    {
+      "file": "charcoal/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "charcoal",
+      "style": "walk-a"
+    },
+    {
+      "file": "charcoal/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "charcoal",
+      "style": "walk-b"
+    },
+    {
+      "file": "charcoal/pose-lying.png",
+      "part": "poseLying",
+      "coat": "charcoal",
+      "style": "lying"
+    },
+    {
       "file": "grey/body.png",
       "part": "body",
       "coat": "grey",
@@ -696,6 +876,42 @@
         "x": 0.6689,
         "y": 0.6626
       }
+    },
+    {
+      "file": "grey/markings-patch.png",
+      "part": "markings",
+      "coat": "grey",
+      "style": "patch"
+    },
+    {
+      "file": "grey/markings-socks.png",
+      "part": "markings",
+      "coat": "grey",
+      "style": "socks"
+    },
+    {
+      "file": "grey/markings-mask.png",
+      "part": "markings",
+      "coat": "grey",
+      "style": "mask"
+    },
+    {
+      "file": "grey/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "grey",
+      "style": "walk-a"
+    },
+    {
+      "file": "grey/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "grey",
+      "style": "walk-b"
+    },
+    {
+      "file": "grey/pose-lying.png",
+      "part": "poseLying",
+      "coat": "grey",
+      "style": "lying"
     },
     {
       "file": "white/body.png",
@@ -810,6 +1026,42 @@
       }
     },
     {
+      "file": "white/markings-patch.png",
+      "part": "markings",
+      "coat": "white",
+      "style": "patch"
+    },
+    {
+      "file": "white/markings-socks.png",
+      "part": "markings",
+      "coat": "white",
+      "style": "socks"
+    },
+    {
+      "file": "white/markings-mask.png",
+      "part": "markings",
+      "coat": "white",
+      "style": "mask"
+    },
+    {
+      "file": "white/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "white",
+      "style": "walk-a"
+    },
+    {
+      "file": "white/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "white",
+      "style": "walk-b"
+    },
+    {
+      "file": "white/pose-lying.png",
+      "part": "poseLying",
+      "coat": "white",
+      "style": "lying"
+    },
+    {
       "file": "tricolour/body.png",
       "part": "body",
       "coat": "tricolour",
@@ -920,6 +1172,42 @@
         "x": 0.6689,
         "y": 0.6626
       }
+    },
+    {
+      "file": "tricolour/markings-patch.png",
+      "part": "markings",
+      "coat": "tricolour",
+      "style": "patch"
+    },
+    {
+      "file": "tricolour/markings-socks.png",
+      "part": "markings",
+      "coat": "tricolour",
+      "style": "socks"
+    },
+    {
+      "file": "tricolour/markings-mask.png",
+      "part": "markings",
+      "coat": "tricolour",
+      "style": "mask"
+    },
+    {
+      "file": "tricolour/front-legs-walk-a.png",
+      "part": "frontLegs",
+      "coat": "tricolour",
+      "style": "walk-a"
+    },
+    {
+      "file": "tricolour/front-legs-walk-b.png",
+      "part": "frontLegs",
+      "coat": "tricolour",
+      "style": "walk-b"
+    },
+    {
+      "file": "tricolour/pose-lying.png",
+      "part": "poseLying",
+      "coat": "tricolour",
+      "style": "lying"
     },
     {
       "file": "common/eyes-open.png",

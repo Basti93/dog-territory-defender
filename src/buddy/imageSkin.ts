@@ -1,6 +1,6 @@
 // Default Buddy skin: pre-rendered PNG layers (assets/buddy). Wraps
-// createImageSkin and adds the size scale. Markings and accent colour are baked
-// into / absent from the art, so they are NOT rendered by this skin.
+// createImageSkin and adds the size scale. Markings are separate overlay layers;
+// the accent colour is baked into the art and NOT rendered by this skin.
 import { BuddyAppearance, BuddySize } from './buddyAppearance';
 import { BuddySkin, createImageSkin, PivotPoint } from './buddySkin';
 import { BUDDY_IMAGE_GROUND_Y, BUDDY_IMAGE_PIVOTS, buddyImageSources } from './imageSkinSources';
@@ -44,7 +44,7 @@ function build(appearance: BuddyAppearance): BuddySkin {
 
 /** Memoised per look, so the rig's skin identity is stable across renders. */
 export function imageSkinFor(appearance: BuddyAppearance): BuddySkin {
-  const key = `${appearance.coat}|${appearance.earStyle}|${appearance.tailStyle}|${appearance.size}`;
+  const key = `${appearance.coat}|${appearance.earStyle}|${appearance.tailStyle}|${appearance.size}|${appearance.markings}`;
   let skin = cache.get(key);
   if (!skin) {
     skin = build(appearance);

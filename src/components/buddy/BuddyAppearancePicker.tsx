@@ -1,6 +1,6 @@
-// Step-by-step look picker: 4 choice steps + a "ready?" step. Markings and the
-// muzzle/chest accent are baked into the painted image skin (see buddy/imageSkin.ts),
-// so their steps are hidden; the saved values stay in the data model untouched. Every option is
+// Step-by-step look picker: 5 choice steps + a "ready?" step. The muzzle/chest accent is baked
+// into the painted image skin (see buddy/imageSkin.ts), so its step stays hidden; the saved value
+// stays in the data model untouched. Markings are overlay layers and have a step. Every option is
 // free and there is no wrong answer; defaults mean "Next" alone is a valid path.
 // The one live Buddy at the top previews every change.
 import React, { useState } from 'react';
@@ -9,12 +9,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   BUDDY_COATS,
   BUDDY_EAR_STYLES,
+  BUDDY_MARKINGS,
   BUDDY_PALETTE,
   BUDDY_SIZES,
   BUDDY_TAIL_STYLES,
   BuddyAppearance,
   defaultBuddyAppearance,
 } from '../../buddy/buddyAppearance';
+import { PICKER_STEPS, PickerStep } from '../../buddy/pickerSteps';
 import { BuddyAvatar } from './BuddyAvatar';
 import { Button, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../../ui';
 import { t } from '../../i18n';
@@ -43,6 +45,12 @@ const COAT_LABEL_KEY: Record<(typeof BUDDY_COATS)[number], string> = {
   white: 'buddy.coat.white',
   tricolour: 'buddy.coat.tricolour',
 };
+const MARKINGS_LABEL_KEY = {
+  none: 'buddy.markings.none',
+  patch: 'buddy.markings.patch',
+  socks: 'buddy.markings.socks',
+  mask: 'buddy.markings.mask',
+} as const;
 const EAR_LABEL_KEY = {
   floppy: 'buddy.ear.floppy',
   pointy: 'buddy.ear.pointy',
@@ -59,13 +67,15 @@ const SIZE_LABEL_KEY = {
   large: 'buddy.size.large',
 } as const;
 
-type StepKey = 'coat' | 'earStyle' | 'tailStyle' | 'size' | 'done';
-const STEPS: StepKey[] = ['coat', 'earStyle', 'tailStyle', 'size', 'done'];
+type StepKey = PickerStep;
+const STEPS: readonly StepKey[] = PICKER_STEPS;
 
 function stepCaption(step: StepKey, name: string): string {
   switch (step) {
     case 'coat':
       return t('buddy.step.coat', { name });
+    case 'markings':
+      return t('buddy.step.markings', { name });
     case 'earStyle':
       return t('buddy.step.ears');
     case 'tailStyle':
@@ -176,6 +186,18 @@ export function BuddyAppearancePicker({
               />
             ))}
           </View>
+      )}
+      {step === 'markings' && (
+        <View style={styles.row}>
+          {BUDDY_MARKINGS.map((m) => (
+            <OptionChip
+              key={m}
+              label={t(MARKINGS_LABEL_KEY[m])}
+              selected={look.markings === m}
+              onPress={() => set('markings', m)}
+            />
+          ))}
+        </View>
       )}
       {step === 'earStyle' && (
         <View style={styles.row}>

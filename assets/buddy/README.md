@@ -32,3 +32,8 @@ Then per part: "ONLY the <part>, all other parts removed, same position and
 scale as the full dog on a 1024x1024 canvas". Generate the full dog first, then
 ask for each layer from that image so proportions stay consistent. Check by
 stacking all layers: no gaps at joins, no baked-in shadows.
+
+## Extra Blender-rendered layers (per coat, same canvas, see manifest.json)
+- `markings-patch|socks|mask.png`: overlay only, stack above `head` (and `front-legs`), below eyes/ears. Colour is coat-dependent (darker tone on light coats, cream on dark; socks cream except cream/white/tricolour).
+- `pose-lying.png`: full single sprite (sphinx, head on paws, eyes closed, floppy ears + curly tail baked in), same groundY. Replaces all layers for the sleepy mood.
+- `front-legs-walk-a.png` / `front-legs-walk-b.png`: swap-in for `front-legs` (near leg forward / back), same shoulder position.

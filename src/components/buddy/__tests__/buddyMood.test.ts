@@ -1,6 +1,7 @@
 import {
   BUDDY_TRICKS,
   nextTrickDelayMs,
+  partsForMood,
   pickTrick,
   resolveBuddyMood,
   tapCaption,
@@ -72,5 +73,20 @@ describe('tapCaption', () => {
     expect(tapCaption(2, 'Rex')).toBe('Rex loves that.');
     expect(tapCaption(4, 'Rex')).toBe("Hi, it's me!");
     expect(tapCaption(2)).toBe('Buddy loves that.');
+  });
+});
+
+describe('partsForMood', () => {
+  const noop = (() => null) as never;
+  const withLying = { parts: { poseLying: noop } } as never;
+  const without = { parts: {} } as never;
+
+  it('uses the lying sprite only for sleepy on a skin that has one', () => {
+    expect(partsForMood('sleepy', withLying)).toBe('lying');
+    expect(partsForMood('sleepy', without)).toBe('layered');
+  });
+
+  it('keeps every other mood layered', () => {
+    for (const m of ['idle', 'happy', 'curious', 'excited'] as const) expect(partsForMood(m, withLying)).toBe('layered');
   });
 });

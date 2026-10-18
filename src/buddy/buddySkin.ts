@@ -17,7 +17,14 @@ export type BuddyPart =
   | 'eyesOpen'
   | 'eyesClosed'
   | 'mouthHappy'
-  | 'zzz';
+  | 'zzz'
+  | 'markings'
+  | 'poseLying'
+  | 'frontLegsWalkA'
+  | 'frontLegsWalkB';
+
+/** Parts a skin may omit (the vector skin has none of them except zzz). */
+export type OptionalBuddyPart = 'zzz' | 'markings' | 'poseLying' | 'frontLegsWalkA' | 'frontLegsWalkB';
 
 /** All parts share the SAME square canvas, so parts align when stacked. */
 export interface PartBox {
@@ -56,7 +63,10 @@ export interface BuddySkin {
   pivots(appearance: BuddyAppearance): BuddyPivots;
   /** Ground line as a fraction of canvas height (used for squash pivot + shadow). */
   groundY: number;
-  parts: Record<Exclude<BuddyPart, 'zzz'>, PartRenderer> & { zzz?: PartRenderer };
+  parts: Record<Exclude<BuddyPart, OptionalBuddyPart>, PartRenderer> &
+    Partial<Record<OptionalBuddyPart, PartRenderer>>;
+  // Optional parts: `markings` overlay (image only); `poseLying` = the whole sleepy sprite (replaces the
+  // layered parts); `frontLegsWalkA/B` = alternate near-leg frames for hop-walks.
   /** True when `parts.zzz` draws on the full shared canvas (an image) rather than a small glyph. */
   zzzFullCanvas?: boolean;
 }

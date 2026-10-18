@@ -4,7 +4,7 @@
 // assets/buddy/manifest.json). Every layer shares one canvas.
 import { ImageSourcePropType } from 'react-native';
 
-import { BuddyAppearance, BuddyEarStyle, BuddyTailStyle, defaultBuddyAppearance, normalizeAppearance } from './buddyAppearance';
+import { BuddyAppearance, BuddyEarStyle, BuddyMarkings, BuddyTailStyle, defaultBuddyAppearance, normalizeAppearance } from './buddyAppearance';
 import type { BuddyPart, BuddyPivots } from './buddySkin';
 
 /** Hard-coded from assets/buddy/manifest.json (fractions of the canvas, y down). Keep in sync. */
@@ -190,6 +190,97 @@ const COATS: Record<string, CoatSources> = {
   },
 };
 
+/** Overlay + extra frames per coat (literal requires: Metro cannot resolve dynamic paths). */
+interface ExtraSources {
+  markings: Record<Exclude<BuddyMarkings, 'none'>, Src>;
+  poseLying: Src;
+  walkA: Src;
+  walkB: Src;
+}
+
+const EXTRAS: Record<string, ExtraSources> = {
+  cream: {
+    markings: {
+      patch: require('../../assets/buddy/cream/markings-patch.png'),
+      socks: require('../../assets/buddy/cream/markings-socks.png'),
+      mask: require('../../assets/buddy/cream/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/cream/pose-lying.png'),
+    walkA: require('../../assets/buddy/cream/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/cream/front-legs-walk-b.png'),
+  },
+  golden: {
+    markings: {
+      patch: require('../../assets/buddy/golden/markings-patch.png'),
+      socks: require('../../assets/buddy/golden/markings-socks.png'),
+      mask: require('../../assets/buddy/golden/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/golden/pose-lying.png'),
+    walkA: require('../../assets/buddy/golden/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/golden/front-legs-walk-b.png'),
+  },
+  ginger: {
+    markings: {
+      patch: require('../../assets/buddy/ginger/markings-patch.png'),
+      socks: require('../../assets/buddy/ginger/markings-socks.png'),
+      mask: require('../../assets/buddy/ginger/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/ginger/pose-lying.png'),
+    walkA: require('../../assets/buddy/ginger/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/ginger/front-legs-walk-b.png'),
+  },
+  chocolate: {
+    markings: {
+      patch: require('../../assets/buddy/chocolate/markings-patch.png'),
+      socks: require('../../assets/buddy/chocolate/markings-socks.png'),
+      mask: require('../../assets/buddy/chocolate/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/chocolate/pose-lying.png'),
+    walkA: require('../../assets/buddy/chocolate/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/chocolate/front-legs-walk-b.png'),
+  },
+  charcoal: {
+    markings: {
+      patch: require('../../assets/buddy/charcoal/markings-patch.png'),
+      socks: require('../../assets/buddy/charcoal/markings-socks.png'),
+      mask: require('../../assets/buddy/charcoal/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/charcoal/pose-lying.png'),
+    walkA: require('../../assets/buddy/charcoal/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/charcoal/front-legs-walk-b.png'),
+  },
+  grey: {
+    markings: {
+      patch: require('../../assets/buddy/grey/markings-patch.png'),
+      socks: require('../../assets/buddy/grey/markings-socks.png'),
+      mask: require('../../assets/buddy/grey/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/grey/pose-lying.png'),
+    walkA: require('../../assets/buddy/grey/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/grey/front-legs-walk-b.png'),
+  },
+  white: {
+    markings: {
+      patch: require('../../assets/buddy/white/markings-patch.png'),
+      socks: require('../../assets/buddy/white/markings-socks.png'),
+      mask: require('../../assets/buddy/white/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/white/pose-lying.png'),
+    walkA: require('../../assets/buddy/white/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/white/front-legs-walk-b.png'),
+  },
+  tricolour: {
+    markings: {
+      patch: require('../../assets/buddy/tricolour/markings-patch.png'),
+      socks: require('../../assets/buddy/tricolour/markings-socks.png'),
+      mask: require('../../assets/buddy/tricolour/markings-mask.png'),
+    },
+    poseLying: require('../../assets/buddy/tricolour/pose-lying.png'),
+    walkA: require('../../assets/buddy/tricolour/front-legs-walk-a.png'),
+    walkB: require('../../assets/buddy/tricolour/front-legs-walk-b.png'),
+  },
+};
+
 const COMMON: Pick<Record<BuddyPart, Src>, 'eyesOpen' | 'eyesClosed' | 'mouthHappy' | 'zzz'> = {
   eyesOpen: require('../../assets/buddy/common/eyes-open.png'),
   eyesClosed: require('../../assets/buddy/common/eyes-closed.png'),
@@ -197,11 +288,12 @@ const COMMON: Pick<Record<BuddyPart, Src>, 'eyesOpen' | 'eyesClosed' | 'mouthHap
   zzz: require('../../assets/buddy/common/zzz.png'),
 };
 
-/** Sources for one look. Unknown coat/ear/tail values fall back to the defaults. Markings, size and accent are ignored here. */
+/** Sources for one look. Unknown coat/ear/tail values fall back to the defaults. Size and accent are ignored here. `markings` is only present when the look has markings. */
 export function buddyImageSources(appearance: BuddyAppearance): Partial<Record<BuddyPart, Src>> {
   const a = normalizeAppearance(appearance);
   const d = defaultBuddyAppearance();
   const coat = COATS[a.coat] ?? COATS[d.coat];
+  const extras = EXTRAS[a.coat] ?? EXTRAS[d.coat];
   return {
     body: coat.body,
     head: coat.head,
@@ -209,6 +301,10 @@ export function buddyImageSources(appearance: BuddyAppearance): Partial<Record<B
     earLeft: coat.earLeft[a.earStyle] ?? coat.earLeft[d.earStyle],
     earRight: coat.earRight[a.earStyle] ?? coat.earRight[d.earStyle],
     tail: coat.tail[a.tailStyle] ?? coat.tail[d.tailStyle],
+    ...(a.markings !== 'none' ? { markings: extras.markings[a.markings] } : {}),
+    poseLying: extras.poseLying,
+    frontLegsWalkA: extras.walkA,
+    frontLegsWalkB: extras.walkB,
     ...COMMON,
   };
 }

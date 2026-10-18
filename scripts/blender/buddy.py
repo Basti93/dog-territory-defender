@@ -15,6 +15,7 @@ COATS = {  # mirrors BUDDY_PALETTE.coats in src/buddy/buddyAppearance.ts
 }
 GINGER, CHARCOAL, CREAM_ACCENT, WHITE_ACCENT = "#C8672E", "#4A423E", "#FBEFD5", "#FFFDF7"
 EARS, TAILS = ("floppy", "pointy", "folded"), ("curly", "straight", "stubby")
+MARKS = ("patch", "socks", "mask")
 YAW = Matrix.Rotation(math.radians(32), 4, "Z")  # positive yaw turns the left-facing dog toward the camera
 CAM = (75, 0)
 
@@ -28,6 +29,10 @@ NECK = Vector((-0.55, 0, 1.95))
 
 OBJS = []
 M = {}
+BASE = {}            # object name -> matrix_world before head tilt / yaw (to re-pose copies)
+EXTRA = Matrix.Identity(4)   # extra dog-frame transform applied by add() (walk-leg swing, lying-pose scale)
+HOLD = None
+NOFIT_PREFIX = ("pose-", "markings-", "front-legs-walk")
 
 
 def mat(key, hexcol, rough=0.6, sss=0.1):
@@ -47,16 +52,20 @@ def mix(h1, h2, t):
     return "#%02X%02X%02X" % tuple(s(a[i] * (1 - t) + b[i] * t) for i in range(3))
 
 
-def add(part, o, only=None):
+def add(part, o, only=None, head=None):
     o["part"], o["only"] = part, only or ""
-    head = part in ("head", "eyes-open", "eyes-closed", "mouth-happy") or part.startswith("ear-")
-    o.matrix_world = YAW @ (TILT if head else Matrix.Identity(4)) @ o.matrix_world
+    if head is None:
+        head = part in ("head", "eyes-open", "eyes-closed", "mouth-happy") or part.startswith("ear-")
+    if part.startswith(NOFIT_PREFIX):
+        o["nofit"] = True
+    BASE[o.name] = o.matrix_world.copy()
+    o.matrix_world = YAW @ EXTRA @ (TILT if head else Matrix.Identity(4)) @ o.matrix_world
     OBJS.append(o)
     return o
 
 
-def ell(part, loc, rad, key, rot=(0, 0, 0), only=None):
-    return add(part, common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot), only)
+def ell(part, loc, rad, key, rot=(0, 0, 0), only=None, head=None):
+    return add(part, common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot), only, head)
 
 
 def on(c, r, phi, e, k=1.0):
@@ -101,16 +110,16 @@ def lerp3(a, b, t):
     return [a[i] + (b[i] - a[i]) * t for i in range(3)]
 
 
-def patch(part, loc, rad, shell_loc, shell_rad, key, only):
+def patch(part, loc, rad, shell_loc, shell_rad, key, only, head=None, k=1.02, rot=(0, 0, 0)):
     """Blob intersected with a slightly inflated copy of the underlying ellipsoid -> flat painted patch."""
-    shell = common.sph(shell_loc, 1.0, M[key], scale=tuple(v * 1.02 for v in shell_rad))
-    blob = common.sph(loc, 1.0, M[key], scale=tuple(rad))
+    shell = common.sph(shell_loc, 1.0, M[key], scale=tuple(v * k for v in shell_rad))
+    blob = common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot)
     md = blob.modifiers.new("i", "BOOLEAN")
     md.operation, md.object = "INTERSECT", shell
     bpy.context.view_layer.objects.active = blob
     bpy.ops.object.modifier_apply(modifier="i")
     bpy.data.objects.remove(shell)
-    return add(part, blob, only)
+    return add(part, blob, only, head)
 
 
 def build():
@@ -215,6 +224,92 @@ def build():
             OBJS.append(b)
 
 
+T_L, T_R = Vector((0.35, 0, 1.25)), (1.0, 0.9, 1.25)
+SH = Vector((-0.4, -0.52, 1.3))   # near shoulder: top of the near front leg (walk frames swing about it)
+MK = 1.035                        # marking shell inflation (clears the 1.02 tricolour patches)
+LS = 0.8                         # lying pose scale (keeps it inside the sitting canvas)
+HEAD_PARTS = ("head", "eyes-closed", "ear-left-floppy", "ear-right-floppy")
+
+
+def swing(deg, lift):
+    return Matrix.Translation(SH + Vector((0, 0, lift))) @ Matrix.Rotation(math.radians(deg), 4, "Y") @ Matrix.Translation(-SH)
+
+
+def build_extras():
+    global EXTRA
+    mat("mark", "#888888")
+    # ---- walking legs: the near leg swung about the shoulder, same shapes as front-legs
+    for name, deg, lift in (("a", 26, 0.0), ("b", -18, 0.06)):
+        EXTRA = swing(deg, lift)
+        ell(f"front-legs-walk-{name}", (-0.4, -0.52, 0.62), (0.28, 0.28, 0.68), "coat")
+        ell(f"front-legs-walk-{name}", (-0.55, -0.52, 0.15), (0.42, 0.34, 0.18), "coat")
+    EXTRA = Matrix.Identity(4)
+
+    # ---- markings: thin shells on the surface, rendered with the base parts as holdouts
+    P = "markings-patch"
+    for loc, rad in (((0.55, -0.1, 2.3), (1.0, 0.75, 0.6)), ((0.0, 0.35, 2.1), (0.6, 0.5, 0.5)),
+                     ((1.05, -0.45, 1.9), (0.55, 0.5, 0.45)), ((0.3, -0.75, 1.75), (0.4, 0.35, 0.35)),
+                     ((1.3, 0.3, 2.0), (0.4, 0.4, 0.4))):
+        patch(P, loc, rad, T_L, T_R, "mark", None, head=False, k=MK)
+    e1 = on(HC, HR, 44, 30)
+    for loc, rad in ((e1, (0.58, 0.5, 0.6)), (on(HC, HR, 66, 52), (0.42, 0.4, 0.4)), (on(HC, HR, 30, 12), (0.3, 0.28, 0.32)), (on(HC, HR, 48, 8), (0.4, 0.4, 0.3))):
+        patch(P, loc, rad, HC, HR, "mark", None, head=True, k=MK)
+
+    S = "markings-socks"
+    for blob, rad, shells in (
+            (Vector((-0.5, -0.52, 0.1)), (0.62, 0.5, 0.44), [((-0.4, -0.52, 0.62), (0.28, 0.28, 0.68)), ((-0.55, -0.52, 0.15), (0.42, 0.34, 0.18))]),
+            (Vector((-0.55, 0.5, 0.1)), (0.62, 0.5, 0.42), [((-0.45, 0.5, 0.62), (0.27, 0.27, 0.65)), ((-0.58, 0.5, 0.15), (0.4, 0.32, 0.17))]),
+            (Vector((-0.05, -0.78, 0.1)), (0.62, 0.5, 0.3), [((-0.05, -0.78, 0.17), (0.5, 0.3, 0.19))])):
+        for sl, sr in shells:
+            patch(S, blob, rad, sl, sr, "mark", None, head=False, k=MK)
+
+    Mk = "markings-mask"
+    for sl, sr in ((MC, MR), (M2C, M2R)):
+        patch(Mk, (-1.95, 0, 2.72), (1.0, 0.9, 0.3), sl, sr, "mark", None, head=True, k=MK)
+    patch(Mk, (-1.35, 0, 3.05), (0.55, 0.3, 0.3), HC, HR, "mark", None, head=True, k=MK)
+    for ph, e in EYES:
+        patch(Mk, on(HC, HR, ph, e, 0.97), (0.3, 0.34, 0.42), HC, HR, "mark", None, head=True, k=MK, rot=(0, 0, math.radians(ph)))
+
+    build_lying()
+
+
+def build_lying():
+    """Sphinx pose, head resting on the front paws, eyes shut. Body built in the dog frame, head parts are
+    copies of the sitting ones re-posed. Everything is nofit so the shared canvas is unchanged."""
+    global EXTRA
+    EXTRA = Matrix.Translation((0.35, 0, 0)) @ Matrix.Scale(LS, 4)
+    L = "pose-lying"
+    ell(L, (0.35, 0, 0.78), (1.3, 0.92, 0.78), "coat")
+    ell(L, (-0.75, 0, 0.7), (0.32, 0.6, 0.55), "accent")
+    for sg in (-1, 1):
+        ell(L, (0.95, sg * 0.74, 0.5), (0.85, 0.6, 0.5), "coat")
+        ell(L, (-0.5, sg * 0.55, 0.4), (0.5, 0.3, 0.4), "coat")
+        ell(L, (-1.95, sg * 0.5, 0.2), (0.95, 0.3, 0.2), "coat")
+    ell(L, (0.1, -1.05, 0.17), (0.6, 0.3, 0.19), "coat")
+    T = (0.35, 0, 0.78)
+    patch(L, (0.5, 0, 1.4), (0.9, 0.85, 0.5), T, (1.3, 0.92, 0.78), "charcoal", "tricolour", head=False)
+    patch(L, (1.0, -0.85, 0.55), (0.6, 0.5, 0.5), (0.95, -0.74, 0.5), (0.85, 0.6, 0.5), "ginger", "tricolour", head=False)
+    # head copies
+    tgt = Vector((-1.55, 0, 1.12))
+    hx = Matrix.Translation(tgt) @ Matrix.Rotation(math.radians(-12), 4, "Y") @ Matrix.Translation(-HC)
+    src = [o for o in OBJS if o["part"] in HEAD_PARTS]
+    for o in src:
+        n = o.copy()
+        bpy.context.scene.collection.objects.link(n)
+        n["part"], n["nofit"] = L, True
+        n.matrix_world = YAW @ EXTRA @ hx @ BASE[o.name]
+        OBJS.append(n)
+    tb = Vector((1.6, 0, 0.32))
+    tx = Matrix.Translation(tb) @ Matrix.Rotation(math.radians(90), 4, "X") @ Matrix.Translation(-TAIL_BASE)
+    for o in [o for o in OBJS if o["part"] == "tail-curly"]:
+        n = o.copy()
+        bpy.context.scene.collection.objects.link(n)
+        n["part"], n["nofit"] = L, True
+        n.matrix_world = YAW @ EXTRA @ tx @ BASE[o.name]
+        OBJS.append(n)
+    EXTRA = Matrix.Identity(4)
+
+
 def set_coat(coat):
     c = COATS[coat]
     acc = WHITE_ACCENT if coat in ("white", "tricolour") else mix(c, CREAM_ACCENT, 0.65)
@@ -225,12 +320,69 @@ def set_coat(coat):
     dark = coat in ("charcoal", "chocolate")
     set_color("rim", mix(c, "#FFFFFF", 0.5)); set_color("lid", mix(c, "#FFFFFF", 0.7) if dark else "#2B2523")
     set_color("nose", "#5A3A28" if coat == "chocolate" else "#2B2523")
+    set_color("mark", mark_colour(coat))
+
+
+def mark_colour(coat, style="patch"):
+    """Light coats get a darker tone (35% toward brown), dark coats cream. Socks are cream wherever cream reads."""
+    c = COATS[coat]
+    light = coat in ("cream", "white", "tricolour")
+    if style == "socks" and not light:
+        return CREAM_ACCENT
+    return CREAM_ACCENT if coat in ("charcoal", "chocolate", "ginger") else mix(c, "#5A3A28", 0.5 if style == "patch" else 0.35)
 
 
 def show(parts, coat=None):
     for o in OBJS:
         ok = o["part"] in parts and (not o["only"] or coat in o["only"].split(","))
         o.hide_render = not ok
+
+
+def holdout(on_):
+    """Turn the base body/head/legs into holdouts (they occlude but paint nothing, cast no shadow)."""
+    global HOLD
+    if HOLD is None:
+        HOLD = bpy.data.materials.new("hold")
+        HOLD.use_nodes = True
+        nt = HOLD.node_tree
+        nt.nodes.clear()
+        h = nt.nodes.new("ShaderNodeHoldout")
+        out = nt.nodes.new("ShaderNodeOutputMaterial")
+        nt.links.new(h.outputs[0], out.inputs["Surface"])
+    for o in OBJS:
+        if o["part"] in ("body", "head", "front-legs") and not o.hide_render:
+            if on_:
+                o["_mat"] = o.material_slots[0].material.name
+                o.material_slots[0].material = HOLD
+            elif "_mat" in o:
+                o.material_slots[0].material = bpy.data.materials[o["_mat"]]
+                del o["_mat"]
+            o.visible_shadow = not on_
+
+
+def composite(out, layers, dst, ground):
+    """Alpha-stack PNG layers over a light backdrop with a thin groundY line (review aid)."""
+    import numpy as np
+    def load(p):
+        im = bpy.data.images.load(p)
+        a = np.array(im.pixels[:], dtype=np.float32).reshape(im.size[1], im.size[0], 4)
+        bpy.data.images.remove(im)
+        return a
+    acc = None
+    for p in layers:
+        a = load(os.path.join(out, p))
+        if acc is None:
+            acc = np.zeros_like(a)
+            acc[..., :3], acc[..., 3] = 0.93, 1.0
+            hh = a.shape[0]
+            acc[hh - int(ground * hh), :, :3] = (0.85, 0.3, 0.3)  # image rows are bottom-up
+        al = a[..., 3:4]
+        acc[..., :3] = a[..., :3] * al + acc[..., :3] * (1 - al)
+    im = bpy.data.images.new("pv", acc.shape[1], acc.shape[0], alpha=True)
+    im.pixels = acc.ravel().tolist()
+    im.filepath_raw, im.file_format = os.path.join(out, dst), "PNG"
+    im.save()
+    bpy.data.images.remove(im)
 
 
 def frame(w, h):
@@ -243,7 +395,7 @@ def frame(w, h):
     sc.render.resolution_x, sc.render.resolution_y, sc.render.resolution_percentage = w, h, 100
     bpy.context.view_layer.update()
     from bpy_extras.object_utils import world_to_camera_view as wcv
-    ys = [1 - wcv(sc, cam, o.matrix_world @ v.co).y for o in OBJS if o["part"] != "zzz" for v in o.data.vertices]
+    ys = [1 - wcv(sc, cam, o.matrix_world @ v.co).y for o in OBJS if o["part"] != "zzz" and not o.get("nofit") for v in o.data.vertices]
     shift = (max(ys) - 0.9) * cam.data.ortho_scale   # >0 means dog too low -> move camera down
     cam.location -= cam.matrix_world.to_3x3() @ Vector((0, shift, 0))
     bpy.context.view_layer.update()
@@ -255,6 +407,24 @@ def pivot(wcv, sc, cam, p, tilted=False):
     return {"x": round(v.x, 4), "y": round(1 - v.y, 4)}
 
 
+def gold_previews(out, ground):
+        st = ["golden/tail-curly.png", "golden/ear-right-floppy.png", "golden/body.png"]
+        hd = ["golden/head.png"]
+        top = ["common/eyes-open.png", "golden/ear-left-floppy.png"]
+        composite(out, st + ["golden/front-legs.png"] + hd + ["golden/markings-patch.png"] + top, "_preview-golden-markings-patch.png", ground)
+        composite(out, st + ["golden/front-legs.png", "golden/markings-socks.png"] + hd + top, "_preview-golden-markings-socks.png", ground)
+        composite(out, st + ["golden/front-legs.png"] + hd + ["golden/markings-mask.png"] + top, "_preview-golden-markings-mask.png", ground)
+        composite(out, st + ["golden/front-legs-walk-a.png"] + hd + top, "_preview-golden-walk-a.png", ground)
+        composite(out, st + ["golden/front-legs-walk-b.png"] + hd + top, "_preview-golden-walk-b.png", ground)
+        composite(out, ["golden/pose-lying.png"], "_preview-golden-lying.png", ground)
+
+
+def sheet(out, coats):
+    import contact_sheet
+    names = [f"_preview-{c}" for c in coats] + [f"{c}/pose-lying" for c in coats]
+    contact_sheet.make(out, names, os.path.join(out, "_contact-sheet.png"), tile=256, cols=len(coats))
+
+
 def main(argv):
     fast = "--fast" in argv
     arg = lambda k, d=None: argv[argv.index(k) + 1] if k in argv else d
@@ -262,12 +432,14 @@ def main(argv):
     out = arg("--out", os.path.join(root, "assets", "buddy"))
     coats = arg("--coats", ",".join(COATS)).split(",")
     preview_only = "--preview-only" in argv
+    only_marks = "--only-markings" in argv
     w = h = int(arg("--size", 512))
     samples = 16 if fast else 32
     import time
     t0 = time.time()
     common.setup_scene(*CAM)
     build()
+    build_extras()
     sc, cam, wcv = frame(w, h)
     pv = {
         "tail": pivot(wcv, sc, cam, TAIL_BASE),
@@ -290,6 +462,15 @@ def main(argv):
     base = ["body", "front-legs", "head", "ear-left-floppy", "ear-right-floppy", "tail-curly", "eyes-open"]
     for coat in coats:
         set_coat(coat)
+        if only_marks:
+            for st in MARKS:
+                set_color("mark", mark_colour(coat, st))
+                show([f"markings-{st}", "body", "head", "front-legs"], coat)
+                holdout(True)
+                common.render(os.path.join(out, f"{coat}/markings-{st}.png"), w, h, samples)
+                holdout(False)
+            print(f"[buddy] {coat} markings {time.time() - t0:.0f}s", flush=True)
+            continue
         if preview_only:
             show(base, coat); common.render(os.path.join(out, f"_preview-{coat}.png"), w, h, samples); continue
         for p, part in (("body", "body"), ("head", "head"), ("front-legs", "frontLegs")):
@@ -299,6 +480,17 @@ def main(argv):
             rnd(f"{coat}/ear-right-{st}.png", [f"ear-right-{st}"], coat, "earRight", st, "earRight")
         for st in TAILS:
             rnd(f"{coat}/tail-{st}.png", [f"tail-{st}"], coat, "tail", st, "tail")
+        for st in MARKS:
+            set_color("mark", mark_colour(coat, st))
+            show([f"markings-{st}", "body", "head", "front-legs"], coat)
+            holdout(True)
+            rnd_path = f"{coat}/markings-{st}.png"
+            common.render(os.path.join(out, rnd_path), w, h, samples)
+            holdout(False)
+            entries.append({"file": rnd_path, "part": "markings", "coat": coat, "style": st})
+        for st in ("a", "b"):
+            rnd(f"{coat}/front-legs-walk-{st}.png", [f"front-legs-walk-{st}"], coat, "frontLegs", f"walk-{st}")
+        rnd(f"{coat}/pose-lying.png", ["pose-lying"], coat, "poseLying", "lying")
         show(base, coat)
         common.render(os.path.join(out, f"_preview-{coat}.png"), w, h, samples)
         if "--variants" in argv:  # extra check renders: happy + sleepy faces
@@ -307,6 +499,11 @@ def main(argv):
             show([b for b in base if b not in ("eyes-open", "tail-curly", "ear-left-floppy")] + ["mouth-happy", "eyes-open", "ear-left-pointy", "tail-straight"], coat)
             common.render(os.path.join(out, f"_preview-{coat}-happy.png"), w, h, samples)
         print(f"[buddy] {coat} done {time.time() - t0:.0f}s", flush=True)
+    if only_marks:
+        if "golden" in coats:
+            gold_previews(out, ground)
+        sheet(out, coats)
+        return
     if not preview_only:
         set_coat("golden")
         for rel, parts, part in (("common/eyes-open.png", ["eyes-open"], "eyesOpen"),
@@ -314,6 +511,9 @@ def main(argv):
                                  ("common/mouth-happy.png", ["mouth-happy"], "mouthHappy"),
                                  ("common/zzz.png", ["zzz"], "zzz")):
             rnd(rel, parts, None, part)
+        if "golden" in coats:
+            gold_previews(out, ground)
+        sheet(out, coats)
         man = {"canvas": 1024, "facing": "left", "groundY": round(ground, 4), "pivots": pv, "files": entries}
         with open(os.path.join(out, "manifest.json"), "w") as f:
             json.dump(man, f, indent=2)
