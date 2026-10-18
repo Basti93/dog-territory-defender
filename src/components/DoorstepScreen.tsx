@@ -7,6 +7,7 @@ import { BuddyAvatar } from './buddy';
 import { buddyFeetInset } from '../buddy/imageSkin';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyMood } from './buddy/buddyMood';
+import { play } from '../feedback/sounds';
 import { ArtImage, Button, Card, FadeSlideIn, ListRow, PressableScale, Screen, palette, radii, shadows, spacing, textStyle } from '../ui';
 import { artOr, buildingArt } from '../art/artAssets';
 import { artTierForLevel } from './den/YardScene';
@@ -246,6 +247,9 @@ interface DoorstepScreenProps {
   onOpenSettings: () => void;
 }
 
+// Module flag: the yawn plays at most once per app session.
+let sleepyYawnPlayed = false;
+
 export function DoorstepScreen({
   dogName,
   treats,
@@ -293,6 +297,14 @@ export function DoorstepScreen({
   // in App.tsx (this screen remounts on every return trip). A long-absence
   // open plays one joyful ~3s greeting, then settles into `buddyMood`. Never
   // a guilt signal: coming back is a delight.
+  // Sleepy Buddy yawns once per app session (not per mount, not during the excited greeting).
+  useEffect(() => {
+    if (buddyMood === 'sleepy' && !playGreeting && !sleepyYawnPlayed) {
+      sleepyYawnPlayed = true;
+      play('sleepy');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [greetingPlaying, setGreetingPlaying] = useState(playGreeting);
   useEffect(() => {
     if (!playGreeting) return;

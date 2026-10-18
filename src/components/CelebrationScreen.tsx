@@ -23,6 +23,9 @@ import { dogDisplayName, UpgradeTease } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../utils/grid';
 import { formatNumber, t, tPlural } from '../i18n';
+import * as haptics from '../feedback/haptics';
+import { play } from '../feedback/sounds';
+import { MAX_COUNT_UP_MS } from '../ui/AnimatedNumber';
 
 // Same keys DenScreen uses for its building cards.
 const BUILDING_NAME_KEYS: Record<BuildingKey, string> = {
@@ -91,6 +94,24 @@ export function CelebrationScreen({
   walkId = null,
   onContinue,
 }: CelebrationScreenProps) {
+  useEffect(() => {
+    play('celebrate');
+    haptics.success();
+  }, []);
+  const treatSoundPlayed = useRef(false);
+  const playTreatSoundOnce = () => {
+    if (treatSoundPlayed.current || treatsEarned <= 0) return;
+    treatSoundPlayed.current = true;
+    play('treat');
+  };
+  // Fallback if the count-up never reports done (e.g. it could not run): fires
+  // just after the longest possible count-up. The once-guard prevents a double.
+  useEffect(() => {
+    if (treatsEarned <= 0) return;
+    const id = setTimeout(playTreatSoundOnce, MAX_COUNT_UP_MS + 300);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treatsEarned]);
   const burstArt = artOr('celebration-burst', null);
   const burst = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -147,7 +168,7 @@ export function CelebrationScreen({
 
         <Card tint="warm" style={styles.treatsCard}>
           <ArtImage art="icon-treat" size={48} />
-          <AnimatedNumber from={0} value={treatsEarned} format={(n) => t('celebration.treatsEarned', { count: formatNumber(n) })} style={textStyle('display')} />
+          <AnimatedNumber from={0} value={treatsEarned} onDone={playTreatSoundOnce} format={(n) => t('celebration.treatsEarned', { count: formatNumber(n) })} style={textStyle('display')} />
         </Card>
 
         {/* Fresh Ground beat — suppressed below BALANCE.freshGround.displayThresholdMultiplier

@@ -5,6 +5,7 @@ import {
   NotificationBookkeepingState,
   TimeOfDayBucket,
 } from '../notifications/notificationDecision';
+import { defaultReminderSlots, migrateLegacyReminderToSlots, ReminderSlot } from '../notifications/walkReminderDecision';
 import { NotificationRepository } from './NotificationRepository';
 
 const DEFAULT_DB_NAME = 'dog-territory-defender.db';
@@ -22,16 +23,32 @@ interface NotificationBookkeepingRow {
   walkReminderFiredCount: number;
   walkReminderFollowedCount: number;
   walkReminderExperimentStartedAt: number | null;
+  /** JSON ReminderSlot[]; null on rows from before the 3-slot change. */
+  walkReminderSlots: string | null;
+}
+
+// Slots live in one JSON column. Rows from before the 3-slot change have
+// NULL there, so the old single time (walkReminderEnabled/Hour/Minute, which
+// stay in the table untouched) is migrated into the slot it fits. The next
+// saveState persists the slots. Anything unparseable falls back to defaults.
+function parseSlots(row: NotificationBookkeepingRow): ReminderSlot[] {
+  if (row.walkReminderSlots === null) {
+    return migrateLegacyReminderToSlots(row.walkReminderEnabled === 1, row.walkReminderHour, row.walkReminderMinute);
+  }
+  try {
+    const saved = JSON.parse(row.walkReminderSlots) as ReminderSlot[];
+    // Always exactly the three known slots, in order.
+    return defaultReminderSlots().map((slot) => ({ ...slot, ...saved.find((s) => s.id === slot.id) }));
+  } catch {
+    return defaultReminderSlots();
+  }
 }
 
 function rowToState(row: NotificationBookkeepingRow): NotificationBookkeepingState {
   return {
     overflowSurfaced: row.overflowSurfaced === 1,
     learnedTimeOfDayBucket: (row.learnedTimeOfDayBucket as TimeOfDayBucket | null) ?? null,
-    walkReminderEnabled: row.walkReminderEnabled === 1,
-    walkReminderHour: row.walkReminderHour,
-    walkReminderMinute: row.walkReminderMinute,
-    walkReminderConsecutiveIgnores: row.walkReminderConsecutiveIgnores,
+    reminderSlots: parseSlots(row),
     walkReminderPendingDate: row.walkReminderPendingDate,
     walkReminderFiredCount: row.walkReminderFiredCount,
     walkReminderFollowedCount: row.walkReminderFollowedCount,
@@ -69,7 +86,8 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
         walkReminderPendingDate TEXT,
         walkReminderFiredCount INTEGER NOT NULL DEFAULT 0,
         walkReminderFollowedCount INTEGER NOT NULL DEFAULT 0,
-        walkReminderExperimentStartedAt INTEGER
+        walkReminderExperimentStartedAt INTEGER,
+        walkReminderSlots TEXT
       );
     `);
     // Migration for rows created before the walk-reminder columns existed
@@ -86,6 +104,7 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
     await addColumnIfMissing(db, 'notification_bookkeeping', 'walkReminderFiredCount INTEGER NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'notification_bookkeeping', 'walkReminderFollowedCount INTEGER NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'notification_bookkeeping', 'walkReminderExperimentStartedAt INTEGER');
+    await addColumnIfMissing(db, 'notification_bookkeeping', 'walkReminderSlots TEXT');
     return db;
   });
 
@@ -104,17 +123,13 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
       await db.runAsync(
         `INSERT INTO notification_bookkeeping (
            id, overflowSurfaced, learnedTimeOfDayBucket,
-           walkReminderEnabled, walkReminderHour, walkReminderMinute,
-           walkReminderConsecutiveIgnores, walkReminderPendingDate,
+           walkReminderSlots, walkReminderPendingDate,
            walkReminderFiredCount, walkReminderFollowedCount, walkReminderExperimentStartedAt
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         SINGLETON_ID,
         initial.overflowSurfaced ? 1 : 0,
         initial.learnedTimeOfDayBucket,
-        initial.walkReminderEnabled ? 1 : 0,
-        initial.walkReminderHour,
-        initial.walkReminderMinute,
-        initial.walkReminderConsecutiveIgnores,
+        JSON.stringify(initial.reminderSlots),
         initial.walkReminderPendingDate,
         initial.walkReminderFiredCount,
         initial.walkReminderFollowedCount,
@@ -128,18 +143,14 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
       await db.runAsync(
         `INSERT INTO notification_bookkeeping (
            id, overflowSurfaced, learnedTimeOfDayBucket,
-           walkReminderEnabled, walkReminderHour, walkReminderMinute,
-           walkReminderConsecutiveIgnores, walkReminderPendingDate,
+           walkReminderSlots, walkReminderPendingDate,
            walkReminderFiredCount, walkReminderFollowedCount, walkReminderExperimentStartedAt
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            overflowSurfaced = excluded.overflowSurfaced,
            learnedTimeOfDayBucket = excluded.learnedTimeOfDayBucket,
-           walkReminderEnabled = excluded.walkReminderEnabled,
-           walkReminderHour = excluded.walkReminderHour,
-           walkReminderMinute = excluded.walkReminderMinute,
-           walkReminderConsecutiveIgnores = excluded.walkReminderConsecutiveIgnores,
+           walkReminderSlots = excluded.walkReminderSlots,
            walkReminderPendingDate = excluded.walkReminderPendingDate,
            walkReminderFiredCount = excluded.walkReminderFiredCount,
            walkReminderFollowedCount = excluded.walkReminderFollowedCount,
@@ -147,10 +158,7 @@ export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_N
         SINGLETON_ID,
         state.overflowSurfaced ? 1 : 0,
         state.learnedTimeOfDayBucket,
-        state.walkReminderEnabled ? 1 : 0,
-        state.walkReminderHour,
-        state.walkReminderMinute,
-        state.walkReminderConsecutiveIgnores,
+        JSON.stringify(state.reminderSlots),
         state.walkReminderPendingDate,
         state.walkReminderFiredCount,
         state.walkReminderFollowedCount,

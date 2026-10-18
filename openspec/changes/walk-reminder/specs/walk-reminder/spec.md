@@ -80,3 +80,42 @@ The system SHALL maintain a durable, locally-persisted record of when the remind
 #### Scenario: Measurement record is visible before a kill-condition decision
 - **WHEN** the reminder has been enabled for any length of time
 - **THEN** its fired count, followed count, and experiment start date SHALL be visible somewhere in the app without needing to inspect raw log text
+
+## MODIFIED Requirements
+
+(2026-10-18 update: three daily slots. These replace the same-named requirements above; the rest of the capability is unchanged.)
+
+### Requirement: The Player Sets Their Own Reminder Time
+The system SHALL offer three independent daily reminder slots (Morning, Noon, Evening), each with its own on/off switch and a real time picker. All slots SHALL be off by default, at suggested times 08:00 / 13:00 / 18:30 that the player can change. The system SHALL NOT enable any slot automatically. A pre-existing single reminder time SHALL migrate into the slot it fits (before 11:00 Morning, 11:00-15:59 Noon, otherwise Evening), keeping its enabled state.
+
+#### Scenario: Enabling a slot
+- **WHEN** the player turns a slot's switch on (asking for notification permission first if no slot was on yet)
+- **THEN** the slot SHALL be scheduled at its shown time, and the player MAY tap the time to change it with a time picker
+
+### Requirement: At Most One Reminder Notification Per Slot Per Day
+The system SHALL schedule at most one walk-reminder notification per enabled slot per calendar day, at that slot's local time, for the next 7 future days.
+
+#### Scenario: No duplicate reminder in the same slot
+- **WHEN** reminders are replanned
+- **THEN** each enabled slot SHALL have exactly one pending reminder per day, identified `walk-reminder-YYYY-MM-DD-<slotId>`
+
+### Requirement: A Slot's Reminder Never Fires if Its Own Walk Already Happened
+A slot's reminder on a day SHALL be skipped if a walk (tracked or manual) STARTED inside that slot's window: from the previous enabled slot's time that day (00:00 for the first enabled slot) up to this slot's time. A walk in one slot's window SHALL NOT silence the other slots.
+
+#### Scenario: A morning walk keeps the evening reminder
+- **WHEN** all three slots are on and a walk started at 07:30
+- **THEN** the Morning reminder SHALL be skipped for that day and the Noon and Evening reminders SHALL still be scheduled
+
+### Requirement: Per-Slot Auto-Sleep After 3 Consecutive Ignored Reminders
+A slot SHALL turn itself off silently after 3 consecutive days on which its reminder was scheduled but no walk started in its window. A walked day SHALL reset only that slot's streak.
+
+#### Scenario: One slot falls asleep
+- **WHEN** the Evening slot goes 3 consecutive days with no walk in its window while the Morning slot is followed
+- **THEN** only the Evening slot SHALL be switched off, with no message
+
+### Requirement: Foreground Delivery
+Walk reminders SHALL be shown as a banner (with the channel's sound) even while the app is open, so a reminder is never invisible to a player who has the app in front.
+
+#### Scenario: Reminder arrives while the app is open
+- **WHEN** a reminder fires while the app is in the foreground
+- **THEN** a banner SHALL be shown

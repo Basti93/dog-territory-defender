@@ -35,10 +35,8 @@ describe('NotificationRepository contract', () => {
 
     const state = await repo.getState();
 
-    expect(state.walkReminderEnabled).toBe(false);
-    expect(state.walkReminderHour).toBeNull();
-    expect(state.walkReminderMinute).toBeNull();
-    expect(state.walkReminderConsecutiveIgnores).toBe(0);
+    expect(state.reminderSlots.map((s) => s.id)).toEqual(['morning', 'noon', 'evening']);
+    expect(state.reminderSlots.some((s) => s.enabled)).toBe(false);
     expect(state.walkReminderPendingDate).toBeNull();
     expect(state.walkReminderFiredCount).toBe(0);
     expect(state.walkReminderFollowedCount).toBe(0);
@@ -51,10 +49,7 @@ describe('NotificationRepository contract', () => {
 
     await repo.saveState({
       ...state,
-      walkReminderEnabled: true,
-      walkReminderHour: 8,
-      walkReminderMinute: 30,
-      walkReminderConsecutiveIgnores: 2,
+      reminderSlots: state.reminderSlots.map((s) => (s.id === 'noon' ? { ...s, enabled: true, hour: 12, minute: 30, consecutiveIgnores: 2 } : s)),
       walkReminderPendingDate: '2026-7-22',
       walkReminderFiredCount: 5,
       walkReminderFollowedCount: 3,
@@ -62,10 +57,8 @@ describe('NotificationRepository contract', () => {
     });
     const reread = await repo.getState();
 
-    expect(reread.walkReminderEnabled).toBe(true);
-    expect(reread.walkReminderHour).toBe(8);
-    expect(reread.walkReminderMinute).toBe(30);
-    expect(reread.walkReminderConsecutiveIgnores).toBe(2);
+    expect(reread.reminderSlots.find((s) => s.id === 'noon')).toMatchObject({ enabled: true, hour: 12, minute: 30, consecutiveIgnores: 2 });
+    expect(reread.reminderSlots.find((s) => s.id === 'morning')!.enabled).toBe(false);
     expect(reread.walkReminderPendingDate).toBe('2026-7-22');
     expect(reread.walkReminderFiredCount).toBe(5);
     expect(reread.walkReminderFollowedCount).toBe(3);

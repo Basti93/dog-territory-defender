@@ -39,6 +39,8 @@ import { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import { streetsKnown } from '../utils/grid';
+import * as haptics from '../feedback/haptics';
+import { play } from '../feedback/sounds';
 import { formatNumber, t, tPlural } from '../i18n';
 
 // nameKey/subKey are i18n keys, resolved with t() at render time.
@@ -207,6 +209,8 @@ export function DenScreen({
       return;
     }
     setMessage(null);
+    play('upgrade');
+    haptics.success();
     setUpgrade((prev) => ({ building, n: (prev?.n ?? 0) + 1 }));
     setExcited(true);
     if (excitedTimer.current) clearTimeout(excitedTimer.current);
@@ -322,6 +326,7 @@ export function DenScreen({
                     label={t(isTease ? 'den.nextUpgradeButton' : 'den.upgradeButton', { cost: formatNumber(cost ?? 0) })}
                     variant={affordable ? 'primary' : 'secondary'}
                     onPress={() => handleUpgrade(building)}
+                    feedback="none" // handleUpgrade plays the upgrade sound itself
                     style={styles.cardButton}
                   />
                 )}

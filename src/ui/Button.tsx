@@ -21,6 +21,8 @@ export interface ButtonProps {
   style?: StyleProp<ViewStyle>;
   /** Override the label colour (e.g. tokens.warm for a gentle destructive action). */
   labelColor?: string;
+  /** Press sound + haptic. Default 'tap' for primary/secondary, 'none' for ghost. */
+  feedback?: 'tap' | 'none';
 }
 
 export function Button({
@@ -34,6 +36,7 @@ export function Button({
   testID,
   style,
   labelColor: labelColorProp,
+  feedback = variant === 'ghost' ? 'none' : 'tap',
 }: ButtonProps) {
   const labelColor = labelColorProp ?? (variant === 'primary' ? palette.background : palette.greenText);
   return (
@@ -41,6 +44,7 @@ export function Button({
       onPress={onPress}
       disabled={disabled}
       pulse={pulse}
+      feedback={feedback}
       accessibilityLabel={accessibilityLabel ?? label}
       testID={testID}
       style={[styles.base, variantStyles[variant], style]}

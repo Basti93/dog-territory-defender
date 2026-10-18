@@ -18,6 +18,8 @@ export interface AnimatedNumberProps {
   format?: (value: number) => string;
   style?: StyleProp<TextStyle>;
   accessibilityLabel?: string;
+  /** Called each time a count-up reaches its end value (or is tapped to skip). */
+  onDone?: () => void;
 }
 
 /**
@@ -33,12 +35,15 @@ export function AnimatedNumber({
   format,
   style,
   accessibilityLabel,
+  onDone,
 }: AnimatedNumberProps) {
   const [shown, setShown] = useState<number>(from ?? value);
   const shownRef = useRef(shown);
   const progress = useRef(new Animated.Value(0)).current;
   const target = useRef(value);
   target.current = value;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   const show = (v: number) => {
     if (v !== shownRef.current) {
@@ -55,7 +60,10 @@ export function AnimatedNumber({
     const id = progress.addListener(({ value: p }) => show(countUpValue(start, value, p, undefined, decimals)));
     const anim = Animated.timing(progress, { toValue: 1, duration: ms, useNativeDriver: false });
     anim.start(({ finished }) => {
-      if (finished) show(value);
+      if (finished) {
+        show(value);
+        onDoneRef.current?.();
+      }
     });
     return () => {
       anim.stop();
@@ -67,6 +75,7 @@ export function AnimatedNumber({
   const skip = () => {
     progress.stopAnimation();
     show(target.current);
+    onDoneRef.current?.();
   };
 
   return (

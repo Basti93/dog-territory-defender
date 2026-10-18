@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 import { log } from '../utils/log';
 import { TimeOfDayBucket } from './notificationDecision';
-import { reminderDayLabel } from './walkReminderDecision';
+import { PlannedReminder, reminderDayLabel, reminderIdentifier, walkReminderBody, walkReminderTitle } from './walkReminderDecision';
 import { t } from '../i18n';
 
 // The actual expo-notifications wiring — permission request + scheduling.
@@ -12,11 +12,16 @@ import { t } from '../i18n';
 // tasks.md 5.2: OS-level permission/delivery isn't automatable in this
 // project's jest setup — covered by manual on-device verification instead).
 
+// Foreground handler. Both kinds of notification show as a banner + in the
+// list even while the app is open (a player testing a reminder with the app
+// in front would otherwise see nothing and conclude it is broken). Only walk
+// reminders play a sound in the foreground, mirroring their channel's
+// audible DEFAULT importance; the Den overflow hint stays silent as before.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
+  handleNotification: async (notification) => ({
     shouldShowBanner: true,
     shouldShowList: true,
-    shouldPlaySound: false,
+    shouldPlaySound: ['walk-reminder', 'walk-reminder-test'].includes(String(notification.request.content.data?.type)),
     shouldSetBadge: false,
   }),
 });
@@ -99,22 +104,82 @@ export async function scheduleOverflowNotification(bucket: TimeOfDayBucket, body
 }
 
 /**
- * Schedules one one-shot walk-reminder per given date (the rolling window
- * from `planReminderDates`). Each gets a stable identifier
- * `walk-reminder-YYYY-MM-DD` and `data.kind === 'walk-reminder'` so it can be
- * found and cancelled without touching the Den-overflow notification.
+ * Schedules one one-shot walk-reminder per planned entry (the rolling window
+ * from `planReminderDates`, one per enabled slot per day). Each gets a stable
+ * identifier `walk-reminder-YYYY-MM-DD-<slotId>` and `data.kind ===
+ * 'walk-reminder'` so it can be found and cancelled without touching the
+ * Den-overflow notification. Every schedule is logged (identifier + trigger
+ * date) so the Debug Log shows exactly what the OS was handed.
  */
-export async function scheduleWalkReminderWindow(dates: Date[], body: string): Promise<void> {
+export async function scheduleWalkReminderWindow(entries: PlannedReminder[]): Promise<void> {
   await ensureAndroidChannels();
-  for (const date of dates) {
+  for (const { date, slotId } of entries) {
     const day = reminderDayLabel(date);
+    const identifier = reminderIdentifier(date, slotId);
+    const at = date.toISOString();
     await Notifications.scheduleNotificationAsync({
-      identifier: `${WALK_REMINDER_ID_PREFIX}${day}`,
-      content: { body, data: { ...WALK_REMINDER_NOTIFICATION_DATA, day } },
+      identifier,
+      content: {
+        title: walkReminderTitle(slotId),
+        body: walkReminderBody(),
+        data: { ...WALK_REMINDER_NOTIFICATION_DATA, day, slot: slotId, at },
+      },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: WALK_REMINDER_CHANNEL_ID },
     });
+    log('WALK_REMINDER_SCHEDULED_ONE', { identifier, at });
   }
-  log('WALK_REMINDER_SCHEDULED', { count: dates.length, days: dates.map(reminderDayLabel) });
+  log('WALK_REMINDER_SCHEDULED', { count: entries.length });
+}
+
+const TEST_REMINDER_IDENTIFIER = 'reminder-test';
+
+/**
+ * Settings diagnostics: fires a real reminder (same channel, title and body)
+ * 5 seconds from now. Tagged `walk-reminder-test` (not `walk-reminder`) so
+ * the replanner never cancels it and it doesn't count as "planned".
+ * Returns false when permission was not granted.
+ */
+export async function scheduleTestReminder(): Promise<boolean> {
+  const granted = await requestNotificationPermission();
+  if (!granted) return false;
+  const date = new Date(Date.now() + 5000);
+  await Notifications.scheduleNotificationAsync({
+    identifier: TEST_REMINDER_IDENTIFIER,
+    content: { title: walkReminderTitle('evening'), body: walkReminderBody(), data: { type: 'walk-reminder-test' } },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: WALK_REMINDER_CHANNEL_ID },
+  });
+  log('WALK_REMINDER_TEST_SCHEDULED', { identifier: TEST_REMINDER_IDENTIFIER, at: date.toISOString() });
+  return true;
+}
+
+export interface ReminderDiagnostics {
+  permission: 'granted' | 'denied' | 'undetermined';
+  planned: number;
+  /** Earliest pending walk-reminder trigger, or null. */
+  next: Date | null;
+}
+
+/** Read-only snapshot of what the OS currently holds, for the Settings diagnostics block. */
+export async function getReminderDiagnostics(): Promise<ReminderDiagnostics> {
+  const [perm, scheduled] = await Promise.all([
+    Notifications.getPermissionsAsync(),
+    Notifications.getAllScheduledNotificationsAsync(),
+  ]);
+  const ours = scheduled.filter((n) => n.content.data?.kind === WALK_REMINDER_NOTIFICATION_DATA.kind);
+  const times = ours
+    .map((n) => {
+      // `data.at` is ours and platform-independent; trigger shapes differ per OS.
+      const at = typeof n.content.data?.at === 'string' ? Date.parse(n.content.data.at) : NaN;
+      if (!Number.isNaN(at)) return at;
+      const trigger = n.trigger as { value?: number; date?: number } | null;
+      return trigger?.value ?? trigger?.date ?? NaN;
+    })
+    .filter((ms) => !Number.isNaN(ms));
+  return {
+    permission: perm.granted ? 'granted' : perm.canAskAgain === false || perm.status === 'denied' ? 'denied' : 'undetermined',
+    planned: ours.length,
+    next: times.length > 0 ? new Date(Math.min(...times)) : null,
+  };
 }
 
 /**

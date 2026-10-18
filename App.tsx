@@ -37,6 +37,12 @@ import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
 import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
 import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
+import {
+  OnboardingScreen,
+  PermissionPrimerScreen,
+  resolveFirstLaunchStep,
+  shouldRunOnboardingThisLaunch,
+} from './src/components/onboarding';
 import { createSqliteDenEconomyRepository } from './src/storage/sqliteDenEconomyRepository';
 import { createSqlitePersonalStatsRepository } from './src/storage/sqlitePersonalStatsRepository';
 import { createSqliteNotificationRepository } from './src/storage/sqliteNotificationRepository';
@@ -60,10 +66,15 @@ import { awardWalkRewards, WalkRewardsCelebration } from './src/economy/walkRewa
 import { checkAndScheduleEarnedTriggerNotification } from './src/notifications/earnedTrigger';
 import { checkAndScheduleWalkReminder } from './src/notifications/walkReminder';
 import { resolveDoorstepOverflowLine } from './src/notifications/notificationDecision';
-import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from './src/notifications/scheduler';
+import {
+  DEN_OVERFLOW_NOTIFICATION_DATA,
+  requestNotificationPermission,
+  WALK_REMINDER_NOTIFICATION_DATA,
+} from './src/notifications/scheduler';
 import { SettingsScreen } from './src/components/SettingsScreen';
 import { log } from './src/utils/log';
 import { createSqliteSettingsRepository } from './src/storage/sqliteSettingsRepository';
+import { loadFeedbackPrefsAtStartup } from './src/feedback/feedbackRepository';
 import { formatDistanceKm, getDeviceLocale, LocalePreference, resolveLocale, setLocale, t, useLocale } from './src/i18n';
 
 const walkRepository = createSqliteWalkRepository();
@@ -74,6 +85,7 @@ const personalStatsRepository = createSqlitePersonalStatsRepository();
 const notificationRepository = createSqliteNotificationRepository();
 const buddyAppearanceRepository = createSqliteBuddyAppearanceRepository();
 const settingsRepository = createSqliteSettingsRepository();
+loadFeedbackPrefsAtStartup();
 
 // Loads and applies the saved language as early as possible (module import
 // time). Everything that produces copy at launch (greeting, away-strip lines,
@@ -135,7 +147,15 @@ export default function App() {
   const [treats, setTreats] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   const [dogName, setDogName] = useState<string | null>(null);
-  const [needsDogName, setNeedsDogName] = useState(false);
+  // First-launch flow (onboarding cards -> dog name -> look -> permission primer),
+  // decided by the pure resolveFirstLaunchStep. `firstLaunchLoaded` flips with
+  // dogName in the mount effect below. `onboardingThisLaunch` is true only on a
+  // fresh install; it defers the launch-time location request to the primer.
+  const [firstLaunchLoaded, setFirstLaunchLoaded] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
+  const [onboardingThisLaunch, setOnboardingThisLaunch] = useState(false);
+  const [cardsFinished, setCardsFinished] = useState(false);
+  const [primerPending, setPrimerPending] = useState(false);
   // Buddy's look (buddy-comes-alive). `choosingLook` is true only right after a
   // brand-new player names their dog; existing players are never gated.
   const { appearance: buddyAppearance, loaded: buddyAppearanceLoaded, saveAppearance } = useBuddyAppearance(buddyAppearanceRepository);
@@ -208,8 +228,11 @@ export default function App() {
     });
   }, [showLogMissedWalk]);
 
-  // Initialize location permission
+  // Initialize location permission. On a fresh install the permission primer
+  // asks instead (after the player has been told why), so this waits for the
+  // first-launch state and skips that case.
   useEffect(() => {
+    if (!firstLaunchLoaded || onboardingThisLaunch) return;
     (async () => {
       const hasPermission = await requestLocationPermission();
       if (!hasPermission) {
@@ -219,7 +242,7 @@ export default function App() {
         }));
       }
     })();
-  }, []);
+  }, [firstLaunchLoaded, onboardingThisLaunch]);
 
   // One-time backfill of every previously saved tracked walk into the Home
   // Range grid, then — only once that's done, since it needs a populated
@@ -315,10 +338,14 @@ export default function App() {
         after: accrued.treats,
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
+      // Read before the setState batch below so loaded + dogName flip together.
+      const onboardingDoneSaved = await settingsRepository.getOnboardingDone().catch(() => false);
       setTreats(reconciled.treats);
       setLevel(reconciled.level);
       setDogName(reconciled.dogName);
-      setNeedsDogName(reconciled.dogName === null);
+      setOnboardingDone(onboardingDoneSaved);
+      setOnboardingThisLaunch(shouldRunOnboardingThisLaunch(reconciled.dogName, onboardingDoneSaved));
+      setFirstLaunchLoaded(true);
 
       if (caughtUpToLevel !== null) {
         log('LEVEL_CURVE_CATCH_UP', { before: state.level, caughtUpToLevel });
@@ -426,12 +453,35 @@ export default function App() {
     const next = { ...state, dogName: name };
     await denEconomyRepository.saveState(next);
     setDogName(name);
-    setNeedsDogName(false);
     setChoosingLook(true);
   };
 
+  // Look picker finished or skipped: fresh installs continue to the permission
+  // primer, existing players go straight on.
+  const finishLookStep = () => {
+    setChoosingLook(false);
+    if (onboardingThisLaunch) setPrimerPending(true);
+  };
+
+  const finishPrimer = () => {
+    setPrimerPending(false);
+    setOnboardingDone(true);
+    settingsRepository.saveOnboardingDone(true).catch((err) => log('SETTINGS_ONBOARDING_SAVE_ERROR', { error: String(err) }));
+  };
+
+  const primerRequestLocation = async () => {
+    const granted = await requestLocationPermission();
+    if (!granted) setAppState((prev) => ({ ...prev, error: t('app.locationDenied') }));
+    return granted;
+  };
+
   const startWalk = async () => {
-    const initialLoc = await getInitialLocation();
+    let initialLoc = await getInitialLocation();
+    if (!initialLoc) {
+      // Permission may simply not have been granted yet: ask once, then retry.
+      await requestLocationPermission();
+      initialLoc = await getInitialLocation();
+    }
     if (!initialLoc) {
       Alert.alert(t('app.errorTitle'), t('app.noInitialLocation'));
       return;
@@ -452,6 +502,12 @@ export default function App() {
       walk: newWalk,
       isTracking: true,
     }));
+
+    // Replan reminders so one doesn't fire mid-walk (the walk isn't in the
+    // repository until it finishes, so pass it in explicitly).
+    checkAndScheduleWalkReminder({ walkRepository, notificationRepository }, Date.now(), [newWalk]).catch((err) =>
+      log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+    );
 
     // Start watching location (foreground-service-backed, gps.ts manages the subscription internally)
     await startWatchingLocation((location) => {
@@ -816,7 +872,33 @@ export default function App() {
   // font or the wrong language.
   if (!fontsLoaded || !localeReady) return null;
 
-  if (needsDogName) {
+  const firstLaunchStep = resolveFirstLaunchStep({
+    loaded: firstLaunchLoaded,
+    dogName,
+    onboardingDone,
+    cardsFinished,
+    choosingLook,
+    primerPending,
+  });
+
+  // Cream loading view until Den state + settings are read, so no screen flashes first.
+  if (firstLaunchStep === 'loading') {
+    return <View style={styles.container} />;
+  }
+
+  if (firstLaunchStep === 'onboarding') {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <FadeSlideIn key="onboarding">
+            <OnboardingScreen buddyAppearance={buddyAppearance} onDone={() => setCardsFinished(true)} />
+          </FadeSlideIn>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (firstLaunchStep === 'dogName') {
     return (
       <SafeAreaProvider>
         <View style={styles.container}>
@@ -828,7 +910,7 @@ export default function App() {
     );
   }
 
-  if (choosingLook) {
+  if (firstLaunchStep === 'look') {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.container}>
@@ -839,16 +921,33 @@ export default function App() {
               topInset={16} // inside SafeAreaView already; just a little breathing room
               onSave={(look) => {
                 saveAppearance(look);
-                setChoosingLook(false);
+                finishLookStep();
               }}
               // Skipping keeps the default look, saved so the picker never reappears.
               onSkip={() => {
                 saveAppearance(buddyAppearance);
-                setChoosingLook(false);
+                finishLookStep();
               }}
             />
           </FadeSlideIn>
         </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (firstLaunchStep === 'primer') {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <FadeSlideIn key="permission-primer">
+            <PermissionPrimerScreen
+              buddyAppearance={buddyAppearance}
+              onRequestLocation={primerRequestLocation}
+              onRequestReminders={requestNotificationPermission}
+              onDone={finishPrimer}
+            />
+          </FadeSlideIn>
+        </View>
       </SafeAreaProvider>
     );
   }

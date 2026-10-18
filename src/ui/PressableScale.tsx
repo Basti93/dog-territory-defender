@@ -10,6 +10,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import * as haptics from '../feedback/haptics';
+import { play } from '../feedback/sounds';
 import { tokens } from './tokens';
 
 export const PRESSED_SCALE = 0.96;
@@ -43,6 +45,8 @@ export interface PressableScaleProps {
   hitSlop?: number | Insets;
   /** Slow soft glow/breathe. Stops by itself after ~10s or on first touch. */
   pulse?: boolean;
+  /** 'tap' = soft click + light haptic on press-in. Default 'none' so list rows stay quiet. */
+  feedback?: 'tap' | 'none';
 }
 
 export function PressableScale({
@@ -56,6 +60,7 @@ export function PressableScale({
   testID,
   hitSlop,
   pulse = false,
+  feedback = 'none',
 }: PressableScaleProps) {
   const press = useRef(new Animated.Value(1)).current;
   const breathe = useRef(new Animated.Value(0)).current; // 0..1
@@ -102,7 +107,14 @@ export function PressableScale({
   return (
     <Pressable
       style={layout}
-      onPress={onPress}
+      onPress={(event) => {
+        // Feedback on a completed press only, so a cancelled press stays silent.
+        if (feedback === 'tap' && !disabled) {
+          haptics.tap();
+          play('tap');
+        }
+        onPress?.(event);
+      }}
       onLongPress={onLongPress}
       disabled={disabled}
       hitSlop={hitSlop}

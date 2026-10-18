@@ -23,4 +23,16 @@ describe('SettingsRepository contract', () => {
     expect(await repo.getLocalePreference()).toBe('system');
     expect(normalizeLocalePreference(undefined)).toBe('system');
   });
+
+  it('onboardingDone defaults to false, round-trips, and is independent of locale', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getOnboardingDone()).toBe(false);
+    await repo.saveOnboardingDone(true);
+    expect(await repo.getOnboardingDone()).toBe(true);
+    await repo.saveLocalePreference('de');
+    expect(await repo.getOnboardingDone()).toBe(true);
+    await repo.saveOnboardingDone(false);
+    expect(await repo.getOnboardingDone()).toBe(false);
+    expect(await repo.getLocalePreference()).toBe('de');
+  });
 });

@@ -1,6 +1,6 @@
 import { DenEconomyState } from '../economy/denEconomy';
 import { storageCap } from '../economy/formulas';
-import { defaultWalkReminderFields } from './walkReminderDecision';
+import { defaultWalkReminderFields, ReminderSlot } from './walkReminderDecision';
 import { tPlural } from '../i18n';
 
 // Pure decision logic for the earned-trigger notification (Den-economy
@@ -26,14 +26,8 @@ export interface NotificationBookkeepingState {
   // repository row rather than a second repository, since these are
   // conceptually the same kind of thing this repository already exists for
   // (notification bookkeeping).
-  /** Off by default — the player must explicitly opt in from Settings. */
-  walkReminderEnabled: boolean;
-  /** Player-set local hour (0-23). Null until the player has set a time. */
-  walkReminderHour: number | null;
-  /** Player-set local minute (0-59). Null until the player has set a time. */
-  walkReminderMinute: number | null;
-  /** Consecutive calendar days a scheduled reminder went unfollowed by a walk — reset to 0 by any walked day, auto-sleeps the reminder at 3 (see walkReminderDecision.ts). */
-  walkReminderConsecutiveIgnores: number;
+  /** The three daily reminder slots (morning/noon/evening) — all off by default; the player opts in per slot from Settings (walk-reminder design.md, 2026-10-18). */
+  reminderSlots: ReminderSlot[];
   /** calendarDayKey of the last day a reminder was actually scheduled and not yet reconciled against that day's walk history. Null once resolved. */
   walkReminderPendingDate: string | null;
   /** Durable measurement counter (openspec/changes/walk-reminder/design.md Decision 10) — total reminders actually scheduled, for the 4-week kill-condition review. */

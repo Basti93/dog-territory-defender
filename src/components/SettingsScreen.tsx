@@ -6,25 +6,19 @@ import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { BuddyAppearancePicker } from './buddy';
 import { BuddyLoading } from './BuddyLoading';
 import { Button, Card, Header, ListRow, mix, palette, PressableScale, radii, Screen, spacing, textStyle, tokens } from '../ui';
+import { SoundSettingsCard } from '../feedback/SoundSettingsCard';
 import { dogDisplayName } from '../economy/denEconomy';
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { WalkRepository } from '../storage/WalkRepository';
-import * as Notifications from 'expo-notifications';
-import { cancelScheduledWalkReminder, requestNotificationPermission } from '../notifications/scheduler';
-import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
-import { formatTime, LocalePreference, t, useLocale } from '../i18n';
+import { getReminderDiagnostics, ReminderDiagnostics, requestNotificationPermission, scheduleTestReminder } from '../notifications/scheduler';
+import { isAnyReminderEnabled, REMINDER_SLOT_IDS, ReminderSlot, ReminderSlotId } from '../notifications/walkReminderDecision';
+import { updateReminderSlot } from '../notifications/walkReminder';
+import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n';
 
 // This app's first Settings screen (openspec/changes/walk-reminder/design.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
 // reminder. Not a general-purpose preferences screen; don't bolt unrelated
 // settings onto this without revisiting that decision first.
-
-// Anchor time the picker first opens to when the player turns the reminder
-// on with no previously-set time of their own — a starting point for them to
-// confirm or change, never a silently-applied final choice (Decision 2: "a
-// real time picker," the app never chooses on the player's behalf).
-const DEFAULT_ANCHOR_HOUR = 18;
-const DEFAULT_ANCHOR_MINUTE = 0;
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -53,6 +47,9 @@ const LANGUAGE_OPTIONS: { value: LocalePreference; labelKey: string | null; labe
   { value: 'en', labelKey: null, label: 'English' },
 ];
 
+// Language-neutral stand-in while diagnostics load.
+const LOADING_PLACEHOLDER = '\u2026';
+
 export function SettingsScreen({
   onClose,
   notificationRepository,
@@ -66,54 +63,50 @@ export function SettingsScreen({
   useLocale(); // re-render when the language switches
   const [loaded, setLoaded] = useState(false);
   const [editingLook, setEditingLook] = useState(false);
-  const [enabled, setEnabled] = useState(false);
-  const [hour, setHour] = useState<number | null>(null);
-  const [minute, setMinute] = useState<number | null>(null);
+  const [slots, setSlots] = useState<ReminderSlot[]>([]);
   // iOS shows its picker inline inside a small sheet (Decision 2's "real time
   // picker" via the native component's own spinner UI) rather than Android's
   // imperative system dialog (DateTimePickerAndroid.open below) — the
   // package's own documented per-platform idiom.
-  const [iosPickerDate, setIosPickerDate] = useState<Date | null>(null);
+  const [iosPicker, setIosPicker] = useState<{ slotId: ReminderSlotId; date: Date } | null>(null);
   // True when the OS has notifications off for this app — shown as a warm
   // inline hint with a button to the system settings.
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<ReminderDiagnostics | null>(null);
+  const [testSent, setTestSent] = useState(false);
 
-  useEffect(() => {
-    notificationRepository.getState().then((state) => {
-      setEnabled(state.walkReminderEnabled);
-      setHour(state.walkReminderHour);
-      setMinute(state.walkReminderMinute);
-      setLoaded(true);
-      // Surface a later revocation too: reminder on, but the OS says no.
-      if (state.walkReminderEnabled) {
-        Notifications.getPermissionsAsync().then((p) => setPermissionDenied(!p.granted)).catch(() => {});
-      }
-    });
-  }, [notificationRepository]);
-
-  const applyTimeChoice = async (pickedHour: number, pickedMinute: number) => {
-    setEnabled(true);
-    setHour(pickedHour);
-    setMinute(pickedMinute);
-    const current = await notificationRepository.getState();
-    await notificationRepository.saveState({
-      ...current,
-      walkReminderEnabled: true,
-      walkReminderHour: pickedHour,
-      walkReminderMinute: pickedMinute,
-      // Set once, the first time the reminder is ever turned on (design.md
-      // Decision 3) — never overwritten on a later time change.
-      walkReminderExperimentStartedAt: current.walkReminderExperimentStartedAt ?? Date.now(),
-    });
-    // Takes effect immediately, not at the next app open (tasks.md task 5.3).
-    await checkAndScheduleWalkReminder({ walkRepository, notificationRepository });
+  const refreshDiagnostics = () => {
+    getReminderDiagnostics().then(setDiagnostics).catch(() => {});
   };
 
-  const openPicker = () => {
-    const anchorHour = hour ?? DEFAULT_ANCHOR_HOUR;
-    const anchorMinute = minute ?? DEFAULT_ANCHOR_MINUTE;
+  useEffect(() => {
+    notificationRepository
+      .getState()
+      .then((state) => {
+        setSlots(state.reminderSlots);
+        setLoaded(true);
+        refreshDiagnostics();
+        // Surface a later revocation too: reminder on, but the OS says no.
+        if (isAnyReminderEnabled(state.reminderSlots)) {
+          getReminderDiagnostics().then((d) => setPermissionDenied(d.permission !== 'granted')).catch(() => {});
+        }
+      })
+      .catch(() => setLoaded(true)); // show the screen with all slots off rather than a blank page
+  }, [notificationRepository]);
+
+  // Persists one slot's change, then replans the whole window right away
+  // (tasks.md task 5.3) — never waits for the next app open.
+  const updateSlot = async (slotId: ReminderSlotId, patch: Partial<ReminderSlot>) => {
+    // Optimistic, so the switch responds at once; the serialized, persisted result replaces it below.
+    setSlots((prev) => prev.map((slot) => (slot.id === slotId ? { ...slot, ...patch } : slot)));
+    const saved = await updateReminderSlot({ walkRepository, notificationRepository }, slotId, patch);
+    setSlots(saved);
+    refreshDiagnostics();
+  };
+
+  const openPicker = (slot: ReminderSlot) => {
     const anchorDate = new Date();
-    anchorDate.setHours(anchorHour, anchorMinute, 0, 0);
+    anchorDate.setHours(slot.hour, slot.minute, 0, 0);
 
     if (Platform.OS === 'android') {
       DateTimePickerAndroid.open({
@@ -121,40 +114,39 @@ export function SettingsScreen({
         mode: 'time',
         onChange: (event: DateTimePickerEvent, selected?: Date) => {
           if (event.type === 'set' && selected) {
-            applyTimeChoice(selected.getHours(), selected.getMinutes());
+            updateSlot(slot.id, { hour: selected.getHours(), minute: selected.getMinutes() });
           }
-          // event.type === 'dismissed': player backed out — leave the
-          // reminder exactly as it was (still off, if this was the
-          // first-time-on flow; no partial state change either way).
+          // 'dismissed': player backed out — leave the slot exactly as it was.
         },
       });
     } else {
-      setIosPickerDate(anchorDate);
+      setIosPicker({ slotId: slot.id, date: anchorDate });
     }
   };
 
-  const handleToggle = async (value: boolean) => {
+  const handleToggle = async (slot: ReminderSlot, value: boolean) => {
     if (!value) {
-      // One-tap permanent dismissal, no confirmation dialog (design.md
-      // Decision 8) — turns off immediately and cancels anything pending.
-      setEnabled(false);
-      const current = await notificationRepository.getState();
-      await notificationRepository.saveState({ ...current, walkReminderEnabled: false });
-      await cancelScheduledWalkReminder();
+      // One-tap dismissal, no confirmation dialog (design.md Decision 8).
+      await updateSlot(slot.id, { enabled: false });
       return;
     }
 
-    // Ask for notification permission first; if the OS says no, keep the
-    // toggle off and point to system settings instead of silently failing.
-    const granted = await requestNotificationPermission();
-    setPermissionDenied(!granted);
-    if (!granted) return;
+    // Ask for permission on the first enable (channels are created inside
+    // requestNotificationPermission, before the OS prompt); if the OS says
+    // no, keep the switch off and point to system settings.
+    if (!isAnyReminderEnabled(slots)) {
+      const granted = await requestNotificationPermission();
+      setPermissionDenied(!granted);
+      if (!granted) return;
+    }
+    await updateSlot(slot.id, { enabled: true });
+  };
 
-    // Turning on requires picking a time before the reminder is actually
-    // enabled — the toggle itself doesn't flip to "on" until a time is
-    // confirmed (openspec/changes/walk-reminder/specs/walk-reminder/spec.md's
-    // "Enabling the reminder requires picking a time" scenario).
-    openPicker();
+  const handleTest = async () => {
+    const ok = await scheduleTestReminder();
+    setPermissionDenied(!ok);
+    setTestSent(ok);
+    refreshDiagnostics();
   };
 
   if (!loaded) {
@@ -192,14 +184,11 @@ export function SettingsScreen({
       <Header title={t('menu.settings')} icon="icon-settings" onBack={onClose} />
 
       <Card tint="sky" style={styles.reminderCard}>
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={textStyle('h2')}>{t('settings.reminder.title')}</Text>
-            <Text style={[textStyle('small'), styles.rowSubtitle]}>
-              {t('settings.reminder.subtitle')}
-            </Text>
-          </View>
-          <Switch value={enabled} onValueChange={handleToggle} trackColor={{ true: tokens.green }} />
+        <View style={styles.rowText}>
+          <Text style={textStyle('h2')}>{t('settings.reminder.title')}</Text>
+          <Text style={[textStyle('small'), styles.rowSubtitle]}>
+            {t('settings.reminder.subtitle')}
+          </Text>
         </View>
 
         {permissionDenied && (
@@ -211,16 +200,44 @@ export function SettingsScreen({
           </View>
         )}
 
-        {enabled && hour !== null && minute !== null && (
-          <PressableScale style={styles.timeRow} onPress={openPicker}>
-            <Text style={textStyle('body')}>{t('settings.reminder.time')}</Text>
-            <Text style={[textStyle('h2'), { color: palette.greenText }]}>{formatReminderTime(hour, minute)}</Text>
-          </PressableScale>
-        )}
+        {REMINDER_SLOT_IDS.map((id) => {
+          const slot = slots.find((s) => s.id === id);
+          if (!slot) return null;
+          return (
+            <View key={id} style={styles.slotRow}>
+              <Switch value={slot.enabled} onValueChange={(v) => handleToggle(slot, v)} trackColor={{ true: tokens.green }} />
+              <Text style={[textStyle('body'), styles.slotLabel]}>{t(`settings.reminder.slot.${id}`)}</Text>
+              <PressableScale style={styles.slotTime} onPress={() => openPicker(slot)} accessibilityLabel={t(`settings.reminder.slot.${id}`)}>
+                <Text style={[textStyle('h2'), { color: slot.enabled ? palette.greenText : palette.muted }]}>
+                  {formatReminderTime(slot.hour, slot.minute)}
+                </Text>
+              </PressableScale>
+            </View>
+          );
+        })}
+
+        <View style={styles.hintBox}>
+          <Text style={textStyle('small')}>
+            {t('settings.reminder.diag.permission', {
+              status: diagnostics ? t(`settings.reminder.diag.${diagnostics.permission}`) : LOADING_PLACEHOLDER,
+            })}
+          </Text>
+          <Text style={textStyle('small')}>
+            {diagnostics?.next
+              ? t('settings.reminder.diag.next', { when: `${formatDate(diagnostics.next)} ${formatTime(diagnostics.next)}` })
+              : t('settings.reminder.diag.nextNone')}
+            {' · '}
+            {t('settings.reminder.diag.planned', { count: diagnostics?.planned ?? 0 })}
+          </Text>
+          <Button label={t('settings.reminder.test')} variant="secondary" onPress={handleTest} />
+          {testSent && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.reminder.testSent')}</Text>}
+        </View>
         <Text style={[textStyle('small'), styles.rowSubtitle]}>
           {t('settings.reminder.battery')}
         </Text>
       </Card>
+
+      <SoundSettingsCard />
 
       <ListRow
         icon="icon-paw"
@@ -251,27 +268,27 @@ export function SettingsScreen({
       </Card>
 
 
-      {Platform.OS === 'ios' && iosPickerDate && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setIosPickerDate(null)}>
+      {Platform.OS === 'ios' && iosPicker && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
           <View style={styles.iosPickerBackdrop}>
             <View style={styles.iosPickerSheet}>
               <DateTimePicker
-                value={iosPickerDate}
+                value={iosPicker.date}
                 mode="time"
                 display="spinner"
                 onChange={(_event: DateTimePickerEvent, selected?: Date) => {
-                  if (selected) setIosPickerDate(selected);
+                  if (selected) setIosPicker({ slotId: iosPicker.slotId, date: selected });
                 }}
               />
               <View style={styles.iosPickerActions}>
-                <Button label={t('common.cancel')} variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPickerDate(null)} />
+                <Button label={t('common.cancel')} variant="secondary" style={styles.iosPickerButton} onPress={() => setIosPicker(null)} />
                 <Button
                   label={t('common.done')}
                   style={styles.iosPickerButton}
                   onPress={() => {
-                    const picked = iosPickerDate;
-                    setIosPickerDate(null);
-                    if (picked) applyTimeChoice(picked.getHours(), picked.getMinutes());
+                    const picked = iosPicker;
+                    setIosPicker(null);
+                    updateSlot(picked.slotId, { hour: picked.date.getHours(), minute: picked.date.getMinutes() });
                   }}
                 />
               </View>
@@ -302,15 +319,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   rowText: { flex: 1 },
   rowSubtitle: { color: palette.muted, marginTop: spacing.xs },
-  timeRow: {
+  slotRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.md,
     minHeight: 52,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.tile,
     backgroundColor: palette.card,
   },
+  slotLabel: { flex: 1 },
+  slotTime: { minHeight: 44, justifyContent: 'center' },
   lookHeader: { paddingHorizontal: spacing.lg },
   iosPickerBackdrop: { flex: 1, backgroundColor: mix(tokens.brown, tokens.text, 0.3) + '40', justifyContent: 'flex-end' },
   iosPickerSheet: {
