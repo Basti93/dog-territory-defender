@@ -1,5 +1,5 @@
 // Row <-> API mappers and shared reads used by several services.
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { ApiCell, ApiDenState, ApiDog, ApiTerritory, ApiWalkMeta } from '@game/sync/apiContract';
 import type { Db } from '../db/client';
 import { cells, denState, dogs, territories, walks } from '../db/schema';
@@ -43,9 +43,9 @@ export const dogFromRow = (r: typeof dogs.$inferSelect): ApiDog => ({
   updatedAt: r.updatedAt,
 });
 
-export const walkMetaFromRow = (r: Omit<typeof walks.$inferSelect, 'route'>): ApiWalkMeta => ({
+export const walkMetaFromRow = (r: Omit<typeof walks.$inferSelect, 'route' | 'generated'>): ApiWalkMeta => ({
   id: r.id,
-  playerId: r.playerId,
+  playerId: r.playerId as string, // null only for generated (bot) walks, which no human-facing query returns
   startTime: r.startTime,
   startSource: r.startSource as 'button' | 'manual-log',
   closed: r.closed,
@@ -64,7 +64,7 @@ export async function worldMass(db: Db, householdId: string): Promise<{ cellCoun
   const [row] = await db
     .select({ n: sql<number>`count(*)::int`, v: sql<number>`coalesce(sum(${cells.visits}), 0)::int` })
     .from(cells)
-    .where(eq(cells.householdId, householdId));
+    .where(and(eq(cells.householdId, householdId), eq(cells.generated, false)));
   return { cellCount: row?.n ?? 0, visitsSum: row?.v ?? 0 };
 }
 

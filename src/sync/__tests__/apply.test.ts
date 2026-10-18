@@ -1,4 +1,5 @@
-import { applyEvents, applySnapshot } from '../apply';
+import { applyEvents, applyNearby, applySnapshot } from '../apply';
+import { getNearby } from '../nearbyStore';
 import type { ApiEvent, ApiWalkFull } from '../apiContract';
 import { apiDen, IDENTITY, makeRepos, snapshot, defaultDenEconomyState } from '../../test/syncHelpers';
 
@@ -225,5 +226,33 @@ describe('member.updated', () => {
     const state = await repos.sync.getState();
     expect(state.players).toEqual({ 'p-me': 'Sam', 'p-lisa': 'Lisi' });
     expect(state.lastMemberJoined).toBeNull(); // a rename is not "joined"
+  });
+});
+
+describe('neighbour events (Track B)', () => {
+  const ev = (seq: number, kind: 'neighbour.sniffed' | 'neighbour.gift', line: string, at: number): ApiEvent =>
+    ({
+      seq,
+      kind,
+      actorPlayerId: null,
+      createdAt: at,
+      payload: { botName: 'Momo', botId: 'b1', line, params: { bot: 'Momo' } },
+    }) as ApiEvent;
+
+  it('keeps the newest lines (idempotent on replay), flags the batch, and does not touch the Range', async () => {
+    const repos = makeRepos();
+    const events = [ev(1, 'neighbour.sniffed', 'neighbours.line.sniffCorner', 100), ev(2, 'neighbour.gift', 'neighbours.line.stickLeft', 200)];
+    const result = await applyEvents(events, 2, repos, ctx());
+    expect(result.neighbourEvents).toBe(true);
+    expect(result.rangeChanged).toBe(false);
+    await applyEvents(events, 2, repos, ctx());
+    const lines = (await repos.sync.getState()).neighbourLines!;
+    expect(lines.map((l) => l.seq)).toEqual([2, 1]);
+    expect(lines[0]).toMatchObject({ line: 'neighbours.line.stickLeft', botName: 'Momo', at: 200 });
+  });
+
+  it('applyNearby stores the bot ranges in memory', () => {
+    applyNearby({ items: [{ id: 'b1', kind: 'bot', generated: true, archetype: 'momo', dogName: 'Momo', appearance: {}, traitKey: 'k', areaLabel: 'near', lastActiveBucket: 'today', metCount: 1, rangeCells: [{ ix: 1, iy: 2 }] }] });
+    expect(getNearby()[0].rangeCells).toEqual([{ ix: 1, iy: 2 }]);
   });
 });

@@ -22,6 +22,13 @@
       "when": 1792328776383,
       "tag": "0002_households_import_closed_by_default",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792335214155,
+      "tag": "0003_neighbours",
+      "breakpoints": true
     }
   ]
 }

@@ -157,7 +157,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
   const me = ps.find((p) => p.id === auth.playerId);
   const [dog] = await db.select().from(dogs).where(eq(dogs.householdId, hid));
   const [denRow] = await db.select().from(denState).where(eq(denState.householdId, hid));
-  const cellRows = await db.select().from(cells).where(eq(cells.householdId, hid));
+  const cellRows = await db.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
   const territoryRows = await db.select().from(territories).where(eq(territories.householdId, hid));
   const walkRows = await db
     .select({
@@ -174,7 +174,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
       createdAt: walks.createdAt,
     })
     .from(walks)
-    .where(eq(walks.householdId, hid))
+    .where(and(eq(walks.householdId, hid), eq(walks.generated, false)))
     .orderBy(walks.startTime);
 
   const den = denFromRow(denRow);

@@ -12,6 +12,14 @@ export interface Config {
   /** Debug aid: log req.ip + raw forwarded headers for the first 50 requests (LOG_FORWARDED_HEADERS=true). */
   logForwardedHeaders: boolean;
   inviteTtlMs: number;
+  /** Track B (Nachbarhunde). Off by default; off = nearby is [], scheduler idle, no bots are created. */
+  neighbours: {
+    enabled: boolean;
+    /** Overpass interpreter URL; empty = never fetch, the offset fallback generator is used. */
+    overpassUrl: string;
+    /** Pause between sequential tile fetches. */
+    overpassPauseMs: number;
+  };
   limits: {
     unauthPerMinPerIp: number;
     anyPerMinPerIp: number;
@@ -46,6 +54,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxyCidr: env.TRUST_PROXY_CIDR ?? '172.16.0.0/12',
     logForwardedHeaders: env.LOG_FORWARDED_HEADERS === 'true',
     inviteTtlMs: 24 * 60 * 60 * 1000,
+    neighbours: {
+      enabled: env.NEIGHBOURS_ENABLED === 'true',
+      overpassUrl: env.OVERPASS_URL ?? '',
+      overpassPauseMs: int('OVERPASS_PAUSE_MS', 2000, env),
+    },
     limits: {
       unauthPerMinPerIp: int('RL_UNAUTH_PER_MIN', 30, env),
       anyPerMinPerIp: int('RL_ANY_PER_MIN', 600, env),

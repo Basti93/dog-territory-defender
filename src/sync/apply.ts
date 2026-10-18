@@ -15,11 +15,12 @@
 import type { DenEconomyState } from '../economy/denEconomy';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
-import type { SyncRepository } from '../storage/SyncRepository';
+import { NEIGHBOUR_LINES_KEPT, type NeighbourLineEntry, type SyncRepository } from '../storage/SyncRepository';
+import { setNearby } from './nearbyStore';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
-import type { ApiCell, ApiDenState, ApiEvent, ApiTerritory, ApiWalkFull, ApiWalkMeta, SnapshotResponse } from './apiContract';
+import type { ApiCell, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
   walks: WalkRepository;
@@ -42,6 +43,8 @@ export interface ApplyResult {
   denState: DenEconomyState | null;
   rangeChanged: boolean;
   walksAdded: number;
+  /** Neighbour events arrived: the caller may refresh /v1/nearby. */
+  neighbourEvents: boolean;
 }
 
 interface Batch {
@@ -55,6 +58,7 @@ interface Batch {
   dogName: string | null;
   players: Record<string, string>;
   memberJoined: { playerName: string; at: number; playerId: string } | null;
+  neighbourLines: NeighbourLineEntry[];
 }
 
 /** Overlays the server-owned fields onto the local state; per-device fields (backfill flags, manual-log counters, cliffhanger) stay. */
@@ -142,12 +146,25 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     }
   }
 
+  let neighbourLines = state.neighbourLines;
+  if (batch.neighbourLines.length > 0) {
+    const bySeq = new Map<number, NeighbourLineEntry>();
+    for (const e of [...batch.neighbourLines, ...(state.neighbourLines ?? [])]) bySeq.set(e.seq, e); // replays are idempotent
+    neighbourLines = [...bySeq.values()].sort((a, b) => b.seq - a.seq).slice(0, NEIGHBOUR_LINES_KEPT);
+  }
+
   await repos.sync.saveState({
     players,
     ...(batch.memberJoined ? { lastMemberJoined: batch.memberJoined } : {}),
+    ...(neighbourLines ? { neighbourLines } : {}),
   });
 
-  return { denState: finalDen, rangeChanged: batch.cells.length > 0 || batch.reassigned.length > 0, walksAdded };
+  return {
+    denState: finalDen,
+    rangeChanged: batch.cells.length > 0 || batch.reassigned.length > 0,
+    walksAdded,
+    neighbourEvents: batch.neighbourLines.length > 0,
+  };
 }
 
 export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepos, ctx: ApplyContext): Promise<ApplyResult> {
@@ -165,6 +182,7 @@ export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepo
       dogName: snapshot.dog.name,
       players,
       memberJoined: null,
+      neighbourLines: [],
     },
     repos,
     ctx,
@@ -191,6 +209,7 @@ export async function applyEvents(
     dogName: null,
     players: {},
     memberJoined: null,
+    neighbourLines: [],
   };
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const event of ordered) {
@@ -224,10 +243,28 @@ export async function applyEvents(
       case 'member.updated':
         batch.players[event.payload.player.id] = event.payload.player.displayName;
         break;
+      case 'neighbour.sniffed':
+      case 'neighbour.gift':
+      case 'neighbour.reaction':
+      case 'neighbour.invitation':
+      case 'coop.progress':
+        batch.neighbourLines.push({
+          line: event.payload.line,
+          botName: event.payload.botName,
+          params: event.payload.params,
+          at: event.createdAt,
+          seq: event.seq,
+        });
+        break;
     }
   }
   const result = await applyBatch(batch, repos, ctx, false);
   const state = await repos.sync.getState();
   await repos.sync.saveState({ cursor: Math.max(state.cursor, cursor, ordered.length ? ordered[ordered.length - 1].seq : 0) });
   return result;
+}
+
+/** Keeps the neighbours' dotted Ranges in memory for the map (no persistence yet; refetched each launch). */
+export function applyNearby(response: NearbyResponse): void {
+  setNearby(response.items);
 }

@@ -107,7 +107,7 @@ export async function importHousehold(
       const { route: _route, ...meta } = w;
       await appendEvent(dbx, hid, 'walk.added', auth.playerId, { walk: walkMetaFromRow(meta), cellsPainted: 0 });
     }
-    const cellRows = await dbx.select().from(cells).where(and(eq(cells.householdId, hid)));
+    const cellRows = await dbx.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
     for (let i = 0; i < cellRows.length; i += 500) {
       await appendEvent(dbx, hid, 'cells.changed', auth.playerId, {
         cells: cellRows.slice(i, i + 500).map(cellFromRow),

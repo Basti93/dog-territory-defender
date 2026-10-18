@@ -7,6 +7,8 @@ import type {
   CommandRequest,
   ImportRequest,
   JoinRequest,
+  CoopWeekResponse,
+  GiftsResponse,
   NearbyResponse,
   SnapshotResponse,
   WalkUploadRequest,
@@ -15,6 +17,10 @@ import { API_LIMITS, API_PATHS } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { FixedWindowLimiter } from '../lib/limiter';
+import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
+import { getCoopWeek, inactiveCoopWeek } from '../neighbours/coop';
+import { listGifts } from '../neighbours/gifts';
+import { getNearby } from '../neighbours/nearby';
 import { runCommand } from '../services/commands';
 import { EventBus, pullEventsLongPoll } from '../services/events';
 import { buildSnapshot, joinHousehold } from '../services/households';
@@ -24,6 +30,8 @@ import { DeviceTokenAuthenticator, type Authenticator } from './auth';
 import { IpBanList } from './ipBan';
 import {
   CommandSchema,
+  GiftOpenBodySchema,
+  GiftParamsSchema,
   ImportSchema,
   EventsQuerySchema,
   JoinSchema,
@@ -266,7 +274,30 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     );
   });
 
-  app.get(API_PATHS.nearby, { schema: { querystring: NearbyQuerySchema } }, async (): Promise<NearbyResponse> => ({ items: [] }));
+  app.get(API_PATHS.nearby, { schema: { querystring: NearbyQuerySchema } }, async (req): Promise<NearbyResponse> => {
+    const q = req.query as { radiusM?: number; include?: 'cells' };
+    return getNearby(db, config, req.auth!.householdId, q.radiusM ?? NEIGHBOUR_CONFIG.nearby.defaultRadiusM, q.include === 'cells', now());
+  });
+
+  app.get(API_PATHS.gifts, async (req): Promise<GiftsResponse> => listGifts(db, req.auth!.householdId));
+
+  // Opening a gift is an ordinary idempotent command (den_state lock, command log, daily cap).
+  app.post(
+    API_PATHS.gifts + '/:id/open',
+    { schema: { params: GiftParamsSchema, body: GiftOpenBodySchema } },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const { clientId } = req.body as { clientId: string };
+      const result = await runCommand(db, bus, config, req.auth!, { clientId, command: { kind: 'gift.open', giftId: id } }, now());
+      if (result.kind === 'conflict') return reply.code(409).send({ error: 'client_id_reuse' } satisfies ApiError);
+      if (result.kind === 'capped') return reply.code(429).send({ error: 'daily_cap' } satisfies ApiError);
+      return result.response;
+    }
+  );
+
+  app.get(API_PATHS.coopWeek, async (req): Promise<CoopWeekResponse> =>
+    config.neighbours.enabled ? getCoopWeek(db, req.auth!.householdId, now()) : inactiveCoopWeek()
+  );
 
   return { app, bus, bans };
 }

@@ -2,6 +2,7 @@
 // (additionalProperties:false + ajv removeAdditional off, see app.ts). Each schema is checked at
 // compile time against the shared contract in src/sync/apiContract.ts: if they drift, tsc fails.
 import { Type, type Static } from '@sinclair/typebox';
+import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
 import { API_LIMITS } from '@game/sync/apiContract';
 import type { CommandRequest, ImportRequest, JoinRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
@@ -58,6 +59,7 @@ export const CommandSchema = Type.Object(
         { additionalProperties: false }
       ),
       Type.Object({ kind: Type.Literal('walk.delete'), walkId: Id }, { additionalProperties: false }),
+      Type.Object({ kind: Type.Literal('gift.open'), giftId: Id }, { additionalProperties: false }),
       Type.Object(
         // pattern: at least one non-space character, so a whitespace-only name is a 400, not an empty name
         { kind: Type.Literal('player.rename'), name: Type.String({ minLength: 1, maxLength: API_LIMITS.maxRenameLength, pattern: '\\S' }) },
@@ -79,11 +81,15 @@ export const EventsQuerySchema = Type.Object(
 
 export const NearbyQuerySchema = Type.Object(
   {
-    radiusM: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
+    radiusM: Type.Optional(Type.Integer({ minimum: 1, maximum: NEIGHBOUR_CONFIG.nearby.maxRadiusM })),
     include: Type.Optional(Type.Literal('cells')),
   },
   { additionalProperties: false }
 );
+
+export const GiftParamsSchema = Type.Object({ id: Id }, { additionalProperties: false });
+
+export const GiftOpenBodySchema = Type.Object({ clientId: Id }, { additionalProperties: false });
 
 export const WalkParamsSchema = Type.Object({ id: Id }, { additionalProperties: false });
 

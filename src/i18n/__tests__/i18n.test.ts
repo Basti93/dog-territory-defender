@@ -169,3 +169,12 @@ describe('German copy pools', () => {
     expect(ACHIEVEMENTS['first-steps'].name).toBe('Erste Schritte');
   });
 });
+
+describe('neighbour lines parity', () => {
+  const keys = (d: Record<string, string>) => Object.keys(d).filter((k) => k.startsWith('neighbours.')).sort();
+  it('en and de have the same neighbours.* keys and placeholders, and all 12 lines', () => {
+    expect(keys(de)).toEqual(keys(en));
+    expect(keys(en).filter((k) => k.startsWith('neighbours.line.'))).toHaveLength(12);
+    for (const k of keys(en)) expect(placeholders((de as Record<string, string>)[k])).toEqual(placeholders((en as Record<string, string>)[k]));
+  });
+});

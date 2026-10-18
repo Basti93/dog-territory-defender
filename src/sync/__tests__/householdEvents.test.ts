@@ -65,3 +65,23 @@ describe('resolveHouseholdLines', () => {
     ).toEqual(["Lisi just joined Rex's pack. Welcome!"]);
   });
 });
+
+describe('neighbour line', () => {
+  const entry = (seq: number, line: string, at: number) => ({ line, botName: 'Momo', params: { bot: 'Momo' } as Record<string, string | number>, at, seq });
+  const base = { walks: [], myPlayerId: 'p-me', dogName: 'Rex', lastMemberJoined: null, now: NOW };
+
+  it('shows at most one neighbour line, the newest in the window, after the household lines', () => {
+    const lines = resolveHouseholdLines({
+      ...base,
+      walks: [partnerWalk(at(2026, 10, 18, 8))],
+      neighbourLines: [entry(2, 'neighbours.line.sniffCorner', NOW - 1000), entry(1, 'neighbours.line.stickLeft', NOW - 2000)],
+    });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe('Momo had a good sniff at your corner today.');
+  });
+
+  it('skips lines that are too old or whose key this app does not know', () => {
+    expect(resolveHouseholdLines({ ...base, neighbourLines: [entry(1, 'neighbours.line.sniffCorner', NOW - HOUSEHOLD_NEWS_WINDOW_MS - 1)] })).toEqual([]);
+    expect(resolveHouseholdLines({ ...base, neighbourLines: [entry(1, 'neighbours.line.future', NOW - 1)] })).toEqual([]);
+  });
+});

@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { CommandRequest, CommandResponse, CommandErrorCode } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
-import { dogs, economyCommands, households, players, walks } from '../db/schema';
+import { dogs, economyCommands, gifts, households, players, walks } from '../db/schema';
 import { canonicalJson } from '../lib/canonicalJson';
 import { sameLocalDay } from '../lib/time';
 import { applyPassiveAccrual, upgradeBuilding } from '../economy/denTransitions';
@@ -125,6 +125,25 @@ export async function runCommand(
           await appendEvent(dbx, hid, 'member.updated', auth.playerId, {
             player: { id: row.id, displayName: row.displayName, joinedAt: row.createdAt.getTime() },
           });
+        }
+        break;
+      }
+      case 'gift.open': {
+        // First opener wins; later opens (other phone, other player) are ok and credit nothing.
+        // The sprinkle goes straight into the Den: not through the reward formulas, so no Beginner's Luck,
+        // no multipliers and outside the +30% power budget (anti-snowball delta, design Decision 20).
+        const [gift] = await dbx.select().from(gifts).where(and(eq(gifts.hostHouseholdId, hid), eq(gifts.id, cmd.giftId)));
+        if (!gift) {
+          outcome = { ok: false, error: 'not-found' };
+          break;
+        }
+        if (gift.openedAt === null) {
+          await dbx.update(gifts).set({ openedAt: now, openedByPlayerId: auth.playerId }).where(eq(gifts.id, gift.id));
+          if (gift.sprinkleTreats) {
+            const accrued = applyPassiveAccrual(stripRev(den), now, await worldMass(dbx, hid));
+            den = await saveDen(dbx, hid, denRow.rev, { ...accrued, treats: accrued.treats + gift.sprinkleTreats }, now);
+            await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den });
+          }
         }
         break;
       }

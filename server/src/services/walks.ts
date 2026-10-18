@@ -23,6 +23,8 @@ import type { Db } from '../db/client';
 import { cells, households, territories, walks } from '../db/schema';
 import { applyPassiveAccrual, awardWalkTreats, awardWalkXp, dailyRewardMultiplier } from '../economy/denTransitions';
 import { dayKeyInZone, sameLocalDay } from '../lib/time';
+import { onHostWalkAccepted } from '../neighbours/reactions';
+import { paintCells } from './cellPaint';
 import { appendEvent, currentSeq, type EventBus } from './events';
 import { cellFromRow, denFromRow, lockDen, saveDen, stripRev, territoryFromRow, walkMetaFromRow } from './state';
 
@@ -138,7 +140,7 @@ export async function ingestWalk(
     const painted = isManual ? new Set<string>() : paintedCells(req.locations);
     const qualifies = isManual || painted.size >= MIN_CELLS_FOR_REWARD;
     const distanceMeters = cumulativeDistance(req.locations);
-    const rangeRows = await dbx.select().from(cells).where(eq(cells.householdId, hid));
+    const rangeRows = await dbx.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
     const rangeBefore: Cell[] = rangeRows.map((r) => ({
       ix: r.ix,
       iy: r.iy,
@@ -222,23 +224,16 @@ export async function ingestWalk(
           return [ix, iy, assignment.get(id) ?? null];
         })
       );
-      await dbx.execute(sql`
-        insert into cell_days (household_id, ix, iy, day)
-        select ${hid}::uuid, (e->>0)::int, (e->>1)::int, ${day}::text
-        from jsonb_array_elements(${cellsJson}::jsonb) e
-        on conflict do nothing`);
-      await dbx.execute(sql`
-        insert into cells (household_id, ix, iy, last_refreshed, last_tracked, baseline_visits, visits, territory_id)
-        select ${hid}::uuid, (e->>0)::int, (e->>1)::int, ${walkEnd}::bigint, ${walkEnd}::bigint, 0, 0, e->>2
-        from jsonb_array_elements(${cellsJson}::jsonb) e
-        on conflict (household_id, ix, iy) do update set
-          last_refreshed = greatest(cells.last_refreshed, excluded.last_refreshed),
-          last_tracked = greatest(cells.last_tracked, excluded.last_tracked)`);
-      await dbx.execute(sql`
-        update cells c set visits = c.baseline_visits + (
-          select count(*) from cell_days d where d.household_id = c.household_id and d.ix = c.ix and d.iy = c.iy)
-        from jsonb_array_elements(${cellsJson}::jsonb) e
-        where c.household_id = ${hid}::uuid and c.ix = (e->>0)::int and c.iy = (e->>1)::int`);
+      await paintCells(
+        dbx,
+        hid,
+        Array.from(painted).map((id) => {
+          const { ix, iy } = parseCellKey(id);
+          return [ix, iy, assignment.get(id) ?? null] as [number, number, string | null];
+        }),
+        day,
+        walkEnd
+      );
 
       // merges run after the new cells exist, as in finishTrackedWalk
       for (const merge of merges) {
@@ -378,6 +373,16 @@ export async function ingestWalk(
       await appendEvent(dbx, hid, 'territory.changed', auth.playerId, { upserted, removedIds: removedTerritoryIds });
     }
     if (qualifies) await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den: denApi });
+
+    // Track B: first tracked walk creates the neighbours; new ground may trigger a reaction walk. Never fails the walk.
+    await onHostWalkAccepted(dbx, config, {
+      hostId: hid,
+      walkId: req.id,
+      startSource: req.startSource,
+      qualifies,
+      newGroundCellIds: Array.from(newGround),
+      now,
+    });
 
     return {
       kind: 'ok',

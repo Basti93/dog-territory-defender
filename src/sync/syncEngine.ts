@@ -22,7 +22,7 @@ import { API_LIMITS } from './apiContract';
 import { newClientId } from './ids';
 import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
 import { INVITE_CODE_LENGTH } from './syncConfig';
-import { applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult } from './apply';
+import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult } from './apply';
 import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
@@ -249,6 +249,8 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     }
   }
 
+  let nearbyLoaded = false;
+
   async function pull(client: ApiClient, identity: SyncIdentity): Promise<void> {
     const state = await deps.sync.getState();
     const ctx: ApplyContext = {
@@ -264,13 +266,24 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       },
     };
     const needsSnapshot = state.cursor === 0 && state.lastSyncAt === null;
+    // Neighbour Ranges live in memory only: fetch once per launch and again when neighbour events arrive. Best effort.
+    const refreshNearby = async () => {
+      try {
+        applyNearby(await client.nearby());
+        nearbyLoaded = true;
+      } catch {
+        // neighbours are optional; never fail a sync for them
+      }
+    };
     if (!needsSnapshot) {
       try {
         let cursor = state.cursor;
         for (let page = 0; page < MAX_EVENT_PAGES; page++) {
           const response = await client.events(cursor);
           await noteServerTime(response.serverTime);
-          reportApplied(await applyEvents(response.events, response.cursor, applyRepos, ctx));
+          const applied = await applyEvents(response.events, response.cursor, applyRepos, ctx);
+          reportApplied(applied);
+          if (applied.neighbourEvents || !nearbyLoaded) await refreshNearby();
           cursor = response.cursor;
           if (!response.hasMore) break;
         }
@@ -283,6 +296,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     const snapshot = await seedOrSnapshot(client);
     await noteServerTime(snapshot.serverTime);
     reportApplied(await applySnapshot(snapshot, applyRepos, ctx));
+    await refreshNearby();
   }
 
   /** Another phone of the same player may have renamed them: keep this phone's identity name in step with sync state. */

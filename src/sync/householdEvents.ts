@@ -5,6 +5,7 @@
 
 import { dogDisplayName } from '../economy/denEconomy';
 import { t } from '../i18n';
+import type { NeighbourLineEntry } from '../storage/SyncRepository';
 import type { StoredWalk } from '../storage/WalkRepository';
 
 export const HOUSEHOLD_NEWS_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -34,10 +35,12 @@ export interface HouseholdLineInput {
   lastMemberJoined: { playerName: string; at: number; playerId?: string } | null;
   /** playerId -> CURRENT display name (sync state). Wins over the name stored on a walk, so a rename shows up on old walks too. */
   players?: Record<string, string>;
+  /** Newest first. At most ONE neighbour line is shown per launch, ranked below partner and personal lines. */
+  neighbourLines?: NeighbourLineEntry[];
   now: number;
 }
 
-/** 0-2 plain strings for the Doorstep away strip. Empty when not joined. */
+/** 0-3 plain strings for the Doorstep away strip. Empty when not joined. */
 export function resolveHouseholdLines(input: HouseholdLineInput): string[] {
   const { walks, myPlayerId, dogName, lastMemberJoined, now } = input;
   const players = input.players ?? {};
@@ -58,5 +61,7 @@ export function resolveHouseholdLines(input: HouseholdLineInput): string[] {
   if (lastMemberJoined && now - lastMemberJoined.at <= HOUSEHOLD_NEWS_WINDOW_MS) {
     lines.push(t('household.joined', { player: nameOf(lastMemberJoined.playerId, lastMemberJoined.playerName) ?? '', dog }));
   }
+  const neighbour = (input.neighbourLines ?? []).find((n) => now - n.at <= HOUSEHOLD_NEWS_WINDOW_MS && t(n.line) !== n.line);
+  if (neighbour) lines.push(t(neighbour.line, { ...neighbour.params, bot: neighbour.botName ?? '' }));
   return lines;
 }

@@ -9,6 +9,10 @@ import {
   ApiWalkFull,
   CommandRequest,
   CommandResponse,
+  CoopWeekResponse,
+  GiftsResponse,
+  NearbyResponse,
+  giftOpenPath,
   EventsResponse,
   ImportRequest,
   ImportResponse,
@@ -60,6 +64,11 @@ export interface ApiClient {
   getWalk(id: string): Promise<ApiWalkFull>;
   command(request: CommandRequest): Promise<CommandResponse>;
   importHousehold(request: ImportRequest): Promise<ImportResponse>;
+  /** Neighbour dogs with their dotted Ranges (`[]` while the server has neighbours off). */
+  nearby(): Promise<NearbyResponse>;
+  gifts(): Promise<GiftsResponse>;
+  openGift(giftId: string, clientId: string): Promise<CommandResponse>;
+  coopWeek(): Promise<CoopWeekResponse>;
 }
 
 export function normalizeBaseUrl(url: string): string {
@@ -129,5 +138,9 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     getWalk: (id) => request<ApiWalkFull>('GET', `${API_PATHS.walks}/${encodeURIComponent(id)}`),
     command: (req) => request<CommandResponse>('POST', API_PATHS.commands, req),
     importHousehold: (req) => request<ImportResponse>('POST', API_PATHS.import, req),
+    nearby: () => request<NearbyResponse>('GET', `${API_PATHS.nearby}?include=cells`),
+    gifts: () => request<GiftsResponse>('GET', API_PATHS.gifts),
+    openGift: (giftId, clientId) => request<CommandResponse>('POST', giftOpenPath(giftId), { clientId }),
+    coopWeek: () => request<CoopWeekResponse>('GET', API_PATHS.coopWeek),
   };
 }

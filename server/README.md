@@ -20,7 +20,7 @@ Type gate from the repo root: `npx tsc -p server`.
 ## Shared code (no copies)
 
 - Contract: `../src/sync/apiContract.ts` (pure TS types; the app imports it too). Request schemas in `src/http/schemas.ts` are compile-time checked against it.
-- Pure game code imported through the `@game/*` alias (= `../src/*`): `economy/formulas`, `balanceConfig`, `territoryEconomy`, `utils/grid`, `geometry`, `territoryCluster`, `storage/TerritoryRepository` and `HomeRangeRepository` (types and id helpers only), `types`.
+- Pure game code imported through the `@game/*` alias (= `../src/*`): `economy/formulas`, `balanceConfig`, `territoryEconomy`, `neighbourConfig`, `utils/grid`, `geometry`, `territoryCluster`, `storage/TerritoryRepository` and `HomeRangeRepository` (types and id helpers only), `types`.
 - NOT importable (pull in i18n/storage): `denEconomy.ts`, `walkRewards.ts`, `milestones.ts`, `manualWalkLog.ts`. `src/economy/denTransitions.ts` re-expresses their transitions; `test/parity.test.ts` pins it against the app's own functions.
 
 ## Run
@@ -31,7 +31,7 @@ Docker image: build with the repo root as context.
 docker build -f server/Dockerfile -t dog-territory-api .
 ```
 
-Env (see `.env.example`): `DATABASE_URL`, `PORT` (7000), `READY_PORT` (7100, internal `/readyz`, never publish), `LOG_LEVEL`, `HOUSEHOLD_MAX_PLAYERS`, `TRUST_PROXY_CIDR` (default 172.16.0.0/12; the only network whose X-Forwarded-For is trusted), `LOG_FORWARDED_HEADERS` (debug: log req.ip + forwarded headers for the first 50 requests), `MIGRATE_ON_START`.
+Env (see `.env.example`): `DATABASE_URL`, `PORT` (7000), `READY_PORT` (7100, internal `/readyz`, never publish), `LOG_LEVEL`, `HOUSEHOLD_MAX_PLAYERS`, `TRUST_PROXY_CIDR` (default 172.16.0.0/12; the only network whose X-Forwarded-For is trusted), `LOG_FORWARDED_HEADERS` (debug: log req.ip + forwarded headers for the first 50 requests), `MIGRATE_ON_START`, `NEIGHBOURS_ENABLED`, `OVERPASS_URL`, `OVERPASS_PAUSE_MS`.
 
 ## Operator CLI (the only admin surface; no admin endpoint exists)
 
@@ -48,10 +48,20 @@ Invite codes are shown once (only a hash is stored), single-use, valid 24 h.
 
 Public: `GET /healthz`, `POST /v1/join`. Everything else needs `Authorization: Bearer <token>`; anything else, including unknown paths, answers the identical `401 {"error":"unauthorized"}`.
 
-`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby` (always `[]` in M1), `POST /v1/households/import` (founding seed, once).
+`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once).
 
 ## Behaviour worth knowing
 
 - Walks are append-only and idempotent by client id; the server recomputes cells, territories and reward from the route. Cell timestamps come from the walk, never receive time, so merging is order-independent; `visits` = baseline + distinct household-days (`cell_days`).
-- Den state is server-authoritative, changed only by walks and commands (`den.upgrade`, `den.claim`, `dog.update`, `walk.delete`, `player.rename`); commands are idempotent by `clientId`. Passive accrual is applied lazily.
+- Den state is server-authoritative, changed only by walks and commands (`den.upgrade`, `den.claim`, `dog.update`, `walk.delete`, `player.rename`, `gift.open`); commands are idempotent by `clientId`. Passive accrual is applied lazily.
 - Hardening: strict schemas (unknown properties rejected), 64 KiB body (1 MiB walks, 5 MiB import), helmet headers, no CORS, per-IP and per-device rate limits, IP bans in `banned_ips`, per-household daily write caps, redacted structured access log. Residual risk: design Decision 16.
+
+## Nachbarhunde (Track B, behind `NEIGHBOURS_ENABLED`)
+
+Design: `docs/decisions/multiplayer-sync/design.md` Decisions 17-24. Code: `src/neighbours/`.
+
+**Enable it:** set `NEIGHBOURS_ENABLED=true` (compose passes it through from the host `.env`; it is `false` by default and should stay so until the app side with the Doorstep lines has shipped) and, for real streets, `OVERPASS_URL=https://overpass-api.de/api/interpreter` (empty = offset fallback only). Restart the api container (`docker compose up -d api`). Migrations apply with `MIGRATE_ON_START=true` or `node dist/ops/migrate.js`. Bots appear on each household's next accepted tracked walk; the first neighbour event shows up the next morning. Turn it off the same way: `nearby` returns `[]`, the scheduler idles, existing rows stay.
+
+**How it runs:** one 15-minute `setInterval` tick inside the api process (no cron). Per host it plans the local day (from 06:15, idempotent through unique keys), writes bot walks only once they are over (through the same cell-merge code as human walks, into the bot household, flagged `generated`), updates the Viertel-Runde, and emits due events into the normal `events` feed. Each host runs in its own transaction behind `pg_try_advisory_xact_lock`. Street tiles (coarse ~2 km grid, `street_tiles`) are fetched sequentially, at most 3 per tick, never 02:00-06:00 local, failed tiles retried after 6 h.
+
+**Tuning:** caps, sprinkle fraction, co-op sizes and geometry live in `src/economy/neighbourConfig.ts`; who the six dogs are and when they walk in `src/neighbours/archetypes.ts`.

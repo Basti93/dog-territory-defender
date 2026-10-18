@@ -1,6 +1,7 @@
 import { loadConfig } from './config';
 import { connectPostgres, runMigrations } from './db/client';
 import { buildApp, buildReadyApp } from './http/app';
+import { startNeighbourScheduler } from './neighbours/scheduler';
 
 async function main() {
   const config = loadConfig();
@@ -14,8 +15,11 @@ async function main() {
   const ready = config.readyPort > 0 ? buildReadyApp(conn.db) : null;
   if (ready) await ready.listen({ port: config.readyPort, host: '0.0.0.0' });
 
+  const stopScheduler = startNeighbourScheduler(conn.db, bus, config, (msg, extra) => app.log.info({ extra }, msg));
+
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');
+    stopScheduler();
     bus.shutdown(); // release long-pollers now so close() does not wait out their 25 s
     await ready?.close();
     await app.close();
