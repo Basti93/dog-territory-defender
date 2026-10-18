@@ -11,7 +11,7 @@ Der Agent bereitet nur Dateien vor; alles unten fuehrst du selbst per ssh aus, o
 3. Repo-Stand kopieren (ohne node_modules/.git):
    `rsync -av --exclude node_modules --exclude .git ./ user@home-server:dog-territory/`
 4. `ssh user@home-server`, dann `mkdir -p ~/dog-territory/backups && cd ~/dog-territory/deploy`
-5. `cp .env.example .env && chmod 600 .env && nano .env` (Passwort, `DATABASE_URL`, `TS_AUTHKEY` aus der
+5. `cp .env.example .env && chmod 600 .env && nano .env` (Passwort, `TS_AUTHKEY` aus der
    Tailscale-Konsole; fuer den Knoten muessen HTTPS-Zertifikate und das `funnel`-Attribut erlaubt sein).
    Tailscale-Konsole, zwei Punkte: (a) beim Knoten `dog-territory` **Key expiry deaktivieren** (sonst faellt der
    Funnel nach ca. 180 Tagen still aus); (b) in der ACL/Policy braucht der Knoten das `funnel`-nodeAttr,

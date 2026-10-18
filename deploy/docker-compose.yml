@@ -31,7 +31,8 @@ services:
       MIGRATE_ON_START: "true"
       PORT: "7000"        # oeffentlicher Listener; Ziel von serve.json
       READY_PORT: "7100"  # interner /readyz-Listener, kein Host-Port, nicht ueber serve.json
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL in .env setzen}
+      # Derived from POSTGRES_PASSWORD so .env holds the password once; override with DATABASE_URL for a cloud DB.
+      DATABASE_URL: ${DATABASE_URL:-postgres://dtd:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD in .env setzen}@db:5432/dtd}
       LOG_LEVEL: ${API_LOG_LEVEL:-info}
       HOUSEHOLD_MAX_PLAYERS: ${HOUSEHOLD_MAX_PLAYERS:-4}
       # Nur das Netz des Tailscale-Sidecars gilt als Proxy (X-Forwarded-For). Wert nach erstem Start pruefen.
