@@ -113,6 +113,16 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
       return rows.map((row) => ({ id: row.id as AchievementId, unlockedAt: row.unlockedAt }));
     },
 
+    async replaceUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        await db.runAsync('DELETE FROM achievements');
+        for (const a of list) {
+          await db.runAsync('INSERT OR REPLACE INTO achievements (id, unlockedAt) VALUES (?, ?)', a.id, a.unlockedAt);
+        }
+      });
+    },
+
     async unlockAchievements(ids: AchievementId[], unlockedAt: number): Promise<void> {
       if (ids.length === 0) {
         return;

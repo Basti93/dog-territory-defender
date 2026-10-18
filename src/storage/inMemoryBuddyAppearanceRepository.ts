@@ -11,6 +11,9 @@ export function createInMemoryBuddyAppearanceRepository(): BuddyAppearanceReposi
     async saveAppearance(appearance: BuddyAppearance): Promise<void> {
       saved = normalizeAppearance(appearance);
     },
+    async reset(): Promise<void> {
+      saved = null;
+    },
     async hasChosen(): Promise<boolean> {
       return saved !== null;
     },

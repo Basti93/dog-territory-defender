@@ -129,4 +129,13 @@ describe('WalkRepository contract', () => {
     expect(saved?.treatsEarned).toBeUndefined();
     expect(saved?.refreshedRouteWalkId).toBeUndefined();
   });
+
+  it('replaceAll swaps the whole set of walks', async () => {
+    const repo = createInMemoryWalkRepository();
+    await repo.saveWalk(makeWalk({ id: 'old' }));
+    await repo.replaceAll([makeWalk({ id: 'a', startTime: 1 }), makeWalk({ id: 'b', startTime: 2 })]);
+    expect((await repo.getWalks()).map((w) => w.id)).toEqual(['b', 'a']);
+    await repo.replaceAll([]);
+    expect(await repo.getWalks()).toEqual([]);
+  });
 });

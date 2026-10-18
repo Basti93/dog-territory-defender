@@ -6,4 +6,6 @@ export interface BuddyAppearanceRepository {
   saveAppearance(appearance: BuddyAppearance): Promise<void>;
   /** True once saveAppearance has been called at least once. */
   hasChosen(): Promise<boolean>;
+  /** Forgets any saved look: back to the default and hasChosen false (backup restore). */
+  reset(): Promise<void>;
 }

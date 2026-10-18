@@ -1,6 +1,6 @@
 const { SAMPLE_RATE, SOUNDS, encodeWav } = require('../../../scripts/soundSynth.cjs');
 
-const EXPECTED_MS: Record<string, number> = { tap: 40, treat: 120, upgrade: 350, celebrate: 700, bark: 180, sleepy: 400 };
+const EXPECTED_MS: Record<string, number> = { tap: 40, treat: 120, upgrade: 350, celebrate: 700, bark: 180, sleepy: 400, 'new-street': 150, 'reward-reached': 400, 'walk-done': 300 };
 
 describe('WAV generator', () => {
   it('writes a valid 22.05 kHz mono 16-bit PCM header', () => {

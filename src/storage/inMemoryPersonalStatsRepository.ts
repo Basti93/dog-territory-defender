@@ -21,6 +21,11 @@ export function createInMemoryPersonalStatsRepository(): PersonalStatsRepository
       return Array.from(unlocked.values()).sort((a, b) => a.unlockedAt - b.unlockedAt);
     },
 
+    async replaceUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
+      unlocked.clear();
+      for (const a of list) unlocked.set(a.id, { ...a });
+    },
+
     async unlockAchievements(ids: AchievementId[], unlockedAt: number): Promise<void> {
       for (const id of ids) {
         if (!unlocked.has(id)) {

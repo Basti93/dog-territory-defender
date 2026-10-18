@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Modal, Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
@@ -13,6 +13,7 @@ import { WalkRepository } from '../storage/WalkRepository';
 import { getReminderDiagnostics, ReminderDiagnostics, requestNotificationPermission, scheduleTestReminder } from '../notifications/scheduler';
 import { isAnyReminderEnabled, REMINDER_SLOT_IDS, ReminderSlot, ReminderSlotId } from '../notifications/walkReminderDecision';
 import { updateReminderSlot } from '../notifications/walkReminder';
+import { pickAndImportBackup, shareBackup } from '../storage/backupIO';
 import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n';
 
 // This app's first Settings screen (openspec/changes/walk-reminder/design.md
@@ -26,6 +27,8 @@ interface SettingsScreenProps {
   walkRepository: WalkRepository;
   dogName: string | null;
   buddyAppearance: BuddyAppearance;
+  /** A walk is being tracked: backup/restore is disabled so it can't be overwritten mid-walk. */
+  walkActive: boolean;
   /** Persists the new look and updates App state. */
   onSaveAppearance: (appearance: BuddyAppearance) => void | Promise<void>;
   /** The player's saved language choice ('system' follows the device). */
@@ -56,6 +59,7 @@ export function SettingsScreen({
   walkRepository,
   dogName,
   buddyAppearance,
+  walkActive,
   onSaveAppearance,
   localePreference,
   onChangeLocalePreference,
@@ -74,6 +78,7 @@ export function SettingsScreen({
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [diagnostics, setDiagnostics] = useState<ReminderDiagnostics | null>(null);
   const [testSent, setTestSent] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
 
   const refreshDiagnostics = () => {
     getReminderDiagnostics().then(setDiagnostics).catch(() => {});
@@ -147,6 +152,43 @@ export function SettingsScreen({
     setPermissionDenied(!ok);
     setTestSent(ok);
     refreshDiagnostics();
+  };
+
+  const handleShareBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await shareBackup();
+      if (!result.shared) Alert.alert(t('settings.backup.title'), t('settings.backup.noShare', { uri: result.uri }));
+    } catch {
+      Alert.alert(t('settings.backup.title'), t('settings.backup.shareFailed'));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const runRestore = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await pickAndImportBackup();
+      if (result.status === 'invalid') {
+        const key = result.reason === 'newer-schema' ? 'newerSchema' : result.reason === 'unreadable' ? 'unreadable' : 'invalid';
+        Alert.alert(t('settings.backup.title'), t(`settings.backup.${key}`));
+      } else if (result.status === 'imported') {
+        // The running app holds the old data in memory; a restart is the simple, robust reload.
+        Alert.alert(t('settings.backup.doneTitle'), t('settings.backup.doneMessage', { walks: result.counts.walks, cells: result.counts.cells, territories: result.counts.territories, achievements: result.counts.achievements }));
+      }
+    } catch {
+      Alert.alert(t('settings.backup.title'), t('settings.backup.restoreFailed'));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRestoreBackup = () => {
+    Alert.alert(t('settings.backup.restoreTitle'), t('settings.backup.restoreMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.backup.restoreConfirm'), style: 'destructive', onPress: runRestore },
+    ]);
   };
 
   if (!loaded) {
@@ -267,6 +309,15 @@ export function SettingsScreen({
         </View>
       </Card>
 
+      <Card style={styles.languageCard}>
+        <View style={styles.rowText}>
+          <Text style={textStyle('h2')}>{t('settings.backup.title')}</Text>
+          <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.subtitle')}</Text>
+        </View>
+        <Button label={t('settings.backup.share')} variant="secondary" onPress={handleShareBackup} disabled={backupBusy || walkActive} />
+        <Button label={t('settings.backup.restore')} variant="ghost" onPress={handleRestoreBackup} disabled={backupBusy || walkActive} />
+        {walkActive && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.walkActive')}</Text>}
+      </Card>
 
       {Platform.OS === 'ios' && iosPicker && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>

@@ -111,6 +111,17 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
       }
     },
 
+    async replaceAll(next: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void> {
+      cells.clear();
+      for (const c of next) {
+        cells.set(cellKey(c.ix, c.iy), {
+          ...c,
+          lastVisitCreditedDayKey: c.lastTracked > 0 ? calendarDayKey(c.lastTracked) : null,
+        });
+      }
+      lastNewGroundEvent = newGroundEvent;
+    },
+
     async getWorldMass(): Promise<{ cellCount: number; visitsSum: number }> {
       // A single ungrouped aggregate over every cell, regardless of
       // territory — see HomeRangeRepository.getWorldMass's doc comment and

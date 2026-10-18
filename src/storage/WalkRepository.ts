@@ -9,4 +9,6 @@ export interface WalkRepository {
   getWalks(): Promise<StoredWalk[]>;
   getWalk(id: string): Promise<StoredWalk | null>;
   deleteWalk(id: string): Promise<void>;
+  /** Atomically replaces every stored walk with `walks` (used by backup restore). */
+  replaceAll(walks: Walk[]): Promise<void>;
 }

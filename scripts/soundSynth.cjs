@@ -113,6 +113,39 @@ function sleepy() {
   return out;
 }
 
-const SOUNDS = { tap, treat, upgrade, celebrate, bark, sleepy };
+// In-walk cues: quiet on purpose, the phone is in a pocket.
+function newStreet() {
+  const out = silence(150);
+  addNote(out, 0, 80, 880, 0.3, 30); // A5
+  addNote(out, 60, 90, 1318.5, 0.3, 30); // E6
+  return out;
+}
+
+function rewardReached() {
+  const out = silence(400);
+  addNote(out, 0, 150, 440, 0.32, 9); // A4
+  addNote(out, 120, 150, 554.37, 0.32, 9); // C#5
+  addNote(out, 240, 160, 659.25, 0.36, 10); // E5
+  return out;
+}
+
+function walkDone() {
+  const out = silence(300);
+  addNote(out, 0, 300, 784, 0.28, 10); // G5
+  addNote(out, 0, 300, 1568, 0.08, 14); // soft octave
+  return out;
+}
+
+const SOUNDS = {
+  tap,
+  treat,
+  upgrade,
+  celebrate,
+  bark,
+  sleepy,
+  'new-street': newStreet,
+  'reward-reached': rewardReached,
+  'walk-done': walkDone,
+};
 
 module.exports = { SAMPLE_RATE, SOUNDS, encodeWav };

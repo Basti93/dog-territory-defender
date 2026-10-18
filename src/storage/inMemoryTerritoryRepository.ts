@@ -36,6 +36,11 @@ export function createInMemoryTerritoryRepository(): TerritoryRepository {
       territories.delete(absorbedId);
     },
 
+    async replaceAll(next: Territory[]): Promise<void> {
+      territories.clear();
+      for (const t of next) territories.set(t.id, { ...t });
+    },
+
     async incrementTerritoryStats(id: TerritoryId, input: IncrementTerritoryStatsInput): Promise<void> {
       const existing = territories.get(id);
       if (!existing) return;

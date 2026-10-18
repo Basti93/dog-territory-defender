@@ -58,6 +58,11 @@ export function createSqliteBuddyAppearanceRepository(dbName: string = DEFAULT_D
       );
     },
 
+    async reset(): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync('DELETE FROM buddy_appearance WHERE id = ?', SINGLETON_ID);
+    },
+
     async hasChosen(): Promise<boolean> {
       const db = await dbPromise;
       const row = await db.getFirstAsync<{ id: string }>(

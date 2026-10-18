@@ -21,5 +21,10 @@ export function createInMemoryWalkRepository(): WalkRepository {
     async deleteWalk(id: string): Promise<void> {
       walks.delete(id);
     },
+
+    async replaceAll(next: Walk[]): Promise<void> {
+      walks.clear();
+      for (const walk of next) walks.set(walk.id, { ...walk, syncedAt: null });
+    },
   };
 }

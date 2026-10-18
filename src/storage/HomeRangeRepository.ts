@@ -105,4 +105,11 @@ export interface HomeRangeRepository {
    * Do not add one, even for a seemingly-harmless debug/display purpose.
    */
   getWorldMass(): Promise<{ cellCount: number; visitsSum: number }>;
+
+  /**
+   * Backup & Restore only: wipes every cell and the New Ground event, then
+   * writes exactly the given ones (verbatim, including territoryId/visits).
+   * Never call from game logic — paintCells is the only gameplay write path.
+   */
+  replaceAll(cells: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void>;
 }

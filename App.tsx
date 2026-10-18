@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
 
-import { Walk, AppState as AppStateType } from './src/types';
+import { play } from './src/feedback/sounds';
+import { createWalkCueTracker } from './src/feedback/walkCues';
+import { Walk, Location as WalkLocation, AppState as AppStateType } from './src/types';
 import { requestLocationPermission, startWatchingLocation, stopWatchingLocation, getInitialLocation } from './src/utils/gps';
 import { cumulativeDistance } from './src/utils/geometry';
 import { cellCentre, cellKey, MIN_CELLS_FOR_REWARD, NEW_GROUND_MIN_CELLS, newGroundCells, paintedCells, parseCellKey } from './src/utils/grid';
@@ -116,6 +118,20 @@ export default function App() {
   useEffect(() => {
     if (fontsLoaded && localeReady) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded, localeReady]);
+  // In-walk audio cues (src/feedback/walkCues.ts). Refs, not state: nothing
+  // renders from them. `range` is the Home Range snapshot taken at walk start
+  // (null = not loaded, so no new-street dings rather than false ones).
+  const startingRef = useRef(false);
+  const startTokenRef = useRef(0);
+  const cueTracker = useRef(createWalkCueTracker({ now: Date.now, minCells: MIN_CELLS_FOR_REWARD })).current;
+  const walkCueState = useRef<{
+    active: boolean;
+    range: Set<string> | null;
+    painted: Set<string>;
+    newGround: Set<string>;
+    last: WalkLocation | null;
+  }>({ active: false, range: null, painted: new Set(), newGround: new Set(), last: null });
+
   const [appState, setAppState] = useState<AppStateType>({
     walk: null,
     isTracking: false,
@@ -476,52 +492,100 @@ export default function App() {
   };
 
   const startWalk = async () => {
-    let initialLoc = await getInitialLocation();
-    if (!initialLoc) {
-      // Permission may simply not have been granted yet: ask once, then retry.
-      await requestLocationPermission();
-      initialLoc = await getInitialLocation();
-    }
-    if (!initialLoc) {
-      Alert.alert(t('app.errorTitle'), t('app.noInitialLocation'));
-      return;
-    }
+    // Double-tap guard + cancel guard: resetWalk bumps startTokenRef, so any
+    // async step below that resumes after a cancel bails out.
+    if (startingRef.current) return;
+    startingRef.current = true;
+    const token = ++startTokenRef.current;
+    const cancelled = () => startTokenRef.current !== token;
+    try {
+      let initialLoc = await getInitialLocation();
+      if (!initialLoc) {
+        // Permission may simply not have been granted yet: ask once, then retry.
+        await requestLocationPermission();
+        initialLoc = await getInitialLocation();
+      }
+      if (cancelled()) return;
+      if (!initialLoc) {
+        Alert.alert(t('app.errorTitle'), t('app.noInitialLocation'));
+        return;
+      }
 
-    const newWalk: Walk = {
-      id: Date.now().toString(),
-      startTime: Date.now(),
-      locations: [initialLoc],
-      closed: false,
-      startSource: 'button',
-    };
+      const newWalk: Walk = {
+        id: Date.now().toString(),
+        startTime: Date.now(),
+        locations: [initialLoc],
+        closed: false,
+        startSource: 'button',
+      };
 
-    log('WALK_START', { id: newWalk.id, lat: initialLoc.latitude, lon: initialLoc.longitude });
+      // Cue bookkeeping: snapshot the Home Range so "new ground" means new
+      // before this walk, exactly like finishWalk's newGroundCells. The
+      // snapshot loads in the background (null until then, so no new-street
+      // dings) and never delays the watcher.
+      cueTracker.reset();
+      const cueState = walkCueState.current;
+      cueState.active = true;
+      cueState.range = null;
+      cueState.painted = paintedCells([initialLoc]);
+      cueState.newGround = new Set();
+      cueState.last = initialLoc;
 
-    setAppState((prev) => ({
-      ...prev,
-      walk: newWalk,
-      isTracking: true,
-    }));
+      // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
+      await startWatchingLocation((location) => {
+        // Audio cues only (never visual); sounds.play() also checks the sound pref.
+        const cs = walkCueState.current;
+        if (cs.active && cs.last) {
+          const added = paintedCells([cs.last, location]);
+          cs.last = location;
+          for (const c of added) cs.painted.add(c);
+          if (cs.range) {
+            for (const c of newGroundCells(added, cs.range)) cs.newGround.add(c);
+          }
+          const cue = cueTracker.onCells(cs.painted.size, cs.newGround.size);
+          if (cue) play(cue);
+        }
 
-    // Replan reminders so one doesn't fire mid-walk (the walk isn't in the
-    // repository until it finishes, so pass it in explicitly).
-    checkAndScheduleWalkReminder({ walkRepository, notificationRepository }, Date.now(), [newWalk]).catch((err) =>
-      log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
-    );
+        setAppState((prev) => {
+          if (!prev.walk) return prev;
 
-    // Start watching location (foreground-service-backed, gps.ts manages the subscription internally)
-    await startWatchingLocation((location) => {
-      setAppState((prev) => {
-        if (!prev.walk) return prev;
+          const updatedWalk = {
+            ...prev.walk,
+            locations: [...prev.walk.locations, location],
+          };
 
-        const updatedWalk = {
-          ...prev.walk,
-          locations: [...prev.walk.locations, location],
-        };
-
-        return { ...prev, walk: updatedWalk };
+          return { ...prev, walk: updatedWalk };
+        });
       });
-    });
+      if (cancelled()) {
+        // resetWalk ran while the watcher was starting; it may have stopped nothing yet.
+        await stopWatchingLocation();
+        return;
+      }
+
+      homeRangeRepository
+        .getCells()
+        .then((rangeCells) => {
+          if (!cancelled() && cueState.active) cueState.range = new Set(rangeCells.map((c) => cellKey(c.ix, c.iy)));
+        })
+        .catch((err) => log('WALK_CUE_RANGE_ERROR', { error: String(err) }));
+
+      log('WALK_START', { id: newWalk.id, lat: initialLoc.latitude, lon: initialLoc.longitude });
+
+      setAppState((prev) => ({
+        ...prev,
+        walk: newWalk,
+        isTracking: true,
+      }));
+
+      // Replan reminders so one doesn't fire mid-walk (the walk isn't in the
+      // repository until it finishes, so pass it in explicitly).
+      checkAndScheduleWalkReminder({ walkRepository, notificationRepository }, Date.now(), [newWalk]).catch((err) =>
+        log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
+      );
+    } finally {
+      if (startTokenRef.current === token) startingRef.current = false;
+    }
   };
 
   // Finish Walk — replaces the old Close Territory/End Walk pair (design.md's
@@ -542,6 +606,9 @@ export default function App() {
     const walk = appState.walk;
     const painted = paintedCells(walk.locations);
     const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
+    walkCueState.current.active = false;
+    const doneCue = cueTracker.onFinish(qualifies);
+    if (doneCue) play(doneCue);
 
     // Snapshot the Range before painting this walk's cells, so New Ground
     // detection AND the Fresh Ground bloomMultiplier both compare against
@@ -841,6 +908,10 @@ export default function App() {
   };
 
   const resetWalk = async () => {
+    startTokenRef.current++; // cancels a startWalk still in its async steps
+    startingRef.current = false;
+    walkCueState.current.active = false;
+    cueTracker.reset();
     await stopWatchingLocation();
     if (appState.walk) {
       log('WALK_CANCELLED', { id: appState.walk.id, points: appState.walk.locations.length });
@@ -1174,6 +1245,7 @@ export default function App() {
               walkRepository={walkRepository}
               dogName={dogName}
               buddyAppearance={buddyAppearance}
+              walkActive={appState.isTracking}
               onSaveAppearance={saveAppearance}
               localePreference={localePreference}
               onChangeLocalePreference={changeLocalePreference}

@@ -51,4 +51,6 @@ export interface TerritoryRepository {
   /** Sums `walksHere`/`treatsEarnedHere` from `absorbedId` into `survivorId`, then deletes the absorbed row. Never touches the cells table — the caller is responsible for HomeRangeRepository.reassignCellsToTerritory separately. */
   mergeTerritoryStats(survivorId: TerritoryId, absorbedId: TerritoryId): Promise<void>;
   incrementTerritoryStats(id: TerritoryId, input: IncrementTerritoryStatsInput): Promise<void>;
+  /** Backup & Restore only: wipes every Territory, then writes exactly the given ones (ids preserved, since cells reference them). */
+  replaceAll(territories: Territory[]): Promise<void>;
 }

@@ -23,6 +23,14 @@ describe('BuddyAppearanceRepository contract', () => {
     expect(await repo.hasChosen()).toBe(true);
   });
 
+  it('reset returns to default and hasChosen false', async () => {
+    const repo = createInMemoryBuddyAppearanceRepository();
+    await repo.saveAppearance({ ...defaultBuddyAppearance(), coat: 'grey' });
+    await repo.reset();
+    expect(await repo.hasChosen()).toBe(false);
+    expect(await repo.getAppearance()).toEqual(defaultBuddyAppearance());
+  });
+
   it('overwrites on a second save', async () => {
     const repo = createInMemoryBuddyAppearanceRepository();
     await repo.saveAppearance({ ...defaultBuddyAppearance(), coat: 'grey' });

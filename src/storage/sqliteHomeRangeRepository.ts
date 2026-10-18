@@ -211,6 +211,36 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       });
     },
 
+    async replaceAll(cells: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void> {
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        await db.runAsync('DELETE FROM home_range_cells');
+        await db.runAsync('DELETE FROM home_range_new_ground_event');
+        for (const c of cells) {
+          // The daily-visit anti-farming key isn't exported; re-derive it from
+          // lastTracked so a restore can't hand out one extra visit today.
+          await db.runAsync(
+            `INSERT INTO home_range_cells (ix, iy, lastRefreshed, lastTracked, visits, territoryId, lastVisitCreditedDayKey) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            c.ix,
+            c.iy,
+            c.lastRefreshed,
+            c.lastTracked,
+            c.visits,
+            c.territoryId,
+            c.lastTracked > 0 ? calendarDayKey(c.lastTracked) : null
+          );
+        }
+        if (newGroundEvent) {
+          await db.runAsync(
+            'INSERT INTO home_range_new_ground_event (id, occurredAt, cellIds) VALUES (?, ?, ?)',
+            NEW_GROUND_EVENT_SINGLETON_ID,
+            newGroundEvent.occurredAt,
+            JSON.stringify(newGroundEvent.cellIds)
+          );
+        }
+      });
+    },
+
     async getWorldMass(): Promise<{ cellCount: number; visitsSum: number }> {
       const db = await dbPromise;
       // A single ungrouped aggregate over every cell, regardless of
