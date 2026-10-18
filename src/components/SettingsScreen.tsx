@@ -3,6 +3,7 @@ import { Alert, Linking, Modal, Platform, StyleSheet, Switch, Text, View } from 
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { useBackAction } from '../app/backStack';
 import { BuddyAppearancePicker } from './buddy';
 import { BuddyLoading } from './BuddyLoading';
 import { material, mix, PaperHeader, PaperHint, PaperRow, PaperSection, PaperSheet, palette, PressableScale, radii, Screen, spacing, TextLink, textStyle, tokens, WoodSign } from '../ui';
@@ -18,6 +19,7 @@ import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n'
 import { AutoFinishSwitch } from './AutoFinishSwitch';
 import { HouseholdCard } from './HouseholdCard';
 import type { SettingsRepository } from '../storage/SettingsRepository';
+import { LiveShareSwitch } from './LiveShareSwitch';
 import { LogShippingSwitch } from './LogShippingSwitch';
 import { isRestoreAllowed } from '../sync/restoreGuard';
 import type { ApiGift } from '../sync/apiContract';
@@ -105,6 +107,8 @@ export function SettingsScreen({
   const restoreAllowed = !syncEngine || (syncStatus !== null && isRestoreAllowed(syncStatus.joined));
   const [loaded, setLoaded] = useState(false);
   const [editingLook, setEditingLook] = useState(false);
+  // Android back inside the look picker returns to the settings list, not out of Settings.
+  useBackAction(editingLook, () => setEditingLook(false));
   const [slots, setSlots] = useState<ReminderSlot[]>([]);
   // iOS shows its picker inline inside a small sheet (Decision 2's "real time
   // picker" via the native component's own spinner UI) rather than Android's
@@ -356,6 +360,9 @@ export function SettingsScreen({
               onShareBackup={handleShareBackup}
               deviceLabel={Platform.OS === 'ios' ? 'iPhone' : 'Android'}
             />
+            {syncStatus?.joined && settingsRepository && (
+              <LiveShareSwitch settingsRepository={settingsRepository} partnerName={syncStatus.partnerName ?? null} />
+            )}
             {syncStatus?.joined && <LogShippingSwitch />}
           </PaperSection>
         )}

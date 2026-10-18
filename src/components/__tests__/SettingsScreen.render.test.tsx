@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { LocalePreference, setLocale, t } from '../../i18n';
@@ -7,8 +7,10 @@ import { createInMemoryNotificationRepository } from '../../storage/inMemoryNoti
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { flush, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { SettingsScreen } from '../SettingsScreen';
+import { resetBackActions, runBackActions } from '../../app/backStack';
 
 beforeEach(() => {
+  resetBackActions();
   jest.useFakeTimers();
 });
 afterEach(() => {
@@ -232,6 +234,20 @@ describe('SettingsScreen gifts from the neighbour dogs', () => {
   it('shows no Gifts section without gifts', async () => {
     const view = await setupWithGifts({}, []);
     expect(screen.queryByText(t('neighbours.gift.title'))).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+});
+
+describe('SettingsScreen hardware back', () => {
+  it('closes the look picker first and leaves the screen to the next handler', async () => {
+    const view = await setup();
+    expect(runBackActions()).toBe(false); // nothing of its own to close on the list
+    await fireEvent.press(screen.getByText(t('settings.changeLook', { dog: 'Rex' })));
+    expect(screen.getByText(t('settings.lookTitle', { dog: 'Rex' }))).toBeOnTheScreen();
+    await act(async () => {
+      expect(runBackActions()).toBe(true);
+    });
+    expect(screen.queryByText(t('settings.lookTitle', { dog: 'Rex' }))).toBeNull();
     await unmountAndExpectNoTimers(view);
   });
 });

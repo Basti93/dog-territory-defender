@@ -22,9 +22,37 @@ let fallbackSubscription: Location.LocationSubscription | null = null;
 let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let lastDeliveredTimestamp = 0;
 
+// Live sharing (sync/presenceSender.ts) listens here, NOT through the walk session: the task callback below runs in
+// the app's own JS runtime even with the screen off, so every accepted fix reaches the observer synchronously, with no
+// React in between. Registered once at startup by app/syncRuntime.ts.
+let fixObserver: ((location: LocationType) => void) | null = null;
+
+export function setFixObserver(observer: ((location: LocationType) => void) | null): void {
+  fixObserver = observer;
+}
+
+// The durable copy of the walk (app/activeWalkRecorder.ts). Same reasoning as the observer above: it must be fed here,
+// where fixes land even with no UI (screen off, app swiped away, runtime relaunched headless by the OS), so a later
+// app launch can resume the walk. Registered once at startup by app/activeWalkRuntime.ts.
+let fixRecorder: ((location: LocationType) => void) | null = null;
+
+export function setFixRecorder(recorder: ((location: LocationType) => void) | null): void {
+  fixRecorder = recorder;
+}
+
 function deliver(location: LocationType): void {
   if (location.timestamp <= lastDeliveredTimestamp) return;
   lastDeliveredTimestamp = location.timestamp;
+  try {
+    fixRecorder?.(location);
+  } catch (error) {
+    log('GPS_RECORDER_ERROR', { error: String(error) });
+  }
+  try {
+    fixObserver?.(location);
+  } catch (error) {
+    log('GPS_OBSERVER_ERROR', { error: String(error) });
+  }
   currentSubscriber?.(location);
 }
 
@@ -136,6 +164,12 @@ export async function startWatchingLocation(callback: (location: LocationType) =
       accuracy: Location.Accuracy.High,
       timeInterval: 1000,
       distanceInterval: 2,
+      // iOS only (ignored on Android): keep updates flowing with the screen off, as a walk (not "other"), and show
+      // the system's blue background-location pill. Without pausesUpdatesAutomatically:false iOS stops the task
+      // when the dog stands still for a while and the partner's thread silently freezes.
+      activityType: Location.ActivityType.Fitness,
+      pausesUpdatesAutomatically: false,
+      showsBackgroundLocationIndicator: true,
       foregroundService: {
         notificationTitle: 'Tails Up',
         notificationBody: t('gps.trackingBody'),

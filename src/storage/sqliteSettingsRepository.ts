@@ -2,7 +2,7 @@ import * as SQLite from 'expo-sqlite';
 
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
-import { normalizeLocalePreference, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
+import { normalizeLocalePreference, normalizeShownWalkIds, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
 
 const DEFAULT_DB_NAME = 'dog-territory-defender.db';
 const SINGLETON_ID = 'singleton';
@@ -35,6 +35,15 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     }
     if (!columns.some((c) => c.name === 'autoFinish')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN autoFinish INTEGER NOT NULL DEFAULT 1');
+    }
+    if (!columns.some((c) => c.name === 'liveShare')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN liveShare INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.some((c) => c.name === 'liveSharePromptShown')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN liveSharePromptShown INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!columns.some((c) => c.name === 'shownPartnerWalks')) {
+      await db.execAsync("ALTER TABLE app_settings ADD COLUMN shownPartnerWalks TEXT NOT NULL DEFAULT '[]'");
     }
     return db;
   });
@@ -156,6 +165,64 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET logShipping = excluded.logShipping`,
         SINGLETON_ID,
         enabled ? 1 : 0
+      );
+    },
+
+    async getLiveShareEnabled(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ liveShare: number }>('SELECT liveShare FROM app_settings WHERE id = ?', SINGLETON_ID);
+      return row?.liveShare === 1;
+    },
+
+    async saveLiveShareEnabled(enabled: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, liveShare) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET liveShare = excluded.liveShare`,
+        SINGLETON_ID,
+        enabled ? 1 : 0
+      );
+    },
+
+    async getLiveSharePromptShown(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ liveSharePromptShown: number }>(
+        'SELECT liveSharePromptShown FROM app_settings WHERE id = ?',
+        SINGLETON_ID
+      );
+      return row?.liveSharePromptShown === 1;
+    },
+
+    async saveLiveSharePromptShown(shown: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, liveSharePromptShown) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET liveSharePromptShown = excluded.liveSharePromptShown`,
+        SINGLETON_ID,
+        shown ? 1 : 0
+      );
+    },
+
+    async getShownPartnerWalkIds(): Promise<string[]> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ shownPartnerWalks: string }>(
+        'SELECT shownPartnerWalks FROM app_settings WHERE id = ?',
+        SINGLETON_ID
+      );
+      try {
+        return normalizeShownWalkIds(JSON.parse(row?.shownPartnerWalks ?? '[]'));
+      } catch {
+        return [];
+      }
+    },
+
+    async saveShownPartnerWalkIds(ids: string[]): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, shownPartnerWalks) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET shownPartnerWalks = excluded.shownPartnerWalks`,
+        SINGLETON_ID,
+        JSON.stringify(normalizeShownWalkIds(ids))
       );
     },
   };

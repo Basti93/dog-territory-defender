@@ -7,6 +7,7 @@ import { ArtImage, material, PaperSheet, PressableScale, Screen, spacing, TextLi
 import { BuddyAvatar } from '../buddy';
 import { BuddyMood } from '../buddy/buddyMood';
 import { t } from '../../i18n';
+import { useBackAction } from '../../app/backStack';
 
 // Shown once, before the dog-name prompt, on a fresh install. Presentation
 // only: three warm cards, no mechanics, nothing to get wrong.
@@ -73,6 +74,11 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
   const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     setPage(Math.round(e.nativeEvent.contentOffset.x / width));
   };
+  // Android back: one card back; on the first card it falls through to the system (app goes to the background).
+  useBackAction(page > 0, () => {
+    scrollRef.current?.scrollTo({ x: (page - 1) * width, animated: true });
+    setPage(page - 1);
+  });
   const goNext = () => {
     if (last) return onDone();
     scrollRef.current?.scrollTo({ x: (page + 1) * width, animated: true });

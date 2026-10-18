@@ -1,4 +1,5 @@
 import { tokens } from '../ui/tokens';
+import { CAVEAT_SUBSET_BASE64 } from './caveatFont';
 
 // Shared "toy world" look for the Leaflet WebViews (mapHTML, walkPortraitHTML,
 // portraitHTML), so the map reads as part of the same soft-clay world as the
@@ -28,6 +29,7 @@ export const MATERIAL = {
   woodEdge: '#B08D5E',
   woodBottom: '#7A5C3A',
   coral: '#F2786E', // Somewhere-Wild pin
+  inkGreen: '#1E7A47', // handwritten notes
 } as const;
 
 /**
@@ -95,6 +97,53 @@ export const MAP_MARKER_CSS = `
     .map-clouds { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 260; overflow: hidden; }
     .map-cloud { position: absolute; background: url("${svgUrl(CLOUD_SVG)}") center / contain no-repeat; animation: cloud-drift linear infinite; }
     @keyframes cloud-drift { from { transform: translateX(-160px); } to { transform: translateX(110vw); } }`;
+
+/**
+ * Handwritten notes on the map (SHOW_NOTES): Caveat embedded as base64 @font-face (falls back to a cursive system font).
+ * `ink` notes are ink green, `chalk` notes (the "Platz zum Entdecken" hint on unknown ground) use the wood-edge brown.
+ */
+export const MAP_NOTES_CSS = `
+    @font-face { font-family: 'Caveat'; font-weight: 600; src: url(data:font/ttf;base64,${CAVEAT_SUBSET_BASE64}) format('truetype'); }
+    .map-note { display: inline-block; white-space: nowrap; font-family: Caveat, 'Segoe Script', 'Comic Sans MS', cursive; font-weight: 600; font-size: 21px; line-height: 1; color: ${MATERIAL.inkGreen}; text-shadow: 0 0 3px ${MATERIAL.yarn}, 0 0 3px ${MATERIAL.yarn}, 0 0 6px ${MATERIAL.yarn}; transform-origin: 0 0; }
+    .map-note-center { transform: translate(-50%, -50%) rotate(-3deg); }
+    .map-note-below { transform: translate(-50%, 8px) rotate(-3deg); }
+    .map-note-abovePin { transform: translate(-50%, -64px) rotate(-3deg); }
+    .map-note-chalk { color: ${MATERIAL.woodEdge}; font-size: 24px; }`;
+
+/**
+ * In-page JS defining mapNoteHTML(note) and renderMapNotes(map, notes, group): one divIcon per note, returns the new layer
+ * group (or null for an empty list). The text is user-adjacent (street/territory names may reach it later), so it is HTML-escaped.
+ */
+export const MAP_NOTES_JS = `
+    function mapNoteHTML(note) {
+      var safe = String(note.text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      var anchor = note.anchor === 'below' || note.anchor === 'abovePin' ? note.anchor : 'center';
+      var kind = note.kind === 'chalk' ? ' map-note-chalk' : '';
+      return '<div class="map-note map-note-' + anchor + kind + '">' + safe + '</div>';
+    }
+    function renderMapNotes(map, notes, group) {
+      if (group) map.removeLayer(group);
+      if (!notes || notes.length === 0) return null;
+      var next = L.layerGroup().addTo(map);
+      notes.forEach(function (n) {
+        if (typeof n.lat !== 'number' || typeof n.lon !== 'number') return;
+        L.marker([n.lat, n.lon], {
+          icon: L.divIcon({ className: 'map-note-marker', html: mapNoteHTML(n), iconSize: [0, 0] }),
+          interactive: false,
+          keyboard: false
+        }).addTo(next);
+      });
+      return next;
+    }
+    // Embedded band: a note whose point lies outside the visible map is hidden (it would float over nothing).
+    function filterMapNotes(map, group) {
+      if (!group) return;
+      var bounds = map.getBounds();
+      group.eachLayer(function (m) {
+        var el = m.getElement && m.getElement();
+        if (el) el.style.visibility = bounds.contains(m.getLatLng()) ? '' : 'hidden';
+      });
+    }`;
 
 /** divIcon inner HTML for the walk-start doghouse (see MAP_MARKER_CSS). */
 export const DOGHOUSE_HTML = '<div class="doghouse"></div>';
@@ -181,6 +230,8 @@ export const MAP_THEME_PROBE_JS = `
         if (!tile) return;
         reported = true;
         var f = getComputedStyle(tile).filter;
+        // The embedded band filters the whole .leaflet-layer instead of each tile (no seams at fractional zoom).
+        if (!f || f === 'none') f = getComputedStyle(tile.closest('.leaflet-layer') || tile).filter;
         window.__mapThemeApplied = !!f && f !== 'none';
         reportToRN('MAP_THEME_APPLIED', {
           applied: window.__mapThemeApplied,

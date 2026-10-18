@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { AppState } from 'react-native';
 
 import type { PartnerWalkAdded } from '../apply';
 import { createPartnerHomecomingQueue } from '../partnerHomecoming';
@@ -41,5 +42,24 @@ describe('usePartnerHomecoming', () => {
       queue.noteWalksAdded([walk('w9')]);
     });
     expect(result.current.request?.walkId).toBe('w9');
+  });
+
+  it('coming back to the front is a new open: the queue is told once per return', async () => {
+    const queue = createPartnerHomecomingQueue({ syncNow: async () => undefined, setTimer: () => 0, clearTimer: () => undefined });
+    const noteForeground = jest.spyOn(queue, 'noteForeground');
+    let listener: (state: string) => void = () => undefined;
+    const add = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (state: string) => void) => {
+      listener = fn;
+      return { remove: jest.fn() };
+    }) as never);
+    try {
+      await renderHook(() => usePartnerHomecoming(queue, true));
+      listener('background');
+      listener('active');
+      listener('active');
+      expect(noteForeground).toHaveBeenCalledTimes(1);
+    } finally {
+      add.mockRestore();
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
-import { normalizeLocalePreference, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
+import { normalizeLocalePreference, normalizeShownWalkIds, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
 
 export function createInMemorySettingsRepository(): SettingsRepository {
   let localePreference: LocalePreference = 'system';
@@ -9,6 +9,9 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let syncIdentity: SyncIdentity | null = null;
   let logShippingEnabled = true;
   let autoFinishEnabled = true;
+  let liveShareEnabled = false;
+  let liveSharePromptShown = false;
+  let shownPartnerWalkIds: string[] = [];
   return {
     async getSyncIdentity() {
       return syncIdentity ? { ...syncIdentity } : null;
@@ -45,6 +48,24 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveLogShippingEnabled(enabled) {
       logShippingEnabled = enabled !== false;
+    },
+    async getLiveShareEnabled() {
+      return liveShareEnabled;
+    },
+    async saveLiveShareEnabled(enabled) {
+      liveShareEnabled = enabled === true;
+    },
+    async getLiveSharePromptShown() {
+      return liveSharePromptShown;
+    },
+    async saveLiveSharePromptShown(shown) {
+      liveSharePromptShown = shown === true;
+    },
+    async getShownPartnerWalkIds() {
+      return [...shownPartnerWalkIds];
+    },
+    async saveShownPartnerWalkIds(ids) {
+      shownPartnerWalkIds = normalizeShownWalkIds(ids);
     },
   };
 }

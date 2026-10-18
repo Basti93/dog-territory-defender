@@ -9,6 +9,7 @@ import { WalkRepository } from '../storage/WalkRepository';
 import { calendarDayGap } from '../utils/manualWalkLog';
 import { cellCentre, cellKey, streetsKnown } from '../utils/grid';
 import { resolveNewGroundSpot, resolveWildClusterLabel } from '../utils/streetLookup';
+import { displayTerritoryName } from '../utils/territoryDisplayName';
 import { wildestCluster } from '../utils/wildSpot';
 import { formatDate, t, tPlural } from '../i18n';
 
@@ -136,7 +137,7 @@ export async function evaluateSomewhereWild(
         const anchorCell = cells.find((c) => cellKey(c.ix, c.iy) === cluster.anchorCellId);
         if (anchorCell?.territoryId) {
           const territory = await territoryRepository.getTerritory(anchorCell.territoryId);
-          if (territory) place = territory.name;
+          if (territory) place = displayTerritoryName(territory.name);
         }
       }
       const variantIndex = hashString(`${cluster.anchorCellId}:${nextVariantState.epoch}`) % WILD_CLUSTER_VARIANT_COUNT;

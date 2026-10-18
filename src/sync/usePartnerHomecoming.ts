@@ -1,4 +1,5 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 
 import type { PartnerHomecomingQueue, PartnerHomecomingRequest } from './partnerHomecoming';
 
@@ -11,6 +12,15 @@ export function usePartnerHomecoming(
   canPlay: boolean
 ): { request: PartnerHomecomingRequest | null; done: () => void } {
   const next = useSyncExternalStore(queue.subscribe, queue.peek);
+  // Every return to the front is a new "open": one more late homecoming (partner walk that ended while we were away) may come.
+  useEffect(() => {
+    let last: string = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && last !== 'active') queue.noteForeground();
+      last = state;
+    });
+    return () => subscription.remove();
+  }, [queue]);
   const done = useCallback(() => queue.shift(), [queue]);
   return { request: canPlay ? next : null, done };
 }

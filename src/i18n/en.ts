@@ -38,6 +38,7 @@ const en: Record<string, string> = {
   "phrase.dayAndTime.evening": "{weekday} evening",
   "territory.name.withPlace": "{dog}'s {place} Range",
   "territory.name.fallback": "{dog}'s New Range",
+  "territory.name.serverDefault": "A new corner",
 
   // ---- milestone titles (level 2, 4, 7, 11, 16, 22, 29, 37)
   "milestone.title.1": "Doorstep Sniffer",
@@ -157,6 +158,18 @@ const en: Record<string, string> = {
   "world.partnerOut": "{name} is out with {dog}",
   "world.backToYard": "back to the yard",
   "world.neighbourhoodLabel": "The neighbourhood: open the map",
+  "viertel.stats.walks.one": "{count} walk",
+  "viertel.stats.walks.other": "{count} walks",
+  "viertel.stats.streets.one": "{count} street",
+  "viertel.stats.streets.other": "{count} streets",
+  "viertel.stats.corners.one": "{count} corner",
+  "viertel.stats.corners.other": "{count} corners",
+  "viertel.note.today": "stitched today",
+  "viertel.note.wild": "tall grass, never been there",
+  "viertel.note.explore": "room to explore",
+  "viertel.territories": "Territories ›",
+  "viertel.territoriesLabel": "Open your territories",
+  "viertel.statsLabel": "Your neighbourhood: {stats}",
   "world.album": "Album",
   "world.albumLabel": "Bench: past walks",
   "world.post": "Mail",
@@ -577,6 +590,14 @@ const en: Record<string, string> = {
   "homecoming.line.when.3": "{dog} lies down like someone who earned it.",
   "homecoming.line.when.4": "The yard missed you both, a little.",
   "homecoming.line.when.5": "{when}: stitched in, signed, sniffed.",
+  // Live sharing (M4, opt-in): the Settings switch and the one-time question at the first walk start.
+  "liveShare.partnerFallback": "your household",
+  "liveShare.switch": "Share walks live",
+  "liveShare.hint": "{partner} sees your path while you are out. After 6 hours it is deleted.",
+  "liveShare.prompt.title": "May {partner} see your walk live?",
+  "liveShare.prompt.body": "You can change this any time in the Mailbox.",
+  "liveShare.prompt.yes": "Yes, please",
+  "liveShare.prompt.no": "Rather not",
 };
 
 export default en;

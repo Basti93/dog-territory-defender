@@ -1,3 +1,5 @@
+import { AppState } from 'react-native';
+
 import { createApiClient } from '../sync/apiClient';
 import { createSyncEngine } from '../sync/syncEngine';
 import { createPartnerHomecomingQueue } from '../sync/partnerHomecoming';
@@ -5,6 +7,8 @@ import { createPresenceSender } from '../sync/presenceSender';
 import { createPresenceViewer } from '../sync/presenceViewer';
 import { configureLogShipper } from '../utils/logShipper';
 import { resolveHouseholdLines } from '../sync/householdEvents';
+import type { PartnerWalkAdded } from '../sync/apply';
+import { setFixObserver } from '../utils/gps';
 import { repos } from './repositories';
 
 /** The one sync engine for the running app. Import this instead of building another. */
@@ -20,8 +24,27 @@ export const syncEngine = createSyncEngine({
 
 // Live presence of the household (M4 "Alex im Hof"): this phone's heartbeats while it walks, the foreground
 // poller that watches the others, and the queue that turns "her walk ended + her walk arrived" into a mini homecoming.
-export const presenceSender = createPresenceSender({ getIdentity: () => repos.settingsRepository.getSyncIdentity() });
-export const partnerHomecoming = createPartnerHomecomingQueue({ syncNow: () => syncEngine.syncNow() });
+// Sending is opt-in ("Runde live teilen", off until the player said yes) and is fed by the GPS layer itself, so beats
+// continue with the screen off (see presenceSender.ts).
+export const presenceSender = createPresenceSender({
+  getIdentity: () => repos.settingsRepository.getSyncIdentity(),
+  isEnabled: () => repos.settingsRepository.getLiveShareEnabled(),
+  isBackground: () => AppState.currentState !== 'active',
+});
+setFixObserver((location) => presenceSender.addFix(location));
+export const partnerHomecoming = createPartnerHomecomingQueue({
+  syncNow: () => syncEngine.syncNow(),
+  shown: {
+    load: () => repos.settingsRepository.getShownPartnerWalkIds(),
+    save: (ids) => repos.settingsRepository.saveShownPartnerWalkIds(ids),
+  },
+});
+
+/** Sync brought partner walks: they complete a live "they are back" (presence ended + walk arrived) or, if we missed the live moment, become the late one. */
+export function onPartnerWalks(walks: PartnerWalkAdded[]): void {
+  partnerHomecoming.noteWalksAdded(walks);
+  void partnerHomecoming.noteLateWalks(walks);
+}
 export const presenceViewer = createPresenceViewer({
   getIdentity: () => repos.settingsRepository.getSyncIdentity(),
   onWalkEnded: (walk) => partnerHomecoming.noteEnded(walk),

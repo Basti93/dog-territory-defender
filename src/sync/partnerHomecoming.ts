@@ -3,6 +3,10 @@
 // zurück" can play: beats 1 and 2 of the Heimkehr (the patch star, the treats into the bowl). The queue holds the
 // requests in memory; whoever renders (App) decides WHEN one may play, so it never interrupts a walk in progress or
 // the player's own homecoming and simply waits its turn.
+//
+// Late variant: when the partner's walk ended while this app was closed or in the background, the presence viewer never
+// saw it end; the walk simply shows up in the next sync. `noteLateWalks` turns the newest such walk (within 48 h, not
+// shown before, at most one per app open) into the same request. Shown walk ids are persisted so a walk never plays twice.
 
 import type { PartnerWalkAdded } from './apply';
 
@@ -10,6 +14,16 @@ import type { PartnerWalkAdded } from './apply';
 export const PENDING_TTL_MS = 5 * 60_000;
 /** Sync is asked for the partner's walk at these delays after the presence ended (her phone uploads right after the last beat). */
 export const SYNC_RETRY_DELAYS_MS = [2_000, 8_000, 20_000, 45_000, 90_000];
+/** A partner walk older than this (by its start) is not worth a "they are back" moment any more. */
+export const LATE_WINDOW_MS = 48 * 60 * 60_000;
+/** Shown walk ids kept on the phone; a walk older than the window can never come back anyway. */
+export const SHOWN_IDS_KEPT = 50;
+
+/** Where the ids of already shown partner homecomings live (SettingsRepository). */
+export interface ShownWalkStore {
+  load(): Promise<string[]>;
+  save(ids: string[]): Promise<void>;
+}
 
 export interface PartnerHomecomingRequest {
   walkId: string;
@@ -26,6 +40,14 @@ export interface PartnerHomecomingQueue {
   noteEnded(walk: { walkId: string; name: string }): void;
   /** Sync fetched these partner walks. Any that match an ended presence become requests. */
   noteWalksAdded(walks: PartnerWalkAdded[]): void;
+  /**
+   * Partner walks that arrived through sync, whether or not the presence viewer saw them end. The newest one that is
+   * within 48 h, was not shown before, is not manual and fits this open's single late slot becomes a request.
+   * Call it next to `noteWalksAdded` with the same list.
+   */
+  noteLateWalks(walks: PartnerWalkAdded[]): Promise<void>;
+  /** The app came to the front again: a new open, so one more late homecoming may be queued. */
+  noteForeground(): void;
   /** The request that is next in line, or null. */
   peek(): PartnerHomecomingRequest | null;
   /** Drops the request that is next in line (it has played). */
@@ -37,6 +59,8 @@ export interface PartnerHomecomingQueue {
 
 export interface PartnerHomecomingDeps {
   syncNow: () => Promise<void>;
+  /** Persists which walks already played. Absent = in memory only (tests). */
+  shown?: ShownWalkStore;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -55,6 +79,20 @@ export function createPartnerHomecomingQueue(deps: PartnerHomecomingDeps): Partn
   const pending = new Map<string, Pending>();
   const ready: PartnerHomecomingRequest[] = [];
   const played = new Set<string>();
+  // Order of shown ids, oldest first, so the persisted list can drop the oldest.
+  let shownOrder: string[] = [];
+  const hydrated: Promise<void> = deps.shown
+    ? deps.shown.load().then(
+        (ids) => {
+          // Merge, not replace: a walk may already have played before the stored list finished loading.
+          shownOrder = [...ids, ...shownOrder.filter((id) => !ids.includes(id))].slice(-SHOWN_IDS_KEPT);
+          shownOrder.forEach((id) => played.add(id));
+        },
+        () => undefined
+      )
+    : Promise.resolve();
+  // One late homecoming per app open.
+  let lateUsed = false;
   // Either signal may come first (her walk can reach sync a moment before the presence poll sees the end): the walk side is remembered briefly.
   const recentWalks = new Map<string, { walk: PartnerWalkAdded; at: number }>();
   const listeners = new Set<() => void>();
@@ -112,11 +150,34 @@ export function createPartnerHomecomingQueue(deps: PartnerHomecomingDeps): Partn
       for (const [id, entry] of recentWalks) if (now() - entry.at > PENDING_TTL_MS) recentWalks.delete(id);
     },
 
+    async noteLateWalks(walks) {
+      await hydrated;
+      if (lateUsed) return;
+      let best: PartnerWalkAdded | null = null;
+      for (const w of walks) {
+        if (w.manual || played.has(w.walkId) || ready.some((r) => r.walkId === w.walkId)) continue;
+        if (now() - w.startTime > LATE_WINDOW_MS) continue;
+        if (!best || w.startTime > best.startTime) best = w;
+      }
+      if (!best) return;
+      lateUsed = true;
+      forget(best.walkId); // a pending presence end for the same walk is answered by this
+      enqueue(best, best.name ?? '');
+    },
+
+    noteForeground() {
+      lateUsed = false;
+    },
+
     peek: () => ready[0] ?? null,
 
     shift() {
       const done = ready.shift();
-      if (done) played.add(done.walkId);
+      if (done) {
+        played.add(done.walkId);
+        shownOrder = [...shownOrder.filter((id) => id !== done.walkId), done.walkId].slice(-SHOWN_IDS_KEPT);
+        void deps.shown?.save(shownOrder).catch(() => undefined);
+      }
       notify();
     },
 

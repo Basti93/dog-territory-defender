@@ -4,12 +4,13 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Cell } from '../storage/HomeRangeRepository';
 import { Territory } from '../storage/TerritoryRepository';
 import { streetsKnown } from '../utils/grid';
+import { displayTerritoryName } from '../utils/territoryDisplayName';
 import { TerritoryTitle } from '../utils/territoryTitles';
 import { TerritoryPortrait } from './TerritoryPortrait';
 import { Badge, Card, Chip, palette, PressableScale, radii, shadows, spacing, textStyle, tokens } from '../ui';
 import { formatDate, formatNumber, t } from '../i18n';
 
-const TERRITORY_TITLE_KEYS: Record<TerritoryTitle, string> = {
+export const TERRITORY_TITLE_KEYS: Record<TerritoryTitle, string> = {
   Everyday: 'territories.title.everyday',
   'Wild One': 'territories.title.wildOne',
   'Far One': 'territories.title.farOne',
@@ -37,11 +38,13 @@ interface TerritoryCardProps {
  */
 export function TerritoryCard({ territory, cells, title, incomeRevealed, displayRate, onRename, onOpenMap }: TerritoryCardProps) {
   const [isRenaming, setIsRenaming] = useState(false);
-  const [draftName, setDraftName] = useState(territory.name);
+  // Generated default names show in the current language (the stored one may be from another language or the server).
+  const shownName = displayTerritoryName(territory.name);
+  const [draftName, setDraftName] = useState(shownName);
 
   const submitRename = () => {
     const trimmed = draftName.trim();
-    if (trimmed && trimmed !== territory.name) {
+    if (trimmed && trimmed !== shownName) {
       onRename(trimmed);
     }
     setIsRenaming(false);
@@ -62,7 +65,7 @@ export function TerritoryCard({ territory, cells, title, incomeRevealed, display
             autoFocus
           />
         ) : (
-          <Text style={[textStyle('h2'), styles.name]}>{territory.name}</Text>
+          <Text style={[textStyle('h2'), styles.name]}>{shownName}</Text>
         )}
         <PressableScale
           style={styles.editButton}

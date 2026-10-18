@@ -1,5 +1,5 @@
 import type { PartnerWalkAdded } from '../apply';
-import { createPartnerHomecomingQueue, PENDING_TTL_MS, SYNC_RETRY_DELAYS_MS } from '../partnerHomecoming';
+import { createPartnerHomecomingQueue, LATE_WINDOW_MS, PENDING_TTL_MS, SYNC_RETRY_DELAYS_MS, type ShownWalkStore } from '../partnerHomecoming';
 
 const walk = (over: Partial<PartnerWalkAdded> = {}): PartnerWalkAdded => ({
   walkId: 'w1',
@@ -102,5 +102,96 @@ describe('partner homecoming queue', () => {
     queue.noteEnded({ walkId: 'w1', name: 'Alex' });
     queue.dispose();
     expect(timers.every((t) => t.cancelled)).toBe(true);
+  });
+});
+
+describe('late partner homecoming (her walk ended while the app was closed or in the background)', () => {
+  const NOW = 1_000_000_000;
+  const memoryStore = (initial: string[] = []) => {
+    let ids = initial;
+    const store: ShownWalkStore = {
+      load: async () => ids,
+      save: jest.fn(async (next: string[]) => {
+        ids = next;
+      }),
+    };
+    return { store, get ids() { return ids; } };
+  };
+  const make = (initial: string[] = []) => {
+    const mem = memoryStore(initial);
+    const queue = createPartnerHomecomingQueue({ syncNow: async () => undefined, shown: mem.store, now: () => NOW, setTimer: () => 0, clearTimer: () => undefined });
+    return { queue, mem };
+  };
+  const recent = (over: Partial<PartnerWalkAdded> = {}) => walk({ startTime: NOW - 3_600_000, ...over });
+
+  it('a walk that arrives through sync without any live presence plays once', async () => {
+    const { queue } = make();
+    await queue.noteLateWalks([recent()]);
+    expect(queue.peek()).toMatchObject({ walkId: 'w1', name: 'Alex' });
+    queue.shift();
+    expect(queue.peek()).toBeNull();
+    await queue.noteLateWalks([recent()]); // replayed sync
+    expect(queue.peek()).toBeNull();
+  });
+
+  it('only within 48 h, and never a manually logged walk', async () => {
+    const { queue } = make();
+    await queue.noteLateWalks([recent({ walkId: 'old', startTime: NOW - LATE_WINDOW_MS - 1 }), recent({ walkId: 'logged', manual: true })]);
+    expect(queue.peek()).toBeNull();
+    await queue.noteLateWalks([recent({ walkId: 'edge', startTime: NOW - LATE_WINDOW_MS + 1000 })]);
+    expect(queue.peek()?.walkId).toBe('edge');
+  });
+
+  it('at most one per app open: the newest of several, then the next foreground allows one more', async () => {
+    const { queue } = make();
+    await queue.noteLateWalks([recent({ walkId: 'a', startTime: NOW - 7_200_000 }), recent({ walkId: 'b', startTime: NOW - 3_600_000 })]);
+    expect(queue.peek()?.walkId).toBe('b');
+    queue.shift();
+    await queue.noteLateWalks([recent({ walkId: 'c' })]);
+    expect(queue.peek()).toBeNull(); // same open
+    queue.noteForeground();
+    await queue.noteLateWalks([recent({ walkId: 'c' })]);
+    expect(queue.peek()?.walkId).toBe('c');
+  });
+
+  it('remembers what was shown across app runs (persisted ids), live homecomings included', async () => {
+    const { queue, mem } = make();
+    queue.noteEnded({ walkId: 'live', name: 'Alex' });
+    queue.noteWalksAdded([walk({ walkId: 'live' })]);
+    queue.shift();
+    await queue.noteLateWalks([recent({ walkId: 'late' })]);
+    queue.shift();
+    expect(mem.ids).toEqual(['live', 'late']);
+
+    const relaunched = make(mem.ids).queue;
+    await relaunched.noteLateWalks([recent({ walkId: 'late' }), recent({ walkId: 'live' })]);
+    expect(relaunched.peek()).toBeNull();
+  });
+
+  it('keeps only the last 50 shown ids', async () => {
+    const { queue, mem } = make(Array.from({ length: 50 }, (_, i) => `old${i}`));
+    await queue.noteLateWalks([recent({ walkId: 'fresh' })]);
+    queue.shift();
+    expect(mem.ids).toHaveLength(50);
+    expect(mem.ids[49]).toBe('fresh');
+    expect(mem.ids).not.toContain('old0');
+  });
+
+  it('does not double up with the live path for the same walk', async () => {
+    const { queue } = make();
+    queue.noteEnded({ walkId: 'w1', name: 'Alex' });
+    queue.noteWalksAdded([recent()]);
+    await queue.noteLateWalks([recent()]);
+    queue.shift();
+    expect(queue.peek()).toBeNull();
+    queue.noteEnded({ walkId: 'w1', name: 'Alex' });
+    expect(queue.peek()).toBeNull();
+  });
+
+  it('plays only when the caller lets it (never over her own walk or celebration): the request waits in the queue', async () => {
+    const { queue } = make();
+    await queue.noteLateWalks([recent()]);
+    // usePartnerHomecoming(queue, canPlay) is the gate (App.tsx: no celebration, no walk in progress); the queue itself keeps the request.
+    expect(queue.peek()?.walkId).toBe('w1');
   });
 });

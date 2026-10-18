@@ -63,4 +63,24 @@ describe('autoFinishEnabled (in-memory)', () => {
     await repo.saveAutoFinishEnabled(false);
     expect(await repo.getAutoFinishEnabled()).toBe(false);
   });
+
+  it('live sharing is OFF by default, the prompt is unanswered, and both round-trip independently', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getLiveShareEnabled()).toBe(false);
+    expect(await repo.getLiveSharePromptShown()).toBe(false);
+    await repo.saveLiveSharePromptShown(true);
+    expect(await repo.getLiveShareEnabled()).toBe(false);
+    await repo.saveLiveShareEnabled(true);
+    expect(await repo.getLiveShareEnabled()).toBe(true);
+    expect(await repo.getLiveSharePromptShown()).toBe(true);
+    await repo.saveLiveShareEnabled(false);
+    expect(await repo.getLiveShareEnabled()).toBe(false);
+  });
+
+  it('shown partner walk ids default to [], round-trip and drop junk', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getShownPartnerWalkIds()).toEqual([]);
+    await repo.saveShownPartnerWalkIds(['a', 'b', 3, ''] as never);
+    expect(await repo.getShownPartnerWalkIds()).toEqual(['a', 'b']);
+  });
 });

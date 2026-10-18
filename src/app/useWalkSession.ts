@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { play } from '../feedback/sounds';
 import { createWalkCueTracker } from '../feedback/walkCues';
-import { AppState, Walk } from '../types';
+import { AppState, Location as WalkLocation, Walk } from '../types';
 import { getInitialLocation, requestLocationPermission, startWatchingLocation, stopWatchingLocation } from '../utils/gps';
 import { cellKey, MIN_CELLS_FOR_REWARD } from '../utils/grid';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
@@ -23,7 +23,9 @@ import {
   WalkEndedBy,
 } from './autoFinish';
 import { notifyAutoFinishedIfBackgrounded } from './autoFinishNotify';
-import { applyLocationToCues, createWalkCueState, startWalkCueState } from './walkSessionHelpers';
+import { applyLocationToCues, createWalkCueState, resumeWalkCueState, startWalkCueState } from './walkSessionHelpers';
+import type { ActiveWalkRecorder } from './activeWalkRecorder';
+import { mergeNewerFixes } from './restoreWalk';
 
 export interface UseWalkSessionDeps {
   repos: AppRepositories;
@@ -36,10 +38,12 @@ export interface UseWalkSessionDeps {
   sync?: FinishTrackedWalkDeps['sync'];
   /** Live presence for the household partner (M4): heartbeats while tracking. Optional; absent = nobody sees the walk live. */
   presence?: PresenceSender;
+  /** Durable mirror of the walk in flight (see activeWalkRecorder.ts): lets a closed or killed app resume it. Optional; absent = the walk lives in memory only. */
+  activeWalk?: ActiveWalkRecorder;
 }
 
 /** The tracked-walk lifecycle: start, GPS fixes, finish, cancel/reset. One walk in flight at a time. */
-export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync, presence }: UseWalkSessionDeps) {
+export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync, presence, activeWalk }: UseWalkSessionDeps) {
   const { homeRangeRepository, walkRepository, notificationRepository } = repos;
   const [appState, setAppState] = useState<AppState>({ walk: null, isTracking: false, error: null });
 
@@ -99,6 +103,35 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
 
   const setError = useCallback((error: string | null) => setAppState((prev) => ({ ...prev, error })), []);
 
+  /** Snapshot of the Home Range for the "new street" cues; loads in the background and never delays the watcher. */
+  const loadCueRange = (cancelled: () => boolean) => {
+    homeRangeRepository
+      .getCells()
+      .then((rangeCells) => {
+        if (!cancelled() && walkCueState.active) walkCueState.range = new Set(rangeCells.map((c) => cellKey(c.ix, c.iy)));
+      })
+      .catch((err) => log('WALK_CUE_RANGE_ERROR', { error: String(err) }));
+  };
+
+  /** The callback for every fix the watcher delivers: cues, append to walkRef, presence, auto-finish. Used by start and resume. */
+  const makeFixHandler = () => {
+    let fixCount = 0;
+    return (location: WalkLocation) => {
+      fixCount++;
+      if (fixCount % 10 === 0) log('WALK_FIX_APPENDED', { count: fixCount });
+      // Audio cues only (never visual); sounds.play() also checks the sound pref.
+      const cue = applyLocationToCues(walkCueState, location, cueTracker);
+      if (cue) play(cue);
+      const current = walkRef.current;
+      if (!current) return;
+      walkRef.current = { ...current, locations: [...current.locations, location] };
+      const next = walkRef.current;
+      setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
+      presence?.tick(next);
+      runAutoFinishRef.current(location);
+    };
+  };
+
   const startWalk = async () => {
     // Double-tap guard + cancel guard: cancelWalk bumps startTokenRef, so any
     // async step below that resumes after a cancel bails out.
@@ -143,21 +176,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       autoFinishRef.current = startAutoFinish(initialLoc, newWalk.startTime, autoEnabled);
       setAutoFinishEnabled(autoEnabled);
       setHomeCountdownMin(null);
-      let fixCount = 0;
-      const watching = await startWatchingLocation((location) => {
-        fixCount++;
-        if (fixCount % 10 === 0) log('WALK_FIX_APPENDED', { count: fixCount });
-        // Audio cues only (never visual); sounds.play() also checks the sound pref.
-        const cue = applyLocationToCues(walkCueState, location, cueTracker);
-        if (cue) play(cue);
-        const current = walkRef.current;
-        if (!current) return;
-        walkRef.current = { ...current, locations: [...current.locations, location] };
-        const next = walkRef.current;
-        setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
-        presence?.tick(next);
-        runAutoFinishRef.current(location);
-      });
+      await activeWalk?.begin(newWalk); // before the watcher: the first stored fix must find the walk row
+      const watching = await startWatchingLocation(makeFixHandler());
       if (!watching) {
         // Previously swallowed: the walk then "tracked" with only its first point.
         log('WALK_WATCH_FAILED', { id: newWalk.id });
@@ -167,15 +187,12 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         // cancelWalk ran while the watcher was starting; it may have stopped nothing yet.
         walkRef.current = null;
         await stopWatchingLocation();
+        // begin() above may have stored the walk after cancelWalk's own clear: drop it, or a relaunch would "restore" a cancelled walk.
+        void activeWalk?.end();
         return;
       }
 
-      homeRangeRepository
-        .getCells()
-        .then((rangeCells) => {
-          if (!cancelled() && walkCueState.active) walkCueState.range = new Set(rangeCells.map((c) => cellKey(c.ix, c.iy)));
-        })
-        .catch((err) => log('WALK_CUE_RANGE_ERROR', { error: String(err) }));
+      loadCueRange(cancelled);
 
       const [fg, bg] = await Promise.all([Location.getForegroundPermissionsAsync(), Location.getBackgroundPermissionsAsync()]).catch(
         () => [{ status: 'unknown' }, { status: 'unknown' }]
@@ -212,6 +229,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     const walkToFinish = walkRef.current && endedBy ? { ...walkRef.current, endedBy } : walkRef.current;
     if (!walkToFinish) {
       setAppState((prev) => ({ ...prev, isTracking: false }));
+      void activeWalk?.end();
       return;
     }
     log('WALK_FINISH', { id: walkToFinish.id, points: walkToFinish.locations.length });
@@ -233,6 +251,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         onRewards,
         sync,
       });
+      // The walk is saved: the durable mirror has done its job. (Not cleared if finishing threw: a relaunch retries.)
+      await activeWalk?.end();
     } finally {
       // After the upload was queued, so the partner's phone usually finds the walk right when presence ends.
       void presence?.end(walkToFinish);
@@ -259,7 +279,70 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       log('WALK_CANCELLED', { id: walkRef.current.id, points: walkRef.current.locations.length });
     }
     walkRef.current = null;
+    void activeWalk?.end();
     setAppState({ walk: null, isTracking: false, error: null });
+  };
+
+  /**
+   * Cold-start restore: takes over a walk that was in flight when the app went away (useWalkRestore decides that).
+   * Same state as before the interruption: its points, start time, mode, auto-finish progress. Returns false, doing
+   * nothing, when a walk is already running or starting, so a double launch can never create a second walk.
+   */
+  const resumeWalk = async (restored: Walk, autoFinish: AutoFinishState): Promise<boolean> => {
+    if (walkRef.current || startingRef.current || restored.locations.length === 0) return false;
+    startingRef.current = true;
+    const token = ++startTokenRef.current;
+    const cancelled = () => startTokenRef.current !== token;
+    try {
+      walkRef.current = restored;
+      finishingRef.current = false;
+      cueTracker.reset();
+      resumeWalkCueState(walkCueState, restored.locations);
+      cueTracker.onCells(walkCueState.painted.size, 0); // already-reached milestones must not ding again
+      autoFinishRef.current = autoFinish;
+      setAutoFinishEnabled(autoFinish.enabled);
+      setHomeCountdownMin(homeCountdownMinutes(autoFinish, Date.now()));
+
+      // (Re)starts the location task: restarting a running one is harmless, and it re-attaches this session's callback.
+      const watching = await startWatchingLocation(makeFixHandler());
+      if (!watching) {
+        log('WALK_WATCH_FAILED', { id: restored.id });
+        setError(t('app.watchFailed'));
+      }
+      if (cancelled() || !walkRef.current) return false;
+
+      // Fixes that landed in the stored copy while this session was still starting (headless runtime) are not in memory yet.
+      const stored = await activeWalk?.load().catch(() => null);
+      if (stored && stored.meta.id === restored.id && walkRef.current) {
+        walkRef.current = mergeNewerFixes(walkRef.current, stored.locations, restored.locations[restored.locations.length - 1].timestamp);
+      }
+      const resumed = walkRef.current;
+      if (cancelled() || !resumed) return false;
+      loadCueRange(cancelled);
+      setAppState((prev) => ({ ...prev, walk: resumed, isTracking: true }));
+      presence?.start(resumed);
+      return true;
+    } finally {
+      if (startTokenRef.current === token) startingRef.current = false;
+    }
+  };
+
+  /**
+   * Cold-start restore of a walk that is over (stale, or the auto-finish rules say so): the normal finish path
+   * (stops the task, saves once, rewards once, celebration), then the session is reset for the next walk.
+   */
+  const finishRestoredWalk = async (restored: Walk, endedBy: WalkEndedBy): Promise<boolean> => {
+    if (walkRef.current || startingRef.current) return false;
+    walkRef.current = restored;
+    walkCueState.active = false;
+    finishingRef.current = false;
+    try {
+      await runFinish(endedBy);
+    } finally {
+      walkRef.current = null;
+      setAppState({ walk: null, isTracking: false, error: null });
+    }
+    return true;
   };
 
   return {
@@ -272,6 +355,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     startWalk,
     finishWalk,
     cancelWalk,
+    resumeWalk,
+    finishRestoredWalk,
+    /** True while a walk is running, starting, or finishing: restore must not touch the session then. */
+    isBusy: () => !!walkRef.current || startingRef.current,
     /** Clear a finished walk for the next one (same reset as cancel). */
     newWalk: cancelWalk,
   };

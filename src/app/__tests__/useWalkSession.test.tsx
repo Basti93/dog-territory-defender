@@ -134,7 +134,7 @@ describe('useWalkSession auto-finish', () => {
 });
 
 describe('useWalkSession live presence', () => {
-  const fakePresence = () => ({ start: jest.fn(), tick: jest.fn(), end: jest.fn().mockResolvedValue(undefined) }) satisfies PresenceSender;
+  const fakePresence = () => ({ start: jest.fn(), addFix: jest.fn(), optInChanged: jest.fn(), tick: jest.fn(), end: jest.fn().mockResolvedValue(undefined) }) satisfies PresenceSender;
   const startWith = async (presence: PresenceSender) => {
     let emit: (l: Location) => void = () => undefined;
     mocked.startWatchingLocation.mockImplementation(async (cb) => {

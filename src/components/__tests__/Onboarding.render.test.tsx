@@ -1,12 +1,14 @@
 import React from 'react';
 import { Dimensions } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { t } from '../../i18n';
 import { renderScreen, styleOf, unmountAndExpectNoTimers } from '../../test/render';
 import { OnboardingScreen, PermissionPrimerScreen } from '../onboarding';
+import { resetBackActions, runBackActions } from '../../app/backStack';
 
 beforeEach(() => {
+  resetBackActions();
   jest.useFakeTimers();
 });
 afterEach(() => {
@@ -50,6 +52,24 @@ describe('OnboardingScreen', () => {
     expect(screen.queryByText(t('onboarding.skip'))).toBeNull(); // no Skip on the last card
     await fireEvent.press(screen.getByText(t('onboarding.start')));
     expect(onDone).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('hardware back steps one card back and is left to the system on the first card', async () => {
+    const view = await renderScreen(<OnboardingScreen onDone={jest.fn()} />);
+    expect(runBackActions()).toBe(false);
+    await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByText(t('common.next')));
+    expect(activeDotIndex()).toBe(2);
+    await act(async () => {
+      expect(runBackActions()).toBe(true);
+    });
+    expect(activeDotIndex()).toBe(1);
+    await act(async () => {
+      expect(runBackActions()).toBe(true);
+    });
+    expect(activeDotIndex()).toBe(0);
+    expect(runBackActions()).toBe(false);
     await unmountAndExpectNoTimers(view);
   });
 

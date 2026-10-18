@@ -52,6 +52,7 @@ const de: Record<string, string> = {
   "phrase.dayAndTime.evening": "{weekday}abend",
   "territory.name.withPlace": "Revier von {dog} rund um {place}",
   "territory.name.fallback": "Neues Revier von {dog}",
+  "territory.name.serverDefault": "Eine neue Ecke",
 
   // ---- milestone titles (level 2, 4, 7, 11, 16, 22, 29, 37)
   "milestone.title.1": "Haustür-Schnüffler",
@@ -171,6 +172,18 @@ const de: Record<string, string> = {
   "world.partnerOut": "{name} ist mit {dog} unterwegs",
   "world.backToYard": "zurück zum Hof",
   "world.neighbourhoodLabel": "Das Viertel: Karte öffnen",
+  "viertel.stats.walks.one": "{count} Runde",
+  "viertel.stats.walks.other": "{count} Runden",
+  "viertel.stats.streets.one": "{count} Straße",
+  "viertel.stats.streets.other": "{count} Straßen",
+  "viertel.stats.corners.one": "{count} Ecke",
+  "viertel.stats.corners.other": "{count} Ecken",
+  "viertel.note.today": "heute genäht",
+  "viertel.note.wild": "hohes Gras, noch nie dort",
+  "viertel.note.explore": "Platz zum Entdecken",
+  "viertel.territories": "Reviere ›",
+  "viertel.territoriesLabel": "Reviere öffnen",
+  "viertel.statsLabel": "Euer Viertel: {stats}",
   "world.album": "Album",
   "world.albumLabel": "Bank: vergangene Runden",
   "world.post": "Post",
@@ -591,6 +604,14 @@ const de: Record<string, string> = {
   "homecoming.line.when.3": "{dog} legt sich hin wie jemand, der es sich verdient hat.",
   "homecoming.line.when.4": "Der Hof hat euch beide ein bisschen vermisst.",
   "homecoming.line.when.5": "{when}: eingenäht, unterschrieben, beschnuppert.",
+  // Live teilen (M4, Opt-in): Schalter in den Einstellungen und die einmalige Frage beim ersten Rundenstart.
+  "liveShare.partnerFallback": "dein Haushalt",
+  "liveShare.switch": "Runde live teilen",
+  "liveShare.hint": "{partner} sieht deinen Pfad, solange du unterwegs bist. Nach 6 Stunden ist er gelöscht.",
+  "liveShare.prompt.title": "Soll {partner} deine Runde live sehen können?",
+  "liveShare.prompt.body": "Du kannst das jederzeit im Briefkasten ändern.",
+  "liveShare.prompt.yes": "Ja, gern",
+  "liveShare.prompt.no": "Lieber nicht",
 };
 
 export default de;

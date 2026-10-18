@@ -7,7 +7,8 @@ import { IDENTITY } from '../../test/syncHelpers';
 const fix = (i: number) => ({ latitude: 52 + i * 0.0001, longitude: 13, timestamp: 1_000_000 + i * 1000, accuracy: 5 });
 const walkWith = (n: number, id = 'walk-1'): PresenceWalk => ({ id, startTime: 1_000_000, locations: Array.from({ length: n }, (_, i) => fix(i)) });
 
-function setup(over: { sendPresence?: (r: PresenceUpdateRequest) => Promise<unknown>; identity?: typeof IDENTITY | null } = {}) {
+function setup(over: { sendPresence?: (r: PresenceUpdateRequest) => Promise<unknown>; identity?: typeof IDENTITY | null; enabled?: { value: boolean } } = {}) {
+  const enabled = over.enabled ?? { value: true };
   const clock = { now: 10_000 };
   const sent: PresenceUpdateRequest[] = [];
   const sendPresence = jest.fn(async (r: PresenceUpdateRequest) => {
@@ -18,6 +19,7 @@ function setup(over: { sendPresence?: (r: PresenceUpdateRequest) => Promise<unkn
   const sleep = jest.fn(async () => undefined);
   const sender = createPresenceSender({
     getIdentity: async () => (over.identity === undefined ? IDENTITY : over.identity),
+    isEnabled: async () => enabled.value,
     createClient: () => ({ sendPresence }) as unknown as ApiClient,
     now: () => clock.now,
     sleep,
@@ -166,5 +168,113 @@ describe('presence sender', () => {
     expect(thin[0]).toEqual(points[0]);
     expect(thin[399]).toEqual(points[999]);
     expect(thinPoints(points.slice(0, 10), 400)).toHaveLength(10);
+  });
+
+  describe('opt-in ("Runde live teilen")', () => {
+    it('sends nothing at all while it is off: not at start, not on ticks, not at the end', async () => {
+      const { clock, sendPresence, sender, settle } = setup({ enabled: { value: false } });
+      sender.start(walkWith(3));
+      await settle();
+      for (let i = 4; i < 10; i++) {
+        clock.now += 20_000;
+        sender.addFix(fix(i));
+        sender.tick(walkWith(i + 1));
+      }
+      await settle();
+      await sender.end(walkWith(12));
+      expect(sendPresence).not.toHaveBeenCalled();
+    });
+
+    it('an unreadable setting counts as off', async () => {
+      const sendPresence = jest.fn(async () => ({ ok: true as const }));
+      const sender = createPresenceSender({
+        getIdentity: async () => IDENTITY,
+        isEnabled: async () => {
+          throw new Error('db down');
+        },
+        createClient: () => ({ sendPresence }) as unknown as ApiClient,
+        now: () => 10_000,
+      });
+      sender.start(walkWith(3));
+      await new Promise((r) => setImmediate(r));
+      expect(sendPresence).not.toHaveBeenCalled();
+    });
+
+    it('saying yes mid-walk starts the thread at once, with everything walked so far', async () => {
+      const enabled = { value: false };
+      const { clock, sent, sender, settle } = setup({ enabled });
+      sender.start(walkWith(3));
+      await settle();
+      clock.now += 2_000;
+      sender.addFix(fix(3));
+      await settle();
+      expect(sent).toHaveLength(0);
+      enabled.value = true;
+      sender.optInChanged();
+      await settle();
+      expect(sent).toHaveLength(1);
+      expect(sent[0].points).toHaveLength(4);
+      expect(sent[0].ended).toBeUndefined();
+    });
+
+    it('turning it off mid-walk closes the sign once and stays quiet for the rest of the walk', async () => {
+      const enabled = { value: true };
+      const { clock, sent, sender, settle } = setup({ enabled });
+      sender.start(walkWith(3));
+      await settle();
+      enabled.value = false;
+      clock.now += 31_000; // past the 30 s beat AND the 5 s answer cache
+      sender.addFix(fix(4));
+      await settle();
+      expect(sent).toHaveLength(2);
+      expect(sent[1].ended).toBe(true);
+      clock.now += 60_000;
+      sender.addFix(fix(5));
+      await sender.end(walkWith(6));
+      expect(sent).toHaveLength(2);
+    });
+  });
+
+  describe('the task feeder (addFix) and the foreground feeder (tick) share one cadence', () => {
+    it('fixes from the location task alone keep the beats going, without any walk object', async () => {
+      const { clock, sent, sender, settle } = setup();
+      sender.start(walkWith(1));
+      await settle();
+      expect(sent).toHaveLength(1);
+      for (let i = 1; i <= 29; i++) {
+        clock.now += 1_000;
+        sender.addFix(fix(i));
+      }
+      await settle();
+      expect(sent).toHaveLength(1); // 29 s in
+      clock.now += 1_000;
+      sender.addFix(fix(30));
+      await settle();
+      expect(sent).toHaveLength(2);
+      expect(sent[1].points).toHaveLength(30);
+    });
+
+    it('the same fix arriving through both feeders is sent once, and a tick right after a task beat does not beat again', async () => {
+      const { clock, sent, sendPresence, sender, settle } = setup();
+      sender.start(walkWith(1));
+      await settle();
+      clock.now += 31_000;
+      sender.addFix(fix(1));
+      sender.tick(walkWith(2)); // the walk session saw fixes 0..1 and brings fix 1 again
+      await settle();
+      expect(sendPresence).toHaveBeenCalledTimes(2);
+      expect(sent[1].points.map((p) => p.t)).toEqual([fix(1).timestamp]);
+    });
+
+    it('fixes before start() or after end() are ignored', async () => {
+      const { sendPresence, sender, settle } = setup();
+      sender.addFix(fix(0));
+      sender.start(walkWith(1));
+      await settle();
+      await sender.end(walkWith(1));
+      sender.addFix(fix(5));
+      await settle();
+      expect(sendPresence).toHaveBeenCalledTimes(2); // first beat + closing beat only
+    });
   });
 });

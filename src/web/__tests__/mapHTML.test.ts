@@ -1,4 +1,5 @@
-import { mapHTML, STITCH_PATCH_JS } from '../mapHTML';
+import { mapHTML, mapHTMLEmbedded, STITCH_PATCH_JS } from '../mapHTML';
+import { MAP_NOTES_JS } from '../mapTheme';
 import { portraitHTML } from '../portraitHTML';
 
 describe('live map HTML', () => {
@@ -10,6 +11,12 @@ describe('live map HTML', () => {
   it('applies the pastel filter on the tile images themselves, not the pane', () => {
     expect(mapHTML).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*saturate\(0\.2\)/);
     expect(mapHTML).not.toMatch(/\.leaflet-tile-pane\s*\{\s*filter/);
+  });
+
+  it('embedded band filters the tile layer, not each tile (no seam lines at fractional zoom); full map keeps per-tile', () => {
+    expect(mapHTMLEmbedded).toMatch(/\.leaflet-layer\s*\{\s*filter:\s*saturate\(0\.2\)/);
+    expect(mapHTMLEmbedded).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*none/);
+    expect(mapHTML).not.toMatch(/\.leaflet-layer\s*\{\s*filter/);
   });
 
   it('mounts the tint in the tile pane and reports theme status to the Debug Log', () => {
@@ -117,6 +124,91 @@ describe('live map HTML', () => {
       const stitch = load()(env.L);
       stitch(env.map, [], [[[1, 2], [3, 4]]], () => 0, () => undefined);
       expect(env.added).toEqual([{ seg: [[1, 2], [3, 4]], color: '#F2786E' }]);
+    });
+  });
+
+  describe('embedded Viertel (EMBEDDED init flag)', () => {
+    it('bakes the flag in: off for the full map, on for the scene band', () => {
+      expect(mapHTML).toContain('const EMBEDDED = false;');
+      expect(mapHTMLEmbedded).toContain('const EMBEDDED = true;');
+    });
+
+    it('disables every way to move the map when embedded', () => {
+      for (const option of ['zoomControl: false', 'dragging: false', 'touchZoom: false', 'scrollWheelZoom: false', 'doubleClickZoom: false', 'boxZoom: false', 'keyboard: false', 'tap: false']) {
+        expect(mapHTMLEmbedded).toContain(option);
+      }
+      // the full map keeps the plain, interactive options (the embedded branch is chosen at runtime by the flag)
+      expect(mapHTML).toContain(": { attributionControl: false }).setView([0, 0], 2)");
+    });
+
+    it('fits our Range with room for the signs, never above street level, and keeps the clouds still', () => {
+      expect(mapHTMLEmbedded).toContain('maxZoom: 17, paddingTopLeft: [20, 76], paddingBottomRight: [20, padBottom]');
+      expect(mapHTMLEmbedded).toContain('if (map.getZoom() < 15)'); // never zoomed out further than 15
+      expect(mapHTMLEmbedded).toContain("el.style.animation = 'none'");
+    });
+
+    it('handles SET_VIEW for an empty Range', () => {
+      expect(mapHTMLEmbedded).toContain("type === 'SET_VIEW'");
+      expect(mapHTMLEmbedded).toContain('payload.zoom || 16');
+    });
+
+    it('inline script is syntactically valid', () => {
+      const m = mapHTMLEmbedded.match(/<script>([\s\S]*)<\/script>\s*<\/body>/)!;
+      expect(() => new Function(m[1])).not.toThrow();
+    });
+  });
+
+  describe('SHOW_NOTES (handwritten notes)', () => {
+    const load = () => new Function('L', `${MAP_NOTES_JS}; return { mapNoteHTML, renderMapNotes };`);
+    const makeEnv = () => {
+      const markers: Array<{ latlng: number[]; html: string }> = [];
+      const group = { addTo: () => group };
+      const L = {
+        layerGroup: () => group,
+        divIcon: (o: { html: string }) => o,
+        marker: (latlng: number[], o: { icon: { html: string } }) => {
+          markers.push({ latlng, html: o.icon.html });
+          return { addTo: () => undefined };
+        },
+      };
+      return { L, markers, map: { removeLayer: jest.fn() } };
+    };
+
+    it('is wired into the message handler and styled with an embedded Caveat font', () => {
+      expect(mapHTML).toContain("type === 'SHOW_NOTES'");
+      expect(mapHTML).toContain("font-family: 'Caveat'");
+      expect(mapHTML).toContain('url(data:font/ttf;base64,');
+      expect(mapHTML).toContain('cursive'); // fallback
+    });
+
+    it('draws one note per entry at its position, escapes the text and clears the previous group', () => {
+      const env = makeEnv();
+      const { renderMapNotes } = load()(env.L);
+      const previous = {};
+      const group = renderMapNotes(env.map, [{ text: 'heute <b>genäht</b>', lat: 1, lon: 2, anchor: 'below' }, { text: 'Platz', lat: 3, lon: 4, kind: 'chalk' }, { text: 'bad', lat: 'x', lon: 5 }], previous);
+      expect(group).not.toBeNull();
+      expect(env.map.removeLayer).toHaveBeenCalledWith(previous);
+      expect(env.markers).toHaveLength(2);
+      expect(env.markers[0].latlng).toEqual([1, 2]);
+      expect(env.markers[0].html).toBe('<div class="map-note map-note-below">heute &lt;b&gt;genäht&lt;/b&gt;</div>');
+      expect(env.markers[1].html).toBe('<div class="map-note map-note-center map-note-chalk">Platz</div>');
+    });
+
+    it('filterMapNotes hides notes outside the visible map and shows the ones inside', () => {
+      const { filterMapNotes } = new Function(`${MAP_NOTES_JS}; return { filterMapNotes };`)();
+      const els = [{ style: { visibility: '' } }, { style: { visibility: '' } }];
+      const layers = [{ ll: 1, el: els[0] }, { ll: 9, el: els[1] }];
+      const group = { eachLayer: (fn: (m: unknown) => void) => layers.forEach((l) => fn({ getElement: () => l.el, getLatLng: () => l.ll })) };
+      filterMapNotes({ getBounds: () => ({ contains: (ll: number) => ll < 5 }) }, group);
+      expect(els.map((e) => e.style.visibility)).toEqual(['', 'hidden']);
+      expect(() => filterMapNotes({}, null)).not.toThrow();
+    });
+
+    it('an empty list clears and returns null', () => {
+      const env = makeEnv();
+      const { renderMapNotes } = load()(env.L);
+      expect(renderMapNotes(env.map, [], {})).toBeNull();
+      expect(env.map.removeLayer).toHaveBeenCalled();
     });
   });
 });

@@ -7,6 +7,7 @@ import { createSqliteNotificationRepository } from '../storage/sqliteNotificatio
 import { createSqliteBuddyAppearanceRepository } from '../storage/sqliteBuddyAppearanceRepository';
 import { createSqliteSettingsRepository } from '../storage/sqliteSettingsRepository';
 import { createSqliteSyncRepository } from '../storage/sqliteSyncRepository';
+import { createSqliteActiveWalkRepository } from '../storage/sqliteActiveWalkRepository';
 import { runHomeRangeMigrationIfNeeded } from '../storage/homeRangeMigration';
 import { runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
 import { loadFeedbackPrefsAtStartup } from '../feedback/feedbackRepository';
@@ -23,6 +24,7 @@ export interface AppRepositories {
   buddyAppearanceRepository: ReturnType<typeof createSqliteBuddyAppearanceRepository>;
   settingsRepository: ReturnType<typeof createSqliteSettingsRepository>;
   syncRepository: ReturnType<typeof createSqliteSyncRepository>;
+  activeWalkRepository: ReturnType<typeof createSqliteActiveWalkRepository>;
 }
 
 export function createAppRepositories(): AppRepositories {
@@ -36,6 +38,7 @@ export function createAppRepositories(): AppRepositories {
     buddyAppearanceRepository: createSqliteBuddyAppearanceRepository(),
     settingsRepository: createSqliteSettingsRepository(),
     syncRepository: createSqliteSyncRepository(),
+    activeWalkRepository: createSqliteActiveWalkRepository(),
   };
 }
 

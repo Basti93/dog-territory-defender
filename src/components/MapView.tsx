@@ -1,21 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { Location } from '../types';
-import { mapHTML } from '../web/mapHTML';
+import { mapHTML, mapHTMLEmbedded } from '../web/mapHTML';
 import { buildHomeRangeRasterPayload, cellIdsToCoords } from '../web/homeRangeRaster';
 import { log } from '../utils/log';
 import { paintedCells } from '../utils/grid';
-import { palette, radii, shadows, textStyle, tokens } from '../ui';
+import { material, palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { t } from '../i18n';
 import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
+import { embeddedFitFrame } from '../web/embeddedFit';
 import type { NeighbourhoodActions } from '../sync/neighbourhood';
 import { useNeighbourhood } from '../sync/useNeighbourhood';
 import { NeighbourCard } from './world/NeighbourCard';
 import { usePartnerWalk } from '../sync/presenceStore';
-import { partnerTrailPayload } from '../web/partnerTrail';
+import { partnerTrailFrameItem, partnerTrailPayload } from '../web/partnerTrail';
+import { ViertelSigns } from './world/ViertelSigns';
+import type { ViertelChromeData } from './world/useViertelChrome';
 
 interface MapViewProps {
   locations: Location[];
@@ -39,6 +42,16 @@ interface MapViewProps {
   onOpenTerritories?: () => void;
   /** Household sync's neighbour source (the sync engine). Omitted = no profile lines on the Nachbarhund card. */
   neighbourhood?: NeighbourhoodActions;
+  /**
+   * The Viertel band in the world scene: the same patchwork map, not interactive (no drag/zoom/tap, no frame), fitted to
+   * our Range with room for the signs. Taps are caught by a Pressable over the map and call `onEmbeddedPress`.
+   */
+  embedded?: boolean;
+  onEmbeddedPress?: () => void;
+  /** Idle map only: the territory/numbers signs and the handwritten notes (SHOW_NOTES). Omitted = the plain map with the old Territories button. */
+  chrome?: ViertelChromeData | null;
+  /** Embedded only: the bottom part of the page the scene's parallax pushes out of view. The Range fit, the empty-Range centre and the numbers sign keep clear of it; the tiles still fill it. */
+  bottomInset?: number;
 }
 
 export function MapView({
@@ -51,6 +64,10 @@ export function MapView({
   panToSpot,
   onOpenTerritories,
   neighbourhood,
+  embedded = false,
+  onEmbeddedPress,
+  chrome,
+  bottomInset = 0,
 }: MapViewProps) {
   const webViewRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
@@ -66,6 +83,11 @@ export function MapView({
   // Nachbarhunde: their dotted Ranges come from the in-memory nearby cache; a tap on a name sign opens the profile card.
   const hood = useNeighbourhood(neighbourhood);
   const [cardBotId, setCardBotId] = useState<string | null>(null);
+
+  // A household partner's walk in progress: her path grows as a stitched thread (null / stale = cleared).
+  const partner = usePartnerWalk();
+  const trailItem = embedded ? partnerTrailFrameItem(partnerTrailPayload(partner)) : null;
+  const trailKey = trailItem ? JSON.stringify(trailItem.cells) : '';
 
   const post = (type: string, payload: unknown) => {
     webViewRef.current?.postMessage(JSON.stringify({ type, payload }));
@@ -88,8 +110,12 @@ export function MapView({
     const liveOverlay = isTracking && locations.length > 0 ? cellIdsToCoords(paintedCells(locations)) : [];
     const raster = buildHomeRangeRasterPayload(persistedCellsRef.current, Date.now(), liveOverlay);
     // While idle the fit also holds the nearest neighbour Ranges (so they are in view when the map opens).
-    const frame = raster && fitBounds ? framePortraitNeighbours(raster, neighbourOverlayPayload(hood.nearby).items).frame : null;
-    post('SHOW_HOME_RANGE', { raster, fitBounds, frame });
+    // The embedded Viertel also keeps a household partner's thread in the picture (its bounding box only; see trailKey).
+    const items = neighbourOverlayPayload(hood.nearby).items;
+    const extras = trailItem ? [...items, trailItem] : items;
+    // The band frames the cluster of our newest paint (never a city-wide bounding box); the full map frames the whole Range.
+    const frame = !raster || !fitBounds ? null : embedded ? embeddedFitFrame(persistedCellsRef.current, extras) : framePortraitNeighbours(raster, items).frame;
+    post('SHOW_HOME_RANGE', { raster, fitBounds, frame, insetBottom: embedded ? bottomInset : 0 });
   };
 
   // Messages posted before the WebView finishes loading its page are silently
@@ -120,7 +146,7 @@ export function MapView({
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, isTracking, locations.length === 0, homeRangeRepository, homeRangeRefreshKey, hood.nearby]);
+  }, [isReady, isTracking, locations.length === 0, homeRangeRepository, homeRangeRefreshKey, hood.nearby, trailKey]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -128,8 +154,6 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, hood.nearby]);
 
-  // A household partner's walk in progress: her path grows as a stitched thread (null / stale = cleared).
-  const partner = usePartnerWalk();
   useEffect(() => {
     if (!isReady) return;
     post('SHOW_PARTNER_TRAIL', partnerTrailPayload(partner));
@@ -156,6 +180,22 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, isTracking, locations]);
 
+  // Handwritten notes ("heute genäht", "hohes Gras, noch nie dort", the chalk hint): one message per data change.
+  const notes = chrome?.loaded && !isTracking ? chrome.notes : null;
+  useEffect(() => {
+    if (!isReady) return;
+    post('SHOW_NOTES', { notes: notes ?? [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, notes]);
+
+  // Embedded with no Range yet: centre on the last known position at street level (the chalk hint sits there).
+  const emptyCenter = embedded && chrome?.loaded && chrome.rangeEmpty ? chrome.fallbackCenter : null;
+  useEffect(() => {
+    if (!isReady || !emptyCenter) return;
+    post('SET_VIEW', { latitude: emptyCenter.latitude, longitude: emptyCenter.longitude, zoom: 16, insetBottom: bottomInset });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, emptyCenter?.latitude, emptyCenter?.longitude]);
+
   // docs/decisions/somewhere-wild task 6.2: sends SHOW_WILD_SPOT whenever
   // the winning cluster/New-Ground location changes, and clears it (posts
   // `null`) when neither state applies — mirrors SHOW_HOME_RANGE's own
@@ -173,32 +213,55 @@ export function MapView({
     post('PAN_TO_SPOT', panToSpot);
   }, [isReady, panToSpot]);
 
+  const webView = (
+    <WebView
+      ref={webViewRef}
+      originWhitelist={['*']}
+      source={{ html: embedded ? mapHTMLEmbedded : mapHTML }}
+      style={styles.webView}
+      pointerEvents={embedded ? 'none' : undefined}
+      onMessage={handleWebViewMessage}
+      onLoadEnd={() => {
+        log('MAP_WEBVIEW_LOAD_END');
+        setIsReady(true);
+      }}
+    />
+  );
+  const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
+
+  if (embedded) {
+    // Nowhere known to look at yet (no Range, no walk, no permission): linen with the chalk hint instead of a world map.
+    const nowhere = !!chrome?.loaded && chrome.rangeEmpty && !chrome.fallbackCenter;
+    return (
+      <View style={styles.embedded} testID="viertel-map">
+        {webView}
+        {nowhere && (
+          <View pointerEvents="none" style={styles.nowhere}>
+            <Text style={styles.chalkText}>{t('viertel.note.explore')}</Text>
+          </View>
+        )}
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onEmbeddedPress}
+          accessibilityRole="button"
+          accessibilityLabel={t('world.neighbourhoodLabel')}
+        />
+        {/* Above the tap area: only the "Reviere" sign takes touches, every other sign lets them through. */}
+        {chrome ? <ViertelSigns chrome={chrome} onOpenTerritories={onOpenTerritories} bottomInset={bottomInset} /> : null}
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
       {/* Toy-window frame: outer view carries the soft shadow (overflow hidden would clip it on iOS); inner view clips the WebView to the rounded corners. */}
       <View style={styles.frameShadow}>
-      <View style={styles.frame}>
-      <WebView
-        ref={webViewRef}
-        originWhitelist={['*']}
-        source={{ html: mapHTML }}
-        style={styles.webView}
-        onMessage={handleWebViewMessage}
-        onLoadEnd={() => {
-          log('MAP_WEBVIEW_LOAD_END');
-          setIsReady(true);
-        }}
-      />
+        <View style={styles.frame}>{webView}</View>
       </View>
-      </View>
-      {/* Territories list screen entry point (docs/decisions/territories,
-          design.md Decision 8) — the map screen's own chrome, floating over
-          the WebView so it never competes with the map's bottom controls. */}
-      {(() => {
-        const item = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
-        return item ? <NeighbourCard item={item} lines={hood.linesFor(item.id)} onClose={() => setCardBotId(null)} /> : null;
-      })()}
-      {onOpenTerritories && (
+      {chrome?.loaded ? <ViertelSigns chrome={chrome} onOpenTerritories={onOpenTerritories} /> : null}
+      {cardItem ? <NeighbourCard item={cardItem} lines={hood.linesFor(cardItem.id)} onClose={() => setCardBotId(null)} /> : null}
+      {/* Territories list screen entry point (docs/decisions/territories, design.md Decision 8): without the Viertel signs it is this floating button. */}
+      {onOpenTerritories && !chrome?.loaded && (
         <TouchableOpacity style={styles.territoriesButton} onPress={onOpenTerritories} activeOpacity={0.85}>
           <Text style={[textStyle('small'), { color: tokens.text }]}>{t('map.territories')}</Text>
         </TouchableOpacity>
@@ -208,6 +271,9 @@ export function MapView({
 }
 
 const styles = StyleSheet.create({
+  embedded: { flex: 1, backgroundColor: material.linen },
+  nowhere: { ...StyleSheet.absoluteFillObject, backgroundColor: material.linen, alignItems: 'center', justifyContent: 'center' },
+  chalkText: { ...textStyle('hand'), color: material.woodRim, fontSize: 26, lineHeight: 30, transform: [{ rotate: '-3deg' }] },
   frameShadow: {
     flex: 1,
     borderRadius: radii.card,

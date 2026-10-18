@@ -49,6 +49,8 @@ export interface PartnerWalkAdded {
   treatsEarned: number;
   newGroundCellCount: number;
   distanceMeters: number;
+  /** A "log a missed walk" entry: it has no live moment, so it never gets a late homecoming. Absent = false. */
+  manual?: boolean;
 }
 
 export interface ApplyResult {
@@ -153,6 +155,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
           treatsEarned: full.treatsEarned ?? 0,
           newGroundCellCount: full.newGroundCellIds.length,
           distanceMeters: cumulativeDistance(full.locations),
+          manual: full.startSource === 'manual-log',
         });
       }
     }

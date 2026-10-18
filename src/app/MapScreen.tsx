@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MapView } from '../components/MapView';
+import { useViertelChrome } from '../components/world/useViertelChrome';
 import { SomewhereWildCard, SomewhereWildSpot } from '../components/SomewhereWildCard';
 import { Button, palette, spacing, textStyle, tokens } from '../ui';
 import { dogDisplayName } from '../economy/denEconomy';
@@ -42,6 +43,15 @@ interface MapScreenProps {
 export function MapScreen(p: MapScreenProps) {
   const { walk, isTracking } = p;
   const distance = walk ? cumulativeDistance(walk.locations) / 1000 : 0;
+  // Idle map: territory sign, numbers sign and handwritten notes (konzept section 3). Hidden while a walk is tracked.
+  const viertelChrome = useViertelChrome({
+    homeRangeRepository: p.repos.homeRangeRepository,
+    walkRepository: p.repos.walkRepository,
+    territoryRepository: p.repos.territoryRepository,
+    dogName: p.dogName,
+    refreshKey: p.homeRangeRefreshKey,
+    wildSpot: p.wildSpot,
+  });
   return (
     <ScreenFrame fadeKey={null} safeArea>
       <StatusBar />
@@ -58,6 +68,7 @@ export function MapScreen(p: MapScreenProps) {
           panToSpot={p.panToSpot}
           onOpenTerritories={p.onOpenTerritories}
           neighbourhood={p.neighbourhood}
+          chrome={isTracking ? null : viertelChrome}
         />
       </View>
 

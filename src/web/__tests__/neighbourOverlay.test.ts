@@ -171,7 +171,7 @@ describe('HTML wiring', () => {
     expect(mapHTML).toContain('hrRenderNeighbours(map, nbItems, neighbourLayerGroup');
     expect(mapHTML).toContain("type: 'NEIGHBOUR_TAPPED'");
     expect(mapHTML).toContain('.neighbour-sign');
-    expect(mapHTML).toContain('const { raster, fitBounds, frame } = payload');
+    expect(mapHTML).toContain('const { raster, fitBounds, frame, insetBottom } = payload');
     const m = mapHTML.match(/<script>([\s\S]*)<\/script>\s*<\/body>/)!;
     expect(() => new Function(m[1])).not.toThrow();
   });

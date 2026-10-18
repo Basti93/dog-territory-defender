@@ -4,6 +4,7 @@ import { formatNumber, t, tPlural } from '../../i18n';
 import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../../utils/grid';
 import { dayAndTimeOfDayPhrase } from '../../utils/manualWalkLog';
 import { WEIRD_HEADLINE_KEYS, pickWeirdKey, seedHash } from '../weirdCopy';
+import { displayTerritoryName } from '../../utils/territoryDisplayName';
 
 // Pure planning for the Heimkehr (konzept section 6): which beats run, what the one big number is,
 // how the choreography varies, and which closing sentence is spoken. No React in here.
@@ -146,7 +147,8 @@ export function resetClosingLineMemory(): void {
 }
 
 function placeOf(walk: HomecomingWalk): string | null {
-  return walk.newTerritoryName ?? walk.mergedTerritoryNames?.[0] ?? walk.territoryName ?? null;
+  const stored = walk.newTerritoryName ?? walk.mergedTerritoryNames?.[0] ?? walk.territoryName ?? null;
+  return stored === null ? null : displayTerritoryName(stored);
 }
 
 /**

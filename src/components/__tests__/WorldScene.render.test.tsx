@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen, within } from '@testing-library/react-native';
 import type { TestInstance } from 'test-renderer';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
@@ -10,6 +10,8 @@ import { formatRatePerHour } from '../world/bakeryRules';
 import { createInMemoryDenEconomyRepository } from '../../storage/inMemoryDenEconomyRepository';
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
 import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPersonalStatsRepository';
+import { createInMemoryTerritoryRepository } from '../../storage/inMemoryTerritoryRepository';
+import { cellCentre } from '../../utils/grid';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { advance, flush, imagesIn, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { pickSceneNotes, WorldScene, WorldSceneProps } from '../world/WorldScene';
@@ -19,6 +21,8 @@ import { resetNeighbourhood, setNearby, setNeighbourhood } from '../../sync/neig
 import type { NeighbourhoodActions } from '../../sync/neighbourhood';
 import { clearPartnerPresence, PRESENCE_STALE_MS, setPartnerPresence } from '../../sync/presenceStore';
 import { partnerHomecomingWalk } from '../world/homecomingPlan';
+
+const { posted } = require('react-native-webview') as { posted: string[] };
 
 jest.mock('../../feedback/sounds', () => ({
   ...jest.requireActual('../../feedback/sounds'),
@@ -141,8 +145,46 @@ describe('WorldScene', () => {
     expect(onOpenHistory).toHaveBeenCalledTimes(2);
     await fireEvent.press(screen.getByRole('button', { name: t('world.postLabel') }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    // no painted ground yet: the Viertel shows its gentle empty note instead of the portrait
-    expect(screen.getByText(t('doorstep.emptyRange', { dog: 'Rex' }))).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the Viertel band is one embedded patchwork map (WebView), not a captured portrait image', async () => {
+    const homeRangeRepository = createInMemoryHomeRangeRepository();
+    await homeRangeRepository.paintCells([{ ix: 1, iy: 1, refreshedAt: Date.now(), tracked: true, territoryId: null } as never]);
+    posted.length = 0;
+    const { view } = await setup({ homeRangeRepository });
+    const band = screen.getByTestId('viertel-map');
+    expect(within(band).getByTestId('webview')).toBeOnTheScreen();
+    expect(screen.getAllByTestId('webview')).toHaveLength(1); // exactly one map WebView in the scene
+    expect(screen.queryByText(t('portrait.gettingTerritory'))).toBeNull(); // the portrait's placeholder is gone
+    expect(imagesIn(band)).toHaveLength(0);
+    const types = posted.map((m) => JSON.parse(m).type);
+    expect(types).toContain('SHOW_HOME_RANGE');
+    expect(types).toContain('SHOW_NOTES');
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('shows the numbers sign, the territory sign with its title and the Reviere sign over the map', async () => {
+    const homeRangeRepository = createInMemoryHomeRangeRepository();
+    const territoryRepository = createInMemoryTerritoryRepository();
+    const id = await territoryRepository.createTerritory('Hinterm Park', 1);
+    const walkRepository = createInMemoryWalkRepository();
+    const [latitude, longitude] = cellCentre(10, 10);
+    await homeRangeRepository.paintCells([{ ix: 10, iy: 10, refreshedAt: Date.now(), tracked: true, territoryId: id }]);
+    await walkRepository.saveWalk({ id: 'w1', startTime: Date.now() - 1000, locations: [{ latitude, longitude, timestamp: 1, accuracy: 5 }], closed: true, startSource: 'button' });
+    const onOpenTerritories = jest.fn();
+    const { view } = await setup({ homeRangeRepository, walkRepository, territoryRepository, onOpenTerritories });
+    expect(await screen.findByText('Hinterm Park')).toBeOnTheScreen();
+    expect(screen.getByText('1 walk')).toBeOnTheScreen();
+    expect(screen.getByText('1 street')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: t('viertel.territoriesLabel') }));
+    expect(onOpenTerritories).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('with no ground and no known position the band is linen with the chalk hint', async () => {
+    const { view } = await setup();
+    expect(await screen.findByText(t('viertel.note.explore'))).toBeOnTheScreen();
     await unmountAndExpectNoTimers(view);
   });
 

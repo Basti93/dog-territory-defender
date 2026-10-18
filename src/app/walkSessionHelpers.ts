@@ -28,6 +28,15 @@ export function startWalkCueState(state: WalkCueState, initialLoc: WalkLocation)
   state.last = initialLoc;
 }
 
+/** Re-arm the cue state for a walk that is being resumed with `locations` already recorded (never empty). */
+export function resumeWalkCueState(state: WalkCueState, locations: WalkLocation[]): void {
+  state.active = true;
+  state.range = null;
+  state.painted = paintedCells(locations);
+  state.newGround = new Set();
+  state.last = locations[locations.length - 1] ?? null;
+}
+
 /**
  * Feed one GPS fix into the cue state (incremental painting) and return the
  * cue to play, if any. No-op while inactive or before the first fix.

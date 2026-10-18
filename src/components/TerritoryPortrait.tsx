@@ -5,10 +5,6 @@ import WebView, { WebViewMessageEvent } from 'react-native-webview';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { buildHomeRangeRasterPayload } from '../web/homeRangeRaster';
 import { portraitHTML } from '../web/portraitHTML';
-import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
-import { PARTNER_TRAIL_FRAME_ID, partnerTrailFrameItem, partnerTrailPayload } from '../web/partnerTrail';
-import { usePartnerWalk } from '../sync/presenceStore';
-import { useNearby } from '../sync/useNearby';
 import { log } from '../utils/log';
 import { ArtImage, palette, shadows, textStyle } from '../ui';
 import { t } from '../i18n';
@@ -31,12 +27,8 @@ interface TerritoryPortraitProps {
   onEmptyChange?: (isEmpty: boolean) => void;
   /** Portrait height in px (default 160). The Doorstep passes a smaller value so Buddy fits above Start Walk. */
   height?: number;
-  /** Screen-reader label for the tappable portrait (the world scene names it "The neighbourhood"). */
+  /** Screen-reader label for the tappable portrait. */
   accessibilityLabel?: string;
-  /** Draw the Nachbarhund Ranges (dotted, under ours) and widen the frame to hold the nearest ones. Only the whole-Range portrait sets this. */
-  showNeighbours?: boolean;
-  /** Draw a household partner's walk in progress as a stitched thread (the whole-Range portrait only). Each new heartbeat re-captures the still image. */
-  showPartnerTrail?: boolean;
 }
 
 /**
@@ -51,15 +43,12 @@ interface TerritoryPortraitProps {
  * "network-dependency consequence" note): falls back to a neutral,
  * non-error line. Never a broken-image icon, never technical error text.
  */
-export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel, showNeighbours = false, showPartnerTrail = false }: TerritoryPortraitProps) {
+export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, onPress, onEmptyChange, height = 160, accessibilityLabel }: TerritoryPortraitProps) {
   const webViewRef = useRef<WebView>(null);
   const [isWebViewReady, setIsWebViewReady] = useState(false);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [hasCells, setHasCells] = useState<boolean | null>(null);
-  const nearby = useNearby();
-  const partner = usePartnerWalk();
-  const partnerWalk = showPartnerTrail ? partner : null;
 
   useEffect(() => {
     if (suppliedCells) {
@@ -84,20 +73,7 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
     const renderFromCells = (cells: Cell[]) => {
       const raster = buildHomeRangeRasterPayload(cells, Date.now());
       if (!raster) return;
-      const payload: { raster: typeof raster; neighbours?: unknown; frame?: unknown } = { raster };
-      // Alex's thread goes to the page first; the page draws it into the next capture. Its bounding box takes part in
-      // the framing like a neighbour (so the thread stays in the picture) but is never drawn as one.
-      const trail = partnerTrailPayload(partnerWalk);
-      if (showPartnerTrail) webViewRef.current?.postMessage(JSON.stringify({ type: 'SHOW_PARTNER_TRAIL', payload: trail }));
-      const trailItem = partnerTrailFrameItem(trail);
-      if (showNeighbours || trailItem) {
-        const items = showNeighbours ? neighbourOverlayPayload(nearby).items : [];
-        const framed = framePortraitNeighbours(raster, trailItem ? [...items, trailItem] : items);
-        if (framed.frame) {
-          payload.neighbours = framed.items.filter((i) => i.id !== PARTNER_TRAIL_FRAME_ID);
-          payload.frame = framed.frame;
-        }
-      }
+      const payload = { raster };
       webViewRef.current?.postMessage(JSON.stringify({ type: 'RENDER_PORTRAIT', payload }));
     };
 
@@ -106,7 +82,7 @@ export function TerritoryPortrait({ homeRangeRepository, cells: suppliedCells, o
       return;
     }
     homeRangeRepository?.getCells().then(renderFromCells);
-  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells, showNeighbours, nearby, showPartnerTrail, partnerWalk]);
+  }, [isWebViewReady, hasCells, homeRangeRepository, suppliedCells]);
 
   const handleWebViewMessage = (event: WebViewMessageEvent) => {
     try {

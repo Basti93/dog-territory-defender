@@ -22,12 +22,13 @@ import type { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import type { PersonalStatsRepository } from '../../storage/PersonalStatsRepository';
 import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
+import type { TerritoryRepository } from '../../storage/TerritoryRepository';
 import type { WalkRepository } from '../../storage/WalkRepository';
 import { ArtImage, DecorImage, PaperNote, SpeechBubble, WoodSign, material, mix, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
 import type { AwayStripLine, DoorstepSession } from '../DoorstepScreen';
-import { TerritoryPortrait } from '../TerritoryPortrait';
+import { MapView } from '../MapView';
 import { BuildingSprite, YARD_ORDER, YardBuildingKey, artTierForLevel, yardWalkGeometry } from '../den/YardScene';
 import { YardBuddy } from '../den/YardBuddy';
 import { YardButterflies } from '../den/YardButterflies';
@@ -35,6 +36,7 @@ import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
 import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
 import { bowlAtCap, chimneyAnchor } from './bakeryRules';
+import { useBackAction } from '../../app/backStack';
 import { BuildingPanel } from './BuildingPanel';
 import { Homecoming } from './Homecoming';
 import { NeighbourCard } from './NeighbourCard';
@@ -53,6 +55,7 @@ import {
   worldYardLayout,
 } from './sceneLayout';
 import { skyTintForDate } from './timeOfDay';
+import { useViertelChrome } from './useViertelChrome';
 
 // "Unser Viertel", step 1 of the redesign (handover/redesign/konzept.md): ONE scene with three heights
 // replacing the Doorstep and the Den's yard. Start height = the yard with the gate at the top; scrolling
@@ -68,6 +71,7 @@ const BOWL_ZOOM_HOLD_MS = 2000;
 /** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides. */
 const GRASS_BASE = '#9BC995';
 const MAX_NOTES = 2;
+const NO_LOCATIONS: never[] = [];
 /** The yard's wooden-sign text is smaller than the 20pt default so long names fit under a building. */
 const SMALL_SIGN_TEXT = { fontSize: 15, lineHeight: 18 } as const;
 
@@ -111,6 +115,12 @@ export interface WorldSceneProps {
   homecoming?: { walk: HomecomingWalk; onDone: () => void } | null;
   /** The sync engine: neighbour lines, the gift parcel and the Viertel-Runde sign. Omitted (tests, not joined) = no neighbours. */
   neighbourhood?: NeighbourhoodActions;
+  /** The Viertel's territory sign (name + title). Omitted (tests) = no territory sign. */
+  territoryRepository?: TerritoryRepository;
+  /** The "Reviere ›" sign on the Viertel opens the Territories screen. Omitted = no sign. */
+  onOpenTerritories?: () => void;
+  /** Bump after a walk was finished so the Viertel signs and notes re-read the data. */
+  homeRangeRefreshKey?: number;
 }
 
 type NoteKind = 'update' | 'line' | 'neighbour';
@@ -193,9 +203,15 @@ export function WorldScene(props: WorldSceneProps) {
     accruedDelta = 0,
     territoryIncomeRate = 0,
     neighbourhood,
+    territoryRepository,
+    onOpenTerritories,
+    homeRangeRefreshKey,
   } = props;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  // Signs and notes for the Viertel band (before any early return: hooks keep their order).
+  const viertelChrome = useViertelChrome({ homeRangeRepository, walkRepository, territoryRepository, dogName, refreshKey: homeRangeRefreshKey });
+
   const layout = useMemo(() => sceneLayout(height, width, insets.top), [height, width, insets.top]);
 
   const scrollRef = useRef<{ scrollTo: (o: { x?: number; y?: number; animated?: boolean }) => void } | null>(null);
@@ -236,6 +252,9 @@ export function WorldScene(props: WorldSceneProps) {
     onUpgradeApplied: wildExtra.playLevelUp,
   });
   const [selected, setSelected] = useState<YardBuildingKey | null>(null);
+  // Android back: close the open building sign first, then bring the Viertel view back down to the yard.
+  useBackAction(selected !== null, () => setSelected(null));
+  useBackAction(isUp && !homecoming, scrollToYard);
   const [tap, setTap] = useState<{ building: YardBuildingKey; n: number } | null>(null);
   const selectBuilding = (building: YardBuildingKey) => {
     setSelected(building);
@@ -448,6 +467,9 @@ export function WorldScene(props: WorldSceneProps) {
   const backPose = buddyBackPoseSources(buddyAppearance);
   const gate = leaving ? artOr('gate-open', null) : artOr('gate-closed', null);
   const startOffset = layout.startOffset;
+  // At the top of the scroll the Viertel layer is pushed up by VIERTEL_PARALLAX * startOffset: the map reaches that far
+  // below the band so no bare linen shows between it and the fence zone.
+  const viertelOverscan = Math.ceil(VIERTEL_PARALLAX * layout.startOffset);
   const parallax = (k: number) => ({
     transform: [{ translateY: scrollY.interpolate({ inputRange: [0, startOffset], outputRange: [-k * startOffset, 0] }) }],
   });
@@ -784,10 +806,18 @@ export function WorldScene(props: WorldSceneProps) {
               </View>
             </WoodSign>
           </View>
-          <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '3deg' }] }]}>
-            <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
-              {title ? `${dog} · ${title}` : t('doorstep.dogLevel', { dog, level })}
-            </WoodSign>
+          <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 160, transform: [{ rotate: '3deg' }] }]}>
+            {title ? (
+              // Name on line 1, title on line 2 (shrinks to fit, never breaks inside a word).
+              <WoodSign size="small" accessibilityLabel={`${dog} · ${title}`}>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[textStyle('sign'), styles.dogSignText, SMALL_SIGN_TEXT]}>{dog}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[textStyle('sign'), styles.dogSignText, SMALL_SIGN_TEXT]}>{title}</Text>
+              </WoodSign>
+            ) : (
+              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
+                {t('doorstep.dogLevel', { dog, level })}
+              </WoodSign>
+            )}
           </View>
           {showsTerritorySign && (
             <View pointerEvents="none" style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '-3deg' }] }]}>
@@ -823,7 +853,8 @@ export function WorldScene(props: WorldSceneProps) {
             accessibilityLabel={t('world.toNeighbourhood')}
             style={[styles.hint, { top: layout.hintTop, height: HINT_H }]}
           >
-            <Text style={[textStyle('hand'), styles.hintText]}>{`↑ ${t('world.toNeighbourhood')}`}</Text>
+            {/* Trailing no-break space: Android clips the handwriting font's last glyph at the measured text width. */}
+            <Text style={[textStyle('hand'), styles.hintText]}>{`↑ ${t('world.toNeighbourhood')}\u00A0\u00A0`}</Text>
           </Pressable>
         </View>
 
@@ -833,14 +864,19 @@ export function WorldScene(props: WorldSceneProps) {
           style={[styles.layer, { top: layout.skyH, height: layout.viertelH + layout.fenceBottom + 120, zIndex: 1 }, parallax(VIERTEL_PARALLAX)]}
         >
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: material.linen }]} />
-          <View style={styles.cloth}>
-            <WorldPortrait
+          {/* The band itself is the cloth: one embedded patchwork map filling its full width and height. Not pannable; a tap opens the full map. */}
+          <View style={[styles.abs, { left: 0, right: 0, top: 0, height: layout.viertelH + viertelOverscan }]}>
+            <MapView
+              embedded
+              locations={NO_LOCATIONS}
               homeRangeRepository={homeRangeRepository}
-              onPress={onOpenMap}
-              dog={dog}
-              height={layout.viertelH - 72}
-              showNeighbours
-              showPartnerTrail
+              wildSpot={viertelChrome.wildSpot}
+              neighbourhood={neighbourhood}
+              chrome={viertelChrome}
+              bottomInset={viertelOverscan}
+              homeRangeRefreshKey={homeRangeRefreshKey}
+              onEmbeddedPress={onOpenMap}
+              onOpenTerritories={onOpenTerritories}
             />
           </View>
         </Animated.View>
@@ -885,42 +921,6 @@ export function WorldScene(props: WorldSceneProps) {
           </WoodSign>
         </View>
       )}
-    </View>
-  );
-}
-
-/** The embedded Viertel: the existing portrait (not pannable), framed like stitched cloth; tap opens the full map. */
-function WorldPortrait({
-  homeRangeRepository,
-  onPress,
-  dog,
-  height,
-  showNeighbours,
-  showPartnerTrail,
-}: {
-  homeRangeRepository: HomeRangeRepository;
-  onPress: () => void;
-  dog: string;
-  height: number;
-  showNeighbours?: boolean;
-  showPartnerTrail?: boolean;
-}) {
-  const [empty, setEmpty] = useState(false);
-  return empty ? (
-    <PaperNote style={styles.emptyNote}>
-      <Text style={[textStyle('body'), styles.noteText]}>{t('doorstep.emptyRange', { dog })}</Text>
-    </PaperNote>
-  ) : (
-    <View style={styles.clothFrame}>
-      <TerritoryPortrait
-        homeRangeRepository={homeRangeRepository}
-        onPress={onPress}
-        onEmptyChange={setEmpty}
-        height={height}
-        accessibilityLabel={t('world.neighbourhoodLabel')}
-        showNeighbours={showNeighbours}
-        showPartnerTrail={showPartnerTrail}
-      />
     </View>
   );
 }
@@ -970,17 +970,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: mix(tokens.blue, '#FFFFFF', 0.7),
   },
-  hintText: { color: material.inkGreen, fontSize: 20, lineHeight: 24 },
+  // Right padding: the handwriting font's last glyph overhangs its advance width and was clipped ("Viertei").
+  hintText: { color: material.inkGreen, fontSize: 20, lineHeight: 24, paddingHorizontal: 8 },
+  dogSignText: { color: material.ink, textAlign: 'center', alignSelf: 'stretch' },
   backWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  cloth: { position: 'absolute', left: 12, right: 12, top: 24, bottom: 0 },
-  clothFrame: {
-    backgroundColor: material.linen,
-    borderRadius: 16,
-    padding: 8,
-    ...stitch(3, material.yarn),
-    overflow: 'hidden',
-  },
-  emptyNote: { alignSelf: 'stretch' },
   noteText: { color: material.ink },
   upgradeLabel: { alignItems: 'center' },
   upgradeTitle: { color: material.ink, textAlign: 'center' },

@@ -24,6 +24,7 @@ import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceReposi
 import { INVITE_CODE_LENGTH } from './syncConfig';
 import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult, PartnerWalkAdded } from './apply';
 import type { NeighbourhoodActions } from './neighbourhood';
+import { pickPartnerName } from './partnerName';
 import { getNeighbourhood, resetNeighbourhood, setNeighbourhood, setNeighbourLines } from './neighbourhoodStore';
 import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
@@ -57,6 +58,8 @@ export interface SyncStatus {
   unauthorized: boolean;
   /** The server refused a write with 426: the app needs an update. Changes stay queued; the Household section shows `household.updateNeeded`. */
   needsUpdate?: boolean;
+  /** The other household member's display name (live-share wording), or null when nobody else is known yet. */
+  partnerName?: string | null;
 }
 
 export interface SyncCallbacks {
@@ -416,6 +419,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
         busy,
         unauthorized,
         needsUpdate: state.needsUpdate === true,
+        partnerName: identity ? pickPartnerName(identity.playerId, state.players) : null,
       };
     },
 

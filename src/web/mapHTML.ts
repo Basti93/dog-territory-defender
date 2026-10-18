@@ -1,7 +1,7 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
 import { NEIGHBOUR_OVERLAY_SCRIPT } from './neighbourOverlayScript';
 import { PARTNER_TRAIL_CSS, PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
-import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
+import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_NOTES_CSS, MAP_NOTES_JS, MAP_THEME_CSS, MAP_TILE_FILTER, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 /**
  * "Naht läuft" (Heimkehr beat 1): animates the newest (fresh-band) patch seams' dash offset over STITCH_MS and
@@ -37,7 +37,24 @@ export const STITCH_PATCH_JS = `
     }
 `;
 
-export const mapHTML = `
+/**
+ * The embedded band fits at quarter zoom steps, so tiles are drawn at a fractional scale. With the tile filter on each
+ * <img> (MAP_THEME_CSS), the antialiased tile edges let the linen background shine through as a thin light grid line
+ * (seen on emulator: one vertical and one horizontal line across the band). Filtering the whole tile layer instead
+ * gives the same look without per-tile edges.
+ */
+const EMBEDDED_TILE_SEAM_CSS = `
+    img.leaflet-tile { filter: none; will-change: auto; }
+    .leaflet-layer { filter: ${MAP_TILE_FILTER}; }`;
+
+/**
+ * The Leaflet page. `embedded` = the Viertel band in the world scene: the same patchwork renderer and overlays, but the
+ * map itself is not interactive (no drag, zoom, tap, zoom control; the RN side puts a Pressable over it), the Range fit
+ * leaves room for the signs at the top and bottom of the band, and the clouds stand still (no endless repaint).
+ * The init flag is baked into the string as `const EMBEDDED`.
+ */
+function buildMapHTML(embedded: boolean): string {
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -52,7 +69,9 @@ export const mapHTML = `
     /* Toy-world look: see mapTheme.ts. Wild marker = docs/decisions/somewhere-wild's warm accent. */
 ${MAP_THEME_CSS}
 ${MAP_MARKER_CSS}
+${MAP_NOTES_CSS}
 ${PARTNER_TRAIL_CSS}
+${embedded ? EMBEDDED_TILE_SEAM_CSS : ''}
   </style>
 </head>
 <body>
@@ -62,10 +81,22 @@ ${HOME_RANGE_RENDERER_SCRIPT}
 ${NEIGHBOUR_OVERLAY_SCRIPT}
 ${PARTNER_TRAIL_SCRIPT}
 ${STITCH_PATCH_JS}
+${MAP_NOTES_JS}
 
-    const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
+    const EMBEDDED = ${embedded ? 'true' : 'false'};
+    const map = L.map('map', EMBEDDED
+      ? { attributionControl: false, zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false, tap: false, zoomSnap: 0.25 }
+      : { attributionControl: false }).setView([0, 0], 2);
 ${MAP_TILE_LAYER_JS}
 ${MAP_CLOUDS_JS}
+    if (EMBEDDED) {
+      // Still clouds: the CSS drift animation would keep the WebView repainting forever.
+      var stillCloudLeft = ['6%', '46%', '74%'];
+      document.querySelectorAll('.map-cloud').forEach(function (el, i) {
+        el.style.animation = 'none';
+        el.style.left = stillCloudLeft[i % 3];
+      });
+    }
 ${CORNER_SIGN_JS}
 
     let trailPolyline = null;
@@ -87,6 +118,8 @@ ${CORNER_SIGN_JS}
     let neighbourLayerGroup = null;
     // A household partner's walk in progress (SHOW_PARTNER_TRAIL): a stitched thread with a paw head.
     let partnerTrailGroup = null;
+    // Handwritten notes (SHOW_NOTES): "heute genäht", "hohes Gras, noch nie dort", the chalk hint on unknown ground.
+    let notesLayerGroup = null;
 
     function reset() {
       if (trailPolyline) {
@@ -192,7 +225,7 @@ ${MAP_THEME_PROBE_JS}
       // in-progress walk's cells overlaid as fresh paint, well before
       // they're persisted.
       if (type === 'SHOW_HOME_RANGE') {
-        const { raster, fitBounds, frame } = payload;
+        const { raster, fitBounds, frame, insetBottom } = payload;
         homeRangeLayerGroup = renderHomeRangeToMap(map, raster, homeRangeLayerGroup);
 
         if (fitBounds && raster) {
@@ -208,7 +241,17 @@ ${MAP_THEME_PROBE_JS}
           const east = (origin[0] + fw) * dLon;
           setTimeout(() => {
             map.invalidateSize();
-            map.fitBounds([[south, west], [north, east]].map((p) => L.latLng(p[0], p[1])), { maxZoom: 18, padding: [20, 20] });
+            const fitBox = [[south, west], [north, east]].map((p) => L.latLng(p[0], p[1]));
+            if (EMBEDDED) {
+              // Zoom 15..17 only: a tiny Range never zooms out to the city, a wide one is cropped instead of shrunk.
+              const padBottom = 70 + (insetBottom || 0);
+              map.fitBounds(fitBox, { maxZoom: 17, paddingTopLeft: [20, 76], paddingBottomRight: [20, padBottom], animate: false });
+              if (map.getZoom() < 15) {
+                map.setView(L.latLngBounds(fitBox).getCenter(), 15, { animate: false });
+                map.panBy([0, -(76 - padBottom) / 2], { animate: false });
+              }
+            }
+            else map.fitBounds(fitBox, { maxZoom: 18, padding: [20, 20] });
           }, 100);
         }
 
@@ -305,6 +348,24 @@ ${MAP_THEME_PROBE_JS}
         reportToRN('STITCH_PATCH_APPLIED', { patches: stitched });
       }
 
+      // payload { notes: [{ text, lat, lon, anchor?: 'center' | 'below' | 'abovePin', kind?: 'ink' | 'chalk' }] }; empty clears.
+      if (type === 'SHOW_NOTES') {
+        const noteList = (payload && payload.notes) || [];
+        notesLayerGroup = renderMapNotes(map, noteList, notesLayerGroup);
+        if (EMBEDDED) filterMapNotes(map, notesLayerGroup);
+        reportToRN('SHOW_NOTES_APPLIED', { count: noteList.length });
+      }
+
+      // Embedded Viertel with no Range yet: centre on a known position (payload { latitude, longitude, zoom }).
+      if (type === 'SET_VIEW') {
+        setTimeout(() => {
+          map.invalidateSize();
+          map.setView([payload.latitude, payload.longitude], payload.zoom || 16, { animate: false });
+          // The lower part of the page is hidden overscan: move the point up into the visible band.
+          if (payload.insetBottom) map.panBy([0, payload.insetBottom / 2], { animate: false });
+        }, 100);
+      }
+
       // docs/decisions/somewhere-wild — pans/zooms to a specific spot on
       // "Somewhere Wild" card tap (tasks.md task 5.2). Distinct from
       // SHOW_WILD_SPOT (which only places/clears the marker) so the card can
@@ -315,6 +376,9 @@ ${MAP_THEME_PROBE_JS}
       }
     }
 
+    // Embedded band: notes outside the fitted view stay hidden (re-checked whenever the view settles).
+    map.on('moveend', function () { if (EMBEDDED) filterMapNotes(map, notesLayerGroup); });
+
     // Android WebView delivers postMessage on document; iOS delivers on window.
     window.addEventListener('message', handleMessage);
     document.addEventListener('message', handleMessage);
@@ -322,3 +386,7 @@ ${MAP_THEME_PROBE_JS}
 </body>
 </html>
 `;
+}
+
+export const mapHTML = buildMapHTML(false);
+export const mapHTMLEmbedded = buildMapHTML(true);

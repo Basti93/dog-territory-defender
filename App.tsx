@@ -6,12 +6,16 @@ import { t } from './src/i18n';
 
 
 import { repos } from './src/app/repositories';
-import { loadHouseholdLines, partnerHomecoming, presenceSender, presenceViewer, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
+import { loadHouseholdLines, onPartnerWalks, partnerHomecoming, presenceSender, presenceViewer, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
 import { useSync } from './src/sync/useSync';
 import { usePresenceViewer } from './src/sync/usePresenceViewer';
 import { usePartnerHomecoming } from './src/sync/usePartnerHomecoming';
+import { useLiveSharePrompt } from './src/sync/useLiveSharePrompt';
+import { LiveSharePrompt } from './src/components/LiveSharePrompt';
 import { screenKey, useNavigation } from './src/app/navigation';
 import { useWalkSession } from './src/app/useWalkSession';
+import { useWalkRestore } from './src/app/useWalkRestore';
+import { activeWalkRecorder } from './src/app/activeWalkRuntime';
 import { useCelebration } from './src/app/useCelebration';
 import { useFirstLaunch } from './src/app/useFirstLaunch';
 import { useLaunchEffects } from './src/app/useLaunchEffects';
@@ -19,6 +23,8 @@ import { useManualWalkLog } from './src/app/useManualWalkLog';
 import { useAppReady } from './src/app/useAppReady';
 import { useOtaUpdates } from './src/app/useOtaUpdates';
 import { LoadingView, ScreenFrame } from './src/app/ScreenFrame';
+import { resolveAppBack, runBackActions, useBackAction, useHardwareBack } from './src/app/backStack';
+import { EdgeSwipeBack } from './src/app/EdgeSwipeBack';
 import { MapScreen } from './src/app/MapScreen';
 import { SomewhereWildSpot } from './src/components/SomewhereWildCard';
 import { TerritoriesScreen } from './src/components/TerritoriesScreen';
@@ -39,6 +45,9 @@ import { useAmbientMusic } from './src/app/useAmbientMusic';
 import { useMusicEnabled } from './src/feedback/feedbackPrefs';
 import { dogDisplayName } from './src/economy/denEconomy';
 import { requestNotificationPermission } from './src/notifications/scheduler';
+
+// Stable reference for useLiveSharePrompt's effect.
+const getSyncStatus = () => syncEngine.getStatus();
 
 // Keep the native splash up until the fonts gate opens, so no blank frame flashes.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -75,7 +84,7 @@ export default function App() {
       if (state.dogName) setDogName(state.dogName);
     },
     onRangeChanged: bumpRangeRefresh,
-    onPartnerWalks: partnerHomecoming.noteWalksAdded,
+    onPartnerWalks,
     onCommandRejected: (error) => {
       // Gentle, never an error tone (Buddy anti-guilt rule); the Den already shows the server's balance.
       if (error === 'insufficient-treats') Alert.alert(t('household.notEnoughTreats'));
@@ -90,6 +99,7 @@ export default function App() {
     repos,
     sync: syncEngine,
     presence: presenceSender,
+    activeWalk: activeWalkRecorder,
     dogName,
     onRangeChanged: bumpRangeRefresh,
     onRewards: (outcome) => {
@@ -111,6 +121,13 @@ export default function App() {
         walkTime: outcome.wildExtra?.closedAt,
       });
     },
+  });
+  // The one-time "may {partner} see your walk live?" question at the first walk start (opt-in; nothing is sent before a yes).
+  const liveShare = useLiveSharePrompt({
+    settings: repos.settingsRepository,
+    getStatus: getSyncStatus,
+    isTracking: walkSession.isTracking,
+    presence: presenceSender,
   });
   const firstLaunch = useFirstLaunch(repos, { dogName, setDogName }, walkSession.setError);
   useAmbientMusic({
@@ -146,12 +163,51 @@ export default function App() {
     loadHouseholdLines,
   });
 
+  // A walk that was in flight when the app was closed or killed comes back (or is finished) once the first-launch state is
+  // loaded; a resumed walk lands on the live map.
+  useWalkRestore(firstLaunch.step === 'done', {
+    activeWalk: activeWalkRecorder,
+    isWalkSaved: async (id) => (await repos.walkRepository.getWalk(id)) !== null,
+    getAutoFinishEnabled: () => repos.settingsRepository.getAutoFinishEnabled(),
+    session: walkSession,
+    openMap: () => nav.goTo('map'),
+  });
+
   // The mini homecoming of a household partner ("Alex und Buddy sind zurück"): waits until nothing else is going on
   // (no walk in progress, no own celebration, the world scene in front), then plays once.
   const partnerReturn = usePartnerHomecoming(
     partnerHomecoming,
     firstLaunch.step === 'done' && !celebration && !walkSession.isTracking && screen === 'doorstep'
   );
+
+  // Android hardware back (and the iOS edge swipe, which calls the same registry): overlays and in-screen subviews
+  // register their own handlers on top of this one; this is the bottom layer, the screen stack. Never finishes or
+  // cancels a walk. Registered before any child mounts, so every child handler sits above it.
+  useBackAction(true, () => {
+    switch (
+      resolveAppBack({
+        firstLaunchDone: firstLaunch.step === 'done',
+        homecomingPlaying: !!celebration || !!partnerReturn.request,
+        screen,
+        viewingWalk: !!nav.viewingWalk,
+        walkActive: walkSession.isTracking,
+      })
+    ) {
+      case 'default':
+        return false;
+      case 'consume':
+        return true;
+      case 'closeWalkPortrait':
+        nav.viewWalk(null);
+        return true;
+      case 'doorstep':
+        nav.goDoorstep();
+        return true;
+      case 'pop':
+        return nav.back();
+    }
+  });
+  useHardwareBack();
 
   // Fonts + language gate: first render waits so no screen flashes the system
   // font or the wrong language.
@@ -246,6 +302,9 @@ export default function App() {
         onDenPanelHandled={nav.goDoorstep}
         homecoming={homecoming}
         neighbourhood={syncEngine}
+        territoryRepository={repos.territoryRepository}
+        onOpenTerritories={() => nav.goTo('territories')}
+        homeRangeRefreshKey={homeRangeRefreshKey}
       />
   );
 
@@ -274,6 +333,12 @@ export default function App() {
   }
 
   const fadeKey = screenKey(screen);
+  // iOS edge swipe-back around every non-home screen (see EdgeSwipeBack). The key keeps one screen's slid-off state out of the next.
+  const swipeable = (id: string, node: React.ReactNode) => (
+    <EdgeSwipeBack key={id} onBack={runBackActions}>
+      {node}
+    </EdgeSwipeBack>
+  );
   switch (screen) {
     case 'doorstep':
     case 'den':
@@ -285,7 +350,8 @@ export default function App() {
         </ScreenFrame>
       );
     case 'territories':
-      return (
+      return swipeable(
+        'territories',
         <ScreenFrame fadeKey={fadeKey}>
           <TerritoriesScreen
             buddyAppearance={buddyAppearance}
@@ -302,7 +368,8 @@ export default function App() {
       // viewed, with the screen left on 'history' underneath, so dismissing it
       // returns to the still-mounted history list, not the map.
       if (nav.viewingWalk) {
-        return (
+        return swipeable(
+          'history-portrait',
           <ScreenFrame fadeKey={null}>
             <WalkPortraitScreen
               walk={nav.viewingWalk}
@@ -314,7 +381,8 @@ export default function App() {
           </ScreenFrame>
         );
       }
-      return (
+      return swipeable(
+        'history',
         <ScreenFrame fadeKey={fadeKey}>
           <WalkHistoryScreen
             buddyAppearance={buddyAppearance}
@@ -330,13 +398,15 @@ export default function App() {
         </ScreenFrame>
       );
     case 'debugLog':
-      return (
+      return swipeable(
+        'debugLog',
         <ScreenFrame fadeKey={fadeKey}>
           <DebugLogScreen notificationRepository={repos.notificationRepository} onClose={nav.close} />
         </ScreenFrame>
       );
     case 'settings':
-      return (
+      return swipeable(
+        'settings',
         <ScreenFrame fadeKey={fadeKey}>
           <SettingsScreen
             notificationRepository={repos.notificationRepository}
@@ -357,7 +427,8 @@ export default function App() {
         </ScreenFrame>
       );
     case 'stats':
-      return (
+      return swipeable(
+        'stats',
         <ScreenFrame fadeKey={fadeKey}>
           <StatsScreen
             buddyAppearance={buddyAppearance}
@@ -368,7 +439,8 @@ export default function App() {
         </ScreenFrame>
       );
     case 'logMissedWalk':
-      return (
+      return swipeable(
+        'logMissedWalk',
         <ScreenFrame fadeKey={fadeKey}>
           <LogMissedWalkScreen
             onLog={manualLog.logMissedWalk}
@@ -379,34 +451,38 @@ export default function App() {
         </ScreenFrame>
       );
     case 'map':
-      return (
-        <MapScreen
-          repos={repos}
-          walk={walkSession.walk}
-          isTracking={walkSession.isTracking}
-          error={walkSession.error}
-          autoFinishEnabled={walkSession.autoFinishEnabled}
-          homeCountdownMin={walkSession.homeCountdownMin}
-          dogName={dogName}
-          treats={treats}
-          level={level}
-          homeRangeRefreshKey={homeRangeRefreshKey}
-          wildSpot={wildSpot}
-          panToSpot={panToSpot}
-          onWildSpotChange={setWildSpot}
-          onTapWildSpot={(spot) => setPanToSpot({ ...spot, requestId: Date.now() })}
-          onOpenTerritories={() => nav.goTo('territories')}
-          neighbourhood={syncEngine}
-          onBackToDoorstep={nav.goDoorstep}
-          onFinishWalk={walkSession.finishWalk}
-          onCancelWalk={walkSession.cancelWalk}
-          onNewWalk={() => {
-            walkSession.newWalk();
-            // The idle map has no Start Walk button (home-dashboard design.md
-            // Decision 9), so "New Walk" returns to the Doorstep.
-            nav.goDoorstep();
-          }}
-        />
+      return swipeable(
+        'map',
+        <>
+          <LiveSharePrompt visible={liveShare.visible} partnerName={liveShare.partnerName} onAnswer={liveShare.answer} />
+          <MapScreen
+            repos={repos}
+            walk={walkSession.walk}
+            isTracking={walkSession.isTracking}
+            error={walkSession.error}
+            autoFinishEnabled={walkSession.autoFinishEnabled}
+            homeCountdownMin={walkSession.homeCountdownMin}
+            dogName={dogName}
+            treats={treats}
+            level={level}
+            homeRangeRefreshKey={homeRangeRefreshKey}
+            wildSpot={wildSpot}
+            panToSpot={panToSpot}
+            onWildSpotChange={setWildSpot}
+            onTapWildSpot={(spot) => setPanToSpot({ ...spot, requestId: Date.now() })}
+            onOpenTerritories={() => nav.goTo('territories')}
+            neighbourhood={syncEngine}
+            onBackToDoorstep={nav.goDoorstep}
+            onFinishWalk={walkSession.finishWalk}
+            onCancelWalk={walkSession.cancelWalk}
+            onNewWalk={() => {
+              walkSession.newWalk();
+              // The idle map has no Start Walk button (home-dashboard design.md
+              // Decision 9), so "New Walk" returns to the Doorstep.
+              nav.goDoorstep();
+            }}
+          />
+        </>
       );
   }
 }
