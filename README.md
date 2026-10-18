@@ -2,6 +2,15 @@
 
 Location-based mobile game for dog owners: walk → GPS trail → close loop → claim territory. Spring-like, joyful, cookie-clicker background loop. Spec-driven — see `openspec/` for build plan and game design.
 
+## Project Status (2026-10-18)
+
+Phase 1 is feature-complete and is now in the owner's own week-long validation on Android; the audit skeleton is `openspec/validation/phase-1-audit.md`, to be filled at the end of the week (decision: CONTINUE / ITERATE / PIVOT / KILL).
+
+Landed this weekend: clay 3D sprites via Blender, animated Buddy (image skin, markings, lying pose, walk frames), clay UI kit + Nunito, Den yard hero, pastel map, 3-slot reminders with diagnostics, onboarding, sound family + music box + in-walk cues, Backup/Restore, i18n de/en, App.tsx decomposition, component test harness.
+
+- **Gate:** `npm run check` (`tsc --noEmit && jest --silent`) before every commit. Nothing is CI-driven; no `.github` workflows exist.
+- **Rebuild rule:** three native deps were added (`expo-av`, `expo-haptics`, `expo-document-picker`), so run `npm install` and rebuild the dev client (`npx expo run:android`) once after pulling; JS-only changes still hot-reload.
+
 ## Setup
 
 ### Prerequisites
@@ -56,6 +65,7 @@ React Native / Expo app, no backend yet — everything runs and persists locally
 - **utils** — GPS, geometry, the Home Range grid (cell addressing, freshness curve, painting, New Ground detection, splitting a trail into New-Ground/base colour runs for the Walk Portrait), manual-walk-log/calendar-day helpers (including the Walk Portrait's day-and-time-of-day phrase), wild-cluster selection (`wildSpot.ts`), reverse-geocode label resolution (`streetLookup.ts`), and the Territory clustering/merge algorithm plus character-title assignment (`territoryCluster.ts`, `territoryTitles.ts`)
 - **web** — the map's, the Doorstep portrait's, and the Walk Portrait's web content, hosted in WebViews, including the Home Range raster builder and its Gaussian-blur/marching-squares/Lab-colour renderer (shared by the interactive map, the still Doorstep portrait, and the Walk Portrait's muted background layer)
 - **openspec** — spec-driven build plan and game design docs (source of truth)
+- **openspec/validation** — per-phase validation audits (`phase-1-audit.md` is a skeleton for the owner to fill after his validation week)
 - **prototype** — clickable HTML design spec — match its visuals, not its structure
 - **testing** — GPX routes for simulated walks
 - **src/app** — the composition behind `App.tsx`: repositories + startup side effects, navigation (`Screen`, `useNavigation`), and the hooks for the walk session, first launch, once-per-launch effects and manual walk log
