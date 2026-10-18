@@ -40,7 +40,11 @@ export function setFixRecorder(recorder: ((location: LocationType) => void) | nu
   fixRecorder = recorder;
 }
 
-function deliver(location: LocationType): void {
+function deliver(raw: LocationType): void {
+  // iOS reports fractional milliseconds (1792359406662.5527). Whole ms from here on: storage, cells, sync and the
+  // server's bigint columns all assume integers. Rounding happens before the duplicate check, so two fixes less than
+  // 1 ms apart collapse into one (the second is dropped), and a zero time step can never reach the distance rule.
+  const location = { ...raw, timestamp: Math.round(raw.timestamp) };
   if (location.timestamp <= lastDeliveredTimestamp) return;
   lastDeliveredTimestamp = location.timestamp;
   try {

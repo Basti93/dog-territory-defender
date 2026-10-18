@@ -35,6 +35,7 @@ import { pullPresenceLongPoll, recordPresence } from '../services/presence';
 import { getWalk, ingestWalk, type AuthCtx } from '../services/walks';
 import { DeviceTokenAuthenticator, type Authenticator } from './auth';
 import { IpBanList } from './ipBan';
+import { normalizeImport, normalizeLogUpload, normalizePresence, normalizeWalkUpload } from './clientTimes';
 import {
   CommandSchema,
   GiftOpenBodySchema,
@@ -251,7 +252,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     API_PATHS.walks,
     { schema: { body: WalkUploadSchema }, bodyLimit: WALK_BODY_LIMIT },
     async (req, reply) => {
-      const result = await ingestWalk(db, bus, config, req.auth!, req.body as WalkUploadRequest, now());
+      const result = await ingestWalk(db, bus, config, req.auth!, normalizeWalkUpload(req.body as WalkUploadRequest), now());
       if (result.kind === 'rejected') {
         return reply.code(422).send({ error: 'walk_rejected', reason: result.reason } satisfies ApiError);
       }
@@ -264,7 +265,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     API_PATHS.import,
     { schema: { body: ImportSchema }, bodyLimit: IMPORT_BODY_LIMIT },
     async (req, reply) => {
-      const result = await importHousehold(db, bus, req.auth!, req.body as ImportRequest, now());
+      const result = await importHousehold(db, bus, req.auth!, normalizeImport(req.body as ImportRequest), now());
       if (result.kind === 'not-allowed') return reply.code(409).send({ error: 'import_not_allowed' } satisfies ApiError);
       return result.response;
     }
@@ -276,7 +277,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
       reply.header('Retry-After', String(logLimiter.retryAfterSeconds(req.auth!.deviceId, t)));
       return reply.code(429).send({ error: 'rate_limited' } satisfies ApiError);
     }
-    const result = await ingestLogs(db, req.auth!, req.body as LogUploadRequest, t);
+    const result = await ingestLogs(db, req.auth!, normalizeLogUpload(req.body as LogUploadRequest), t);
     if (result.kind === 'capped') return reply.code(429).send({ error: 'daily_cap' } satisfies ApiError);
     return { stored: result.stored };
   });
@@ -284,7 +285,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
   // Live presence (M4): ephemeral, household-private, not counted against the daily command cap.
   app.post(API_PATHS.presence, { schema: { body: PresenceSchema }, bodyLimit: 32 * 1024 }, async (req, reply): Promise<PresenceUpdateResponse> => {
     const t = now();
-    const body = req.body as PresenceUpdateRequest;
+    const body = normalizePresence(req.body as PresenceUpdateRequest);
     if (!body.ended && !presenceLimiter.hit(req.auth!.deviceId, t)) {
       reply.header('Retry-After', String(presenceLimiter.retryAfterSeconds(req.auth!.deviceId, t)));
       return reply.code(429).send({ error: 'rate_limited' } satisfies ApiError) as never;

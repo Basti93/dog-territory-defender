@@ -75,6 +75,16 @@ describe('the distance rule (docs/specs/walk-lifecycle.md)', () => {
     expect(stepCountsAsDistance(fixAt(0, 10), fixAt(100, 0))).toBe(false); // clock went backwards
   });
 
+  it('a zero time step (fixes under 1 ms apart collapse to the same ms) never divides: up to 60 m counts, more does not', () => {
+    const a: Location = { ...ORIGIN, timestamp: Math.round(1792359406662.2) };
+    const near: Location = { ...fixAt(30, 0, a), timestamp: Math.round(1792359406662.4) };
+    const far: Location = { ...fixAt(90, 0, a), timestamp: Math.round(1792359406662.4) };
+    expect(near.timestamp - a.timestamp).toBe(0);
+    expect(stepCountsAsDistance(a, near)).toBe(true);
+    expect(stepCountsAsDistance(a, far)).toBe(false);
+    expect(Number.isFinite(cumulativeDistance([a, near]))).toBe(true);
+  });
+
   it('cumulativeDistance skips failing steps; the legacy sum counts everything', () => {
     const a = ORIGIN;
     const b = fixAt(40, 30, a);

@@ -358,6 +358,7 @@ export async function ingestWalk(
         newGroundCellIds: Array.from(newGround),
         treatsEarned: qualifies ? treatsEarned : null,
         reward,
+        createdAt: new Date(now), // the quota queries compare created_at with `now`; the DB clock would break tests with a fixed clock
       })
       .returning();
 

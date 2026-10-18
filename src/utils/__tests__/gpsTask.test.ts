@@ -92,6 +92,14 @@ describe('location task feeding live sharing', () => {
     expect(sent).toHaveLength(3);
   });
 
+  it('hands out whole-millisecond timestamps (iOS reports fractions) and drops a fix under 1 ms after the last', async () => {
+    const seen: number[] = [];
+    await startWatchingLocation((l) => seen.push(l.timestamp));
+    const fix = (timestamp: number) => ({ coords: { latitude: 52, longitude: 13, accuracy: 5 }, timestamp });
+    await runTask({ data: { locations: [fix(T0 + 0.5527), fix(T0 + 1000.2), fix(T0 + 1000.4), fix(T0 + 2000.5)] }, error: null });
+    expect(seen).toEqual([T0 + 1, T0 + 1000, T0 + 2001]); // the third fix rounds to the second's ms: duplicate
+  });
+
   it('sends nothing from the task path while live sharing is off', async () => {
     const { sent } = setup(false);
     await settle();
