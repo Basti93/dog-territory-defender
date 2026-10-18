@@ -1,6 +1,5 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
-import { tokens } from '../ui/tokens';
-import { DOGHOUSE_HTML, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
+import { DOGHOUSE_HTML, TRAIL_BED, TRAIL_STAMPS, CORNER_SIGN_JS, MAP_CLOUDS_JS, MAP_MARKER_CSS, MAP_THEME_CSS, MAP_THEME_PROBE_JS, MAP_TILE_LAYER_JS, PAW_MARKER_HTML, WILD_PIN_HTML } from './mapTheme';
 
 export const mapHTML = `
 <!DOCTYPE html>
@@ -27,6 +26,7 @@ ${HOME_RANGE_RENDERER_SCRIPT}
     const map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
 ${MAP_TILE_LAYER_JS}
 ${MAP_CLOUDS_JS}
+${CORNER_SIGN_JS}
 
     let trailPolyline = null;
     let doghouseMarker = null;
@@ -41,6 +41,8 @@ ${MAP_CLOUDS_JS}
     // discovery. Mirrors currentMarker's add/remove pattern; only ever one
     // at a time, matching the card's own "one spot" rule.
     let wildSpotMarker = null;
+    // "Unsere Ecken": named corner signs (SHOW_CORNERS), one layer group.
+    let cornersLayerGroup = null;
 
     function reset() {
       if (trailPolyline) {
@@ -116,12 +118,10 @@ ${MAP_THEME_PROBE_JS}
 
         if (locations.length > 1) {
           const latLngs = locations.map((loc) => [loc.latitude, loc.longitude]);
-          // Drawn-path look: cream under-stroke + green main stroke, rounded.
-          const trailUnder = L.polyline(latLngs, { color: '${tokens.white}', weight: 10, opacity: 0.95, lineCap: 'round', lineJoin: 'round' });
-          const trailMain = L.polyline(latLngs, { color: '${tokens.green}', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' });
-          // Paw-dot overlay: zero-length round dashes every 14px read as paw prints along the route.
-          const trailDots = L.polyline(latLngs, { color: '${tokens.brown}', weight: 6, opacity: 0.9, dashArray: '0 14', lineCap: 'round', lineJoin: 'round' });
-          trailPolyline = L.layerGroup([trailUnder, trailMain, trailDots]).addTo(map);
+          // Trampelpfad: worn dirt bed + paw stamps (zero-length-ish round dashes).
+          const trailBed = L.polyline(latLngs, { color: '${TRAIL_BED.color}', weight: ${TRAIL_BED.weight}, opacity: ${TRAIL_BED.opacity}, lineCap: 'round', lineJoin: 'round' });
+          const trailStamps = L.polyline(latLngs, { color: '${TRAIL_STAMPS.color}', weight: ${TRAIL_STAMPS.weight}, opacity: 1, dashArray: '${TRAIL_STAMPS.dashArray}', lineCap: 'round', lineJoin: 'round' });
+          trailPolyline = L.layerGroup([trailBed, trailStamps]).addTo(map);
         }
 
         // Doghouse at the walk's start point; cleared when the trail is empty.
@@ -210,6 +210,27 @@ ${MAP_THEME_PROBE_JS}
           }).addTo(map);
         }
         reportToRN('SHOW_WILD_SPOT_APPLIED', { hasSpot: !!payload });
+      }
+
+      // "Unsere Ecken" scaffolding: payload is { corners: [{ name, ix, iy }] },
+      // each placed at the centre of grid cell (ix, iy) as a small wood sign.
+      // An empty/missing list clears. The data model comes later.
+      if (type === 'SHOW_CORNERS') {
+        if (cornersLayerGroup) {
+          map.removeLayer(cornersLayerGroup);
+          cornersLayerGroup = null;
+        }
+        const corners = (payload && payload.corners) || [];
+        if (corners.length > 0) {
+          cornersLayerGroup = L.layerGroup().addTo(map);
+          corners.forEach((c) => {
+            L.marker(hrCellCenterLatLng(c.ix, c.iy), {
+              icon: L.divIcon({ className: 'corner-marker', html: cornerSignHTML(c.name), iconSize: [0, 0] }),
+              interactive: false
+            }).addTo(cornersLayerGroup);
+          });
+        }
+        reportToRN('SHOW_CORNERS_APPLIED', { count: corners.length });
       }
 
       // docs/decisions/somewhere-wild — pans/zooms to a specific spot on

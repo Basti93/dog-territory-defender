@@ -1,5 +1,5 @@
 import { HOME_RANGE_RENDERER_SCRIPT } from './homeRangeRendererScript';
-import { MAP_THEME_CSS, MAP_TILE_LAYER_JS } from './mapTheme';
+import { MAP_THEME_CSS, MAP_TILE_LAYER_JS, TRAIL_BED, TRAIL_STAMPS } from './mapTheme';
 
 // The Walk Portrait's live, animated, non-interactive WebView host
 // (docs/decisions/walk-portrait/design.md Decision 1). Modeled directly on
@@ -32,7 +32,7 @@ export const walkPortraitHTML = `
     /* Same paw-start-marker convention as mapHTML.ts's own divIcon markers
        (current-position, wild-spot-marker) — a small, warm, non-alarming dot,
        not a pin/flag. See proposal.md's resolved "no end-of-trail marker". */
-    .walk-start-marker { width: 14px; height: 14px; background: #2ECC71; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 6px rgba(46, 204, 113, 0.6); }
+    .walk-start-marker { width: 14px; height: 14px; background: #2ECC71; border: 2px solid #FFFBF0; border-radius: 50%; box-shadow: 0 0 6px rgba(46, 204, 113, 0.6); }
 ${MAP_THEME_CSS}
   </style>
 </head>
@@ -70,6 +70,7 @@ ${MAP_TILE_LAYER_JS}
 
     var homeRangeLayerGroup = null;
     var basePolyline = null;
+    var baseStamps = null;
     var newGroundPolylines = [];
     var startMarker = null;
 
@@ -81,6 +82,7 @@ ${MAP_TILE_LAYER_JS}
 
     function clearTrail() {
       if (basePolyline) { map.removeLayer(basePolyline); basePolyline = null; }
+      if (baseStamps) { map.removeLayer(baseStamps); baseStamps = null; }
       for (var i = 0; i < newGroundPolylines.length; i++) { map.removeLayer(newGroundPolylines[i]); }
       newGroundPolylines = [];
       if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
@@ -140,16 +142,24 @@ ${MAP_TILE_LAYER_JS}
         }, 100);
       }
 
-      // Phase A: the full trail, chronologically, in the base colour.
+      // Phase A: the full route as a Trampelpfad (dirt bed + paw stamps).
       basePolyline = L.polyline([], {
-        color: HR_WILD_HEX,
-        weight: 4,
-        opacity: 0.9,
+        color: '${TRAIL_BED.color}',
+        weight: ${TRAIL_BED.weight},
+        opacity: ${TRAIL_BED.opacity},
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
+      baseStamps = L.polyline([], {
+        color: '${TRAIL_STAMPS.color}',
+        weight: ${TRAIL_STAMPS.weight},
+        dashArray: '${TRAIL_STAMPS.dashArray}',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+      var baseGrowth = { setLatLngs: function (pts) { basePolyline.setLatLngs(pts); baseStamps.setLatLngs(pts); } };
 
-      animateGrowth(basePolyline, walkLatLngs, PHASE_A_MS, function () {
+      animateGrowth(baseGrowth, walkLatLngs, PHASE_A_MS, function () {
         // Phase B: colour in just the New Ground runs on top of the
         // already-fully-drawn base trail — these finish last regardless of
         // where in the walk they chronologically occurred.
@@ -160,15 +170,24 @@ ${MAP_TILE_LAYER_JS}
         }
         for (var i = 0; i < newGroundRuns.length; i++) {
           var run = newGroundRuns[i];
+          // New Ground runs: the same path, worn in darker (full-opacity bed).
           var poly = L.polyline([], {
-            color: HR_FRESH_HEX,
-            weight: 4,
+            color: '${TRAIL_BED.color}',
+            weight: ${TRAIL_BED.weight},
             opacity: 1,
             lineCap: 'round',
             lineJoin: 'round'
           }).addTo(map);
-          newGroundPolylines.push(poly);
-          animateGrowth(poly, run, PHASE_B_MS, function () {
+          var runStamps = L.polyline([], {
+            color: '${TRAIL_STAMPS.color}',
+            weight: ${TRAIL_STAMPS.weight},
+            dashArray: '${TRAIL_STAMPS.dashArray}',
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(map);
+          newGroundPolylines.push(poly, runStamps);
+          var runGrowth = { setLatLngs: function (pts) { poly.setLatLngs(pts); runStamps.setLatLngs(pts); } };
+          animateGrowth(runGrowth, run, PHASE_B_MS, function () {
             pending--;
             if (pending === 0) {
               reportToRN('WALK_PORTRAIT_REVEAL_DONE', {});

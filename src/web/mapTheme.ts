@@ -3,39 +3,63 @@ import { tokens } from '../ui/tokens';
 // Shared "toy world" look for the Leaflet WebViews (mapHTML, walkPortraitHTML,
 // portraitHTML), so the map reads as part of the same soft-clay world as the
 // Buddy/Den art. Styling only: nothing here changes any bridge message,
-// projection, or the Home Range renderer. Colours reuse existing tokens
-// from src/ui/tokens.ts (imported below); every other colour here is
-// derived from those tokens via `mixHex`/`rgba` below, never a new literal.
+// projection, or the Home Range renderer. Spec tokens come from
+// src/ui/tokens.ts; the "Flickenteppich" material colours (linen, yarn cream,
+// felt greens, trampelpfad browns, wood sign, coral) are literals from
+// handover/redesign/mockups/02-viertel.html, listed in MATERIAL below.
 
 /** OSM Humanitarian (HOT) raster tiles: paler, fewer colours, no key. (CARTO Voyager showed "API key required" on device; standard OSM was too busy.) */
 export const MAP_TILE_URL = 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png';
 export const MAP_TILE_ATTRIBUTION = '© OpenStreetMap contributors, tiles © HOT / OSM France';
 export const MAP_TILE_HOST_SUFFIX = 'tile.openstreetmap.fr';
 
-/** Pull tiles toward the pastel palette. Used as CSS on img.leaflet-tile and (where supported) as canvas ctx.filter. */
-export const MAP_TILE_FILTER = 'saturate(0.8) brightness(1.03) contrast(0.95) hue-rotate(-6deg)';
-export const MAP_TINT_COLOR = tokens.meadow;
-export const MAP_TINT_ALPHA = 0.14;
+/**
+ * Flickenteppich material colours (handover/redesign/mockups/02-viertel.html).
+ * Felt patch fills live in homeRangeRendererScript.ts (HR_FILL_BANDS / HR_PATCH_PATTERN_DEFS).
+ */
+export const MATERIAL = {
+  linen: '#EFE7D6',
+  linenThread: '#E6DCC6',
+  yarn: '#FFFBF0', // stitched seams
+  blockCream: '#E4DBC5', // city blocks on the quiet map
+  pathBed: '#C9A06A', // Trampelpfad
+  pawStamp: '#8B6F47',
+  woodSign: '#E9C98E',
+  woodEdge: '#B08D5E',
+  woodBottom: '#7A5C3A',
+  coral: '#F2786E', // Somewhere-Wild pin
+} as const;
 
-const mixHex = (a: string, b: string, t: number): string => {
-  const p = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-  const c = (i: number) => Math.round(p(a, i) * (1 - t) + p(b, i) * t).toString(16).padStart(2, '0');
-  return `#${c(0)}${c(1)}${c(2)}`;
-};
+/**
+ * Quiet cream map: wash the HOT tiles toward grey-cream so blocks land near
+ * MATERIAL.blockCream, streets stay near white and labels stay readable.
+ * Used as CSS on img.leaflet-tile and (where supported) as canvas ctx.filter.
+ */
+export const MAP_TILE_FILTER = 'saturate(0.2) sepia(0.2) brightness(1.16) contrast(0.8)';
+export const MAP_TINT_COLOR = MATERIAL.linen;
+export const MAP_TINT_ALPHA = 0.35;
+/** Linen weave "paper" over the tiles, under the patches. */
+export const MAP_PAPER_ALPHA = 0.3;
+const LINEN_WEAVE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6" height="6" fill="${MATERIAL.linen}"/><path d="M0 3 H6 M3 0 V6" stroke="${MATERIAL.linenThread}" stroke-width="1"/></svg>`;
+
+/** Trampelpfad: walked routes as a worn dirt path with paw stamps (live trail + walk portrait). */
+export const TRAIL_BED = { color: MATERIAL.pathBed, weight: 7, opacity: 0.55 } as const;
+export const TRAIL_STAMPS = { color: MATERIAL.pawStamp, weight: 3, dashArray: '2 10' } as const;
+
 const rgba = (hex: string, alpha: number): string =>
   `rgba(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)}, ${alpha})`;
 
 const CREAM = tokens.white; // the token "cream" is #FAFAF8
-// Map background while tiles load: meadow washed halfway toward cream.
-const MAP_BG = mixHex(tokens.meadow, tokens.white, 0.5);
+// Map background while tiles load: linen.
+const MAP_BG = MATERIAL.linen;
 
 const svgUrl = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
 // Paw glyph: one pad + four toes, in green on a cream disc with a green ring.
 const PAW_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="${CREAM}" stroke="${tokens.green}" stroke-width="4"/><g fill="${tokens.green}"><ellipse cx="20" cy="25" rx="6.5" ry="5"/><ellipse cx="12.5" cy="19" rx="2.6" ry="3.4"/><ellipse cx="17.5" cy="14" rx="2.6" ry="3.4"/><ellipse cx="22.5" cy="14" rx="2.6" ry="3.4"/><ellipse cx="27.5" cy="19" rx="2.6" ry="3.4"/></g></svg>`;
 
-// Warm clay pin with a cream centre; anchored at its bottom tip.
-const WILD_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40"><path d="M16 38 C16 38 3 24 3 14 A13 13 0 0 1 29 14 C29 24 16 38 16 38 Z" fill="${tokens.warm}" stroke="${CREAM}" stroke-width="3"/><circle cx="16" cy="14" r="5.5" fill="${CREAM}"/></svg>`;
+// Coral pin with a cream centre; anchored at its bottom tip.
+const WILD_PIN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40"><path d="M16 38 C16 38 3 24 3 14 A13 13 0 0 1 29 14 C29 24 16 38 16 38 Z" fill="${MATERIAL.coral}" stroke="${CREAM}" stroke-width="3"/><circle cx="16" cy="14" r="5.5" fill="${CREAM}"/></svg>`;
 
 // Doghouse at the walk start: clay-style hut (brown walls, warm roof, cream door).
 const DOGHOUSE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect x="7" y="18" width="26" height="18" rx="3" fill="${tokens.brown}" stroke="${CREAM}" stroke-width="2"/><path d="M3 20 L20 5 L37 20 Z" fill="${tokens.warm}" stroke="${CREAM}" stroke-width="2" stroke-linejoin="round"/><path d="M15 36 V27 A5 5 0 0 1 25 27 V36 Z" fill="${CREAM}"/></svg>`;
@@ -48,6 +72,7 @@ export const MAP_THEME_CSS = `
     /* Filter on the tile <img>s themselves (NOT the pane too: they would compound). Some Android WebViews drop a filter set on the hardware-composited .leaflet-tile-pane. */
     img.leaflet-tile { filter: ${MAP_TILE_FILTER}; will-change: filter; }
     /* The tint lives inside the tile pane (above the tile layers, z-index 1) so only tiles are tinted. */
+    .map-paper { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 11; background: url("${svgUrl(LINEN_WEAVE_SVG)}"); opacity: ${MAP_PAPER_ALPHA}; mix-blend-mode: multiply; }
     .map-tint { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 10; background: ${MAP_TINT_COLOR}; opacity: ${MAP_TINT_ALPHA}; mix-blend-mode: multiply; }
     .leaflet-bar { border: none !important; box-shadow: none !important; }
     .leaflet-bar a, .leaflet-bar a:hover { background: ${CREAM}; color: ${tokens.brown}; border: none; border-radius: 14px !important; width: 34px; height: 34px; line-height: 34px; margin-bottom: 8px; font-weight: 700; box-shadow: 0 2px 5px ${rgba(tokens.text, 0.25)}; }
@@ -62,6 +87,8 @@ export const MAP_MARKER_CSS = `
     .paw-marker::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; border: 3px solid ${tokens.green}; opacity: 0; animation: paw-breathe 2.4s ease-out infinite; }
     @keyframes paw-breathe { 0% { transform: scale(0.9); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
     .wild-pin { background: url("${svgUrl(WILD_PIN_SVG)}") center / contain no-repeat; }
+    /* "Unsere Ecken": small wood sign (SHOW_CORNERS). Leaflet owns the outer divIcon element; styling is on the inner div. */
+    .corner-sign { display: inline-block; transform: translate(-50%, 0); white-space: nowrap; font-family: Fredoka, Nunito, system-ui, sans-serif; font-weight: 600; font-size: 13px; line-height: 1.1; color: ${tokens.text}; background: ${MATERIAL.woodSign}; border: 3px solid ${MATERIAL.woodEdge}; border-radius: 10px; box-shadow: 0 3px 0 ${MATERIAL.woodBottom}; padding: 3px 10px; }
     .doghouse { width: 100%; height: 100%; background: url("${svgUrl(DOGHOUSE_SVG)}") center / contain no-repeat; filter: drop-shadow(0 2px 3px ${rgba(tokens.text, 0.3)}); }
     .map-clouds { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 260; overflow: hidden; }
     .map-cloud { position: absolute; background: url("${svgUrl(CLOUD_SVG)}") center / contain no-repeat; animation: cloud-drift linear infinite; }
@@ -73,6 +100,13 @@ export const DOGHOUSE_HTML = '<div class="doghouse"></div>';
 /** divIcon inner HTML for the two markers (see MAP_MARKER_CSS). */
 export const PAW_MARKER_HTML = '<div class="paw-marker"></div>';
 export const WILD_PIN_HTML = '<div class="wild-pin"></div>';
+
+/** In-page JS defining cornerSignHTML(name): divIcon inner HTML for a named corner's wood sign. The name is user text, so it is HTML-escaped. */
+export const CORNER_SIGN_JS = `
+    function cornerSignHTML(name) {
+      var safe = String(name).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return '<div class="corner-sign">' + safe + '</div>';
+    }`;
 
 /**
  * JS (runs in the page) that builds the themed tile layer, the attribution
@@ -91,11 +125,15 @@ export const MAP_TILE_LAYER_JS = `
 
     (function () {
       var tint = L.DomUtil.create('div', 'map-tint', map.getPane('tilePane'));
+      var paper = L.DomUtil.create('div', 'map-paper', map.getPane('tilePane'));
       function syncTint() {
         var size = map.getSize();
-        tint.style.width = size.x + 'px';
-        tint.style.height = size.y + 'px';
-        L.DomUtil.setPosition(tint, map.containerPointToLayerPoint([0, 0]));
+        var origin = map.containerPointToLayerPoint([0, 0]);
+        [tint, paper].forEach(function (el) {
+          el.style.width = size.x + 'px';
+          el.style.height = size.y + 'px';
+          L.DomUtil.setPosition(el, origin);
+        });
       }
       map.on('move zoom viewreset resize', syncTint);
       syncTint();
@@ -146,6 +184,7 @@ export const MAP_THEME_PROBE_JS = `
           applied: window.__mapThemeApplied,
           tileFilter: f,
           tintPresent: !!document.querySelector('.leaflet-tile-pane > .map-tint'),
+          paperPresent: !!document.querySelector('.leaflet-tile-pane > .map-paper'),
           tileSrc: tile.src
         });
       }

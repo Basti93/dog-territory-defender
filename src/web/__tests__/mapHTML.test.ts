@@ -8,17 +8,20 @@ describe('live map HTML', () => {
   });
 
   it('applies the pastel filter on the tile images themselves, not the pane', () => {
-    expect(mapHTML).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*saturate\(0\.8\)/);
+    expect(mapHTML).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*saturate\(0\.2\)/);
     expect(mapHTML).not.toMatch(/\.leaflet-tile-pane\s*\{\s*filter/);
   });
 
   it('mounts the tint in the tile pane and reports theme status to the Debug Log', () => {
     expect(mapHTML).toContain("map.getPane('tilePane')");
     expect(mapHTML).toContain('MAP_THEME_APPLIED');
+    expect(mapHTML).toContain('map-paper'); // linen weave above tiles, below patches
   });
 
-  it('draws paw-dot trail, doghouse and clouds', () => {
-    expect(mapHTML).toContain("dashArray: '0 14'");
+  it('draws the Trampelpfad (dirt bed + paw stamps), doghouse and clouds', () => {
+    expect(mapHTML).toContain("color: '#C9A06A', weight: 7, opacity: 0.55");
+    expect(mapHTML).toContain("color: '#8B6F47', weight: 3");
+    expect(mapHTML).toContain("dashArray: '2 10'");
     expect(mapHTML).toContain('doghouseMarker');
     expect(mapHTML).toContain('map-cloud');
   });
@@ -37,7 +40,7 @@ describe('live map HTML', () => {
     expect(mapHTML).toContain('function hrAddSvgFillPolygons');
     expect(mapHTML).toContain('L.svg()');
     expect(mapHTML).toContain('L.polygon(latlngs');
-    expect(mapHTML).toContain('stroke: false');
+    expect(mapHTML).toContain('hrUsePatternFills(svgRenderer');
     // canvas fallback still present
     expect(mapHTML).toContain('function hrCreateCanvasFillLayer');
     expect(mapHTML).toContain('hrCreateCanvasFillLayer(canvas, L.latLngBounds(');
@@ -46,5 +49,26 @@ describe('live map HTML', () => {
     expect(handler).toContain("reportToRN('RANGE_RENDERED'");
     expect(handler).toContain('polygons: stats ? stats.polygons : 0');
     expect(handler).toContain('mode,');
+  });
+
+  it('paints felt patches: pattern defs once, stitched cream seams, flat-colour fallback', () => {
+    for (const id of ['hr-felt', 'hr-felt-fresh', 'hr-felt-wild']) expect(mapHTML).toContain(`<pattern id="${id}"`);
+    expect(mapHTML).toContain("var HR_SEAM_HEX = '#FFFBF0'");
+    expect(mapHTML).toContain("var HR_SEAM_DASH = '4 4'");
+    expect(mapHTML).toContain("pattern: 'hr-felt-fresh', flat: '#4FBF6B', seam: 4");
+    expect(mapHTML).toContain("url(#' + patches[i].hrBand.pattern + ')");
+    expect(mapHTML).toContain('patterns: false'); // stats report whether patterns took effect
+  });
+
+  it('SHOW_CORNERS renders named wood signs at grid cells and escapes the name', () => {
+    expect(mapHTML).toContain("type === 'SHOW_CORNERS'");
+    expect(mapHTML).toContain('hrCellCenterLatLng(c.ix, c.iy)');
+    expect(mapHTML).toContain('.corner-sign');
+    expect(mapHTML).toContain('#E9C98E');
+    expect(mapHTML).toContain('&lt;');
+  });
+
+  it('uses the coral pin for Somewhere Wild', () => {
+    expect(mapHTML).toContain(encodeURIComponent('#F2786E'));
   });
 });

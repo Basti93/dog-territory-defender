@@ -84,14 +84,28 @@ var HR_FILL_ALPHA_WILD = 0.35;
 // ~5k cells watch pan/zoom smoothness. smoothFactor lets Leaflet simplify
 // rings per zoom; raise it (or drop to 'canvas') if it gets sluggish.
 var HR_LIVE_FILL_MODE = 'svg';
-// Three nested bands, drawn wild -> fresh. wildness is the LUT sample point
-// (1 = wild end #DCE8BE, 0 = fresh end #2ECC71); minFresh is the threshold on
-// the freshness field (1 - blurred wildness) masked to inside the outline.
+// Three nested felt patches ("Flickenteppich"), drawn wild -> usual -> fresh.
+// wildness is the LUT sample point for the flat fallback / canvas mode
+// (1 = wild end, 0 = fresh end); minFresh is the threshold on the freshness
+// field (1 - blurred wildness) masked to inside the outline. pattern = id of
+// the SVG <pattern> in HR_PATCH_PATTERN_DEFS; flat = fill colour used when
+// patterns are unavailable; seam = stitched cream seam width (px).
 var HR_FILL_BANDS = [
-  { wildness: 1.0, opacity: 0.45, minFresh: null },
-  { wildness: 0.5, opacity: 0.5, minFresh: 0.3 },
-  { wildness: 0.0, opacity: 0.55, minFresh: 0.6 }
+  { name: 'wild', wildness: 1.0, minFresh: null, pattern: 'hr-felt-wild', flat: '#DCE8BE', seam: 3 },
+  { name: 'usual', wildness: 0.5, minFresh: 0.3, pattern: 'hr-felt', flat: '#9FD79A', seam: 3 },
+  { name: 'fresh', wildness: 0.0, minFresh: 0.6, pattern: 'hr-felt-fresh', flat: '#4FBF6B', seam: 4 }
 ];
+// Stitched seam: cream yarn, 4px dash / 4px gap, round caps (mockups 02-viertel).
+var HR_SEAM_HEX = '#FFFBF0';
+var HR_SEAM_DASH = '4 4';
+// Felt/grass patterns, defined once and injected into the L.svg() root so
+// polygons can fill with url(#id). Colours from handover/redesign/mockups/02-viertel.html.
+var HR_PATCH_PATTERN_DEFS =
+  '<defs>' +
+  '<pattern id="hr-felt" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="#9FD79A"/><circle cx="2.5" cy="2.5" r=".8" fill="#8CCB88"/></pattern>' +
+  '<pattern id="hr-felt-fresh" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="#4FBF6B"/><circle cx="2.5" cy="2.5" r=".8" fill="#45AE60"/></pattern>' +
+  '<pattern id="hr-felt-wild" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" fill="#DCE8BE"/><path d="M1 6 L2 2 M4 6 L5 1" stroke="#C6D6A0" stroke-width="1" stroke-linecap="round"/></pattern>' +
+  '</defs>';
 var HR_OUTLINE_WEIGHT = 2;
 var HR_OUTLINE_OPACITY = 0.8;
 var HR_OUTSIDE_SENTINEL = 255;
@@ -387,6 +401,35 @@ function hrRingsWithHoles(rings) {
 }
 
 /**
+ * Injects HR_PATCH_PATTERN_DEFS into the renderer's <svg> root (it exists once
+ * the renderer is on the map) and switches the given patch polygons from flat
+ * to pattern fills. Returns false (patches keep their flat colours) if the
+ * defs could not be created.
+ */
+function hrUsePatternFills(renderer, patches) {
+  try {
+    var svg = renderer && renderer._container;
+    if (!svg || !document.createElement) return false;
+    var holder = document.createElement('div');
+    holder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg">' + HR_PATCH_PATTERN_DEFS + '</svg>';
+    var defs = holder.querySelector('defs');
+    if (!defs || typeof SVGPatternElement === 'undefined' || !(defs.querySelector('pattern') instanceof SVGPatternElement)) return false;
+    svg.insertBefore(defs, svg.firstChild);
+    for (var i = 0; i < patches.length; i++) {
+      patches[i].setStyle({ fillColor: 'url(#' + patches[i].hrBand.pattern + ')' });
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/** Centre of a grid cell as [lat, lon] (for named corners, SHOW_CORNERS). */
+function hrCellCenterLatLng(ix, iy) {
+  return [(iy + 0.5) * HR_D_LAT_DEG, (ix + 0.5) * hrDLonForRow(iy)];
+}
+
+/**
  * Adds one L.polygon per outer ring (holes included) for each fill band, in
  * the given SVG renderer, wild -> fresh. Returns the polygon count.
  */
@@ -397,22 +440,26 @@ function hrAddSvgFillPolygons(layerGroup, renderer, occBlurred, wildBlurred, w, 
     freshField[i] = (1 - wildBlurred[i]) * mask;
   }
   var count = 0;
+  var patches = layerGroup.hrPatches = layerGroup.hrPatches || [];
   for (var b = 0; b < HR_FILL_BANDS.length; b++) {
     var band = HR_FILL_BANDS[b];
     var segs = band.minFresh === null
       ? hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD)
       : hrMarchingSquaresSegments(freshField, w, h, band.minFresh);
-    var lut = HR_WILDNESS_COLOR_LUT[Math.round(band.wildness * 254)];
-    var color = 'rgb(' + lut[0] + ',' + lut[1] + ',' + lut[2] + ')';
     var groups = hrRingsWithHoles(hrChainRings(segs));
     for (var g = 0; g < groups.length; g++) {
       var latlngs = groups[g].map(function (ring) {
         return ring.map(function (pt) { return hrLocalToLatLon(pt[0], pt[1], minIx, minIy); });
       });
-      L.polygon(latlngs, {
-        renderer: renderer, stroke: false, fillColor: color, fillOpacity: band.opacity,
+      var poly = L.polygon(latlngs, {
+        renderer: renderer, stroke: true, color: HR_SEAM_HEX, weight: band.seam, opacity: 1,
+        dashArray: HR_SEAM_DASH, lineCap: 'round', lineJoin: 'round',
+        // Flat colour first; hrUsePatternFills() swaps in url(#pattern) once the defs exist.
+        fillColor: band.flat, fillOpacity: 1,
         fill: true, interactive: false, smoothFactor: 1
       }).addTo(layerGroup);
+      poly.hrBand = band;
+      patches.push(poly);
       count++;
     }
   }
@@ -569,15 +616,20 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
     fillLayer.addTo(layerGroup);
   } else {
     // Explicit SVG renderer: vector fill is what the Android WebView composites.
-    var svgRenderer = L.svg();
+    // Own pane just under the overlay pane (z 400) so the trail/markers drawn
+    // later by the host always sit on top of the patches.
+    var patchPane = map.getPane('hrPatchPane') || map.createPane('hrPatchPane');
+    patchPane.style.zIndex = 390;
+    var svgRenderer = L.svg({ pane: 'hrPatchPane' });
     layerGroup.addLayer(svgRenderer); // first, so it exists before the polygons; removed with the group
     polygonCount = hrAddSvgFillPolygons(layerGroup, svgRenderer, occBlurred, wildBlurred, w, h, minIx, minIy);
   }
-  layerGroup.hrStats = { cells: w * h, bounds: [south, west, north, east], pane: 'overlayPane', fillLayer: fillLayer, mode: HR_LIVE_FILL_MODE, polygons: polygonCount };
+  layerGroup.hrStats = { cells: w * h, bounds: [south, west, north, east], pane: HR_LIVE_FILL_MODE === 'canvas' ? 'overlayPane' : 'hrPatchPane', fillLayer: fillLayer, mode: HR_LIVE_FILL_MODE, polygons: polygonCount, patterns: false };
 
   // ---- Range outline: marching-squares 0.5-contour over the blurred
   // occupancy field, stroked on top of the fill for definition. ----
-  var segments = hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD);
+  // SVG mode skips it: each patch polygon carries its own stitched seam.
+  var segments = HR_LIVE_FILL_MODE === 'canvas' ? hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD) : [];
   for (i = 0; i < segments.length; i++) {
     var a = hrLocalToLatLon(segments[i][0][0], segments[i][0][1], minIx, minIy);
     var b = hrLocalToLatLon(segments[i][1][0], segments[i][1][1], minIx, minIy);
@@ -603,6 +655,10 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
   }
 
   layerGroup.addTo(map);
+  if (HR_LIVE_FILL_MODE !== 'canvas') {
+    // The renderer's <svg> exists only now that the group is on the map.
+    layerGroup.hrStats.patterns = hrUsePatternFills(svgRenderer, layerGroup.hrPatches || []);
+  }
   return layerGroup;
 }
 
@@ -706,8 +762,10 @@ function renderHomeRangeMuted(map, payload, previousLayerGroup) {
  * function's output as an image overlay on top of its own OSM tile canvas;
  * this function has no Leaflet dependency and knows nothing about tiles.
  */
-function renderHomeRangePortrait(canvas, payload) {
+function renderHomeRangePortrait(canvas, payload, scale) {
   if (!payload) return;
+  // scale = output pixels per raster cell (default 1). >1 gives the seam room to be a real stitch.
+  var k = scale && scale > 1 ? scale : 1;
 
   var origin = payload.origin;
   var minIx = origin[0];
@@ -732,55 +790,65 @@ function renderHomeRangePortrait(canvas, payload) {
   var wildBlurred = hrBlurWeighted(valueTimesWeight, occ, w, h, HR_BLUR_SIGMA_CELLS);
   var visitsBlurred = hrBlurField(visitsFloat, w, h, HR_BLUR_SIGMA_CELLS);
 
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = w * k;
+  canvas.height = h * k;
   var ctx = canvas.getContext('2d');
-  var imageData = ctx.createImageData(w, h);
+  var fillCanvas = canvas;
+  var fillCtx = ctx;
+  if (k > 1) {
+    fillCanvas = document.createElement('canvas');
+    fillCanvas.width = w;
+    fillCanvas.height = h;
+    fillCtx = fillCanvas.getContext('2d');
+  }
+  var imageData = fillCtx.createImageData(w, h);
 
+  // Flat felt colours per patch band (the canvas has no patterns): same
+  // freshness thresholds as the live map's HR_FILL_BANDS, hard edge at the
+  // Range contour so the seam below sits exactly on the patch border.
+  var bandRgb = HR_FILL_BANDS.map(function (band) { return hrHexToRgb(band.flat).map(function (c) { return Math.round(c * 255); }); });
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       var idx = y * w + x;
-      var occV = occBlurred[idx];
-      var wildV = wildBlurred[idx];
-      var lutIndex = Math.max(0, Math.min(254, Math.round(wildV * 254)));
-      var rgb = HR_WILDNESS_COLOR_LUT[lutIndex];
-
-      var veinMix = Math.min(1, visitsBlurred[idx] * 0.6);
-      var outR = Math.round(rgb[0] + (46 - rgb[0]) * veinMix);
-      var outG = Math.round(rgb[1] + (204 - rgb[1]) * veinMix);
-      var outB = Math.round(rgb[2] + (113 - rgb[2]) * veinMix);
-      var alpha = Math.round((HR_FILL_ALPHA + (HR_FILL_ALPHA_WILD - HR_FILL_ALPHA) * wildV) * occV * 255);
-
+      if (occBlurred[idx] < HR_CONTOUR_THRESHOLD) continue;
+      var freshV = 1 - wildBlurred[idx];
+      var bandIdx = freshV >= HR_FILL_BANDS[2].minFresh ? 2 : freshV >= HR_FILL_BANDS[1].minFresh ? 1 : 0;
+      var rgb = bandRgb[bandIdx];
       // Same vertical flip as renderHomeRangeToMap's fill loop: array row 0
       // is the southernmost row, but image/canvas row 0 must be the north
       // edge.
       var flippedRow = h - 1 - y;
       var pIdx = (flippedRow * w + x) * 4;
-      imageData.data[pIdx] = outR;
-      imageData.data[pIdx + 1] = outG;
-      imageData.data[pIdx + 2] = outB;
-      imageData.data[pIdx + 3] = alpha;
+      imageData.data[pIdx] = rgb[0];
+      imageData.data[pIdx + 1] = rgb[1];
+      imageData.data[pIdx + 2] = rgb[2];
+      imageData.data[pIdx + 3] = 255;
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  fillCtx.putImageData(imageData, 0, 0);
+  if (k > 1) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fillCanvas, 0, 0, w * k, h * k);
+  }
 
-  // Range outline only (HR_CONTOUR_THRESHOLD, same as the interactive map) —
-  // deliberately no second wild-ground contour pass and no marker.
-  var segments = hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD);
-  ctx.strokeStyle = HR_FRESH_HEX;
-  ctx.lineWidth = HR_OUTLINE_WEIGHT;
-  ctx.globalAlpha = HR_OUTLINE_OPACITY;
-  for (i = 0; i < segments.length; i++) {
-    var a = segments[i][0];
-    var b = segments[i][1];
-    // Segments are in the same unflipped (u,v) space as the fill loop's
-    // (x,y) before its own flippedRow conversion above — apply the same
-    // flip here so the stroke lines up with the fill underneath it.
+  // Stitched cream seam along the Range contour (canvas pixels, k per cell). Deliberately no wild-ground
+  // contour pass and no marker.
+  var rings = hrChainRings(hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD));
+  ctx.strokeStyle = HR_SEAM_HEX;
+  ctx.lineWidth = k > 1 ? 3 : 0.35;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (ctx.setLineDash) ctx.setLineDash(k > 1 ? [4, 4] : [0.5, 0.5]);
+  for (i = 0; i < rings.length; i++) {
+    // Same flip as the fill so the stitches line up with the felt underneath.
     ctx.beginPath();
-    ctx.moveTo(a[0], (h - 1) - a[1]);
-    ctx.lineTo(b[0], (h - 1) - b[1]);
+    for (var r = 0; r < rings[i].length; r++) {
+      var pt = rings[i][r];
+      if (r === 0) ctx.moveTo((pt[0] + 0.5) * k, ((h - 1) - pt[1] + 0.5) * k); else ctx.lineTo((pt[0] + 0.5) * k, ((h - 1) - pt[1] + 0.5) * k);
+    }
+    ctx.closePath();
     ctx.stroke();
   }
-  ctx.globalAlpha = 1;
+  if (ctx.setLineDash) ctx.setLineDash([]);
 }
 `;

@@ -36,6 +36,7 @@ function loadRendererInternals() {
       HR_WILD_CONTOUR_THRESHOLD,
       HR_WILD_CONTOUR_HEX,
       HR_FRESH_HEX,
+      HR_SEAM_HEX,
       HR_MUTED_HEX,
       HR_MUTED_FILL_ALPHA,
       HR_FILL_ALPHA,
@@ -71,8 +72,12 @@ function createFakeCanvas() {
       return strokeStyle;
     },
     lineWidth: 0,
+    lineCap: '',
+    lineJoin: '',
     globalAlpha: 1,
+    setLineDash: () => {},
     beginPath: () => {},
+    closePath: () => {},
     moveTo: () => {},
     lineTo: () => {},
     stroke: () => {
@@ -326,20 +331,20 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
     expect(belowSegments.length).toBe(0);
   });
 
-  it('renderHomeRangePortrait fills the canvas and strokes the Range outline, but never the wild-ground contour or a marker (docs/decisions/home-dashboard)', () => {
-    const { renderHomeRangePortrait, HR_FRESH_HEX, HR_WILD_CONTOUR_HEX } = loadRendererInternals() as {
+  it('renderHomeRangePortrait fills the canvas with felt colours and stitches the Range outline in cream, but never the wild-ground contour or a marker (docs/decisions/home-dashboard)', () => {
+    const { renderHomeRangePortrait, HR_SEAM_HEX, HR_WILD_CONTOUR_HEX } = loadRendererInternals() as {
       renderHomeRangePortrait: (canvas: unknown, payload: unknown) => void;
-      HR_FRESH_HEX: string;
+      HR_SEAM_HEX: string;
       HR_WILD_CONTOUR_HEX: string;
     };
 
     const now = 1_000_000;
-    // A solid 5x5 block, well above the 0.5 Range-outline contour threshold —
+    // A solid diamond (rectangles touching the raster border blur to an open contour), well above the 0.5 Range-outline contour threshold —
     // mirrors this file's existing "solid occupied block" fixture.
     const cells: Cell[] = [];
-    for (let y = 0; y < 5; y++) {
-      for (let x = 0; x < 5; x++) {
-        cells.push({ ix: x, iy: y, lastRefreshed: now, lastTracked: now, visits: 1, territoryId: null });
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        if (Math.abs(x - 4) + Math.abs(y - 4) <= 4) cells.push({ ix: x, iy: y, lastRefreshed: now, lastTracked: now, visits: 1, territoryId: null });
       }
     }
     const payload = buildHomeRangeRasterPayload(cells, now);
@@ -352,11 +357,11 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
     expect(calls.strokeCount).toBeGreaterThan(0); // the Range outline contour
     expect(calls.arcCount).toBe(0); // no marker/pin ever drawn
 
-    // Every stroke colour used is the Range outline's fresh-green token —
+    // Every stroke colour used is the Range outline's cream seam token —
     // the wild-ground contour's warm accent colour never appears, since
     // this function deliberately omits that second pass entirely.
     expect(calls.strokeStyleHistory.length).toBeGreaterThan(0);
-    expect(calls.strokeStyleHistory.every((c) => c === HR_FRESH_HEX)).toBe(true);
+    expect(calls.strokeStyleHistory.every((c) => c === HR_SEAM_HEX)).toBe(true);
     expect(calls.strokeStyleHistory).not.toContain(HR_WILD_CONTOUR_HEX);
   });
 

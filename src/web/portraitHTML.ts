@@ -84,12 +84,13 @@ ${HOME_RANGE_RENDERER_SCRIPT}
 
     var map = L.map('map', { attributionControl: false, zoomControl: false });
 
-    function boundsForRaster(raster) {
+    function boundsForRaster(raster, padding) {
+      var pad = padding === undefined ? CELL_PADDING : padding;
       var origin = raster.origin;
-      var minIx = origin[0] - CELL_PADDING;
-      var minIy = origin[1] - CELL_PADDING;
-      var w = raster.w + CELL_PADDING * 2;
-      var h = raster.h + CELL_PADDING * 2;
+      var minIx = origin[0] - pad;
+      var minIy = origin[1] - pad;
+      var w = raster.w + pad * 2;
+      var h = raster.h + pad * 2;
       var south = minIy * HR_D_LAT_DEG;
       var north = (minIy + h) * HR_D_LAT_DEG;
       var midRow = minIy + Math.floor(h / 2);
@@ -178,14 +179,17 @@ ${HOME_RANGE_RENDERER_SCRIPT}
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.restore();
 
-          // Composite the Range outline + Bloom fill (renderHomeRangePortrait,
+          // Composite the felt patches + stitched seam (renderHomeRangePortrait,
           // this script's own math-only function, shared verbatim with the
           // interactive map) on top of the tiles just drawn above.
           var overlayCanvas = document.createElement('canvas');
-          renderHomeRangePortrait(overlayCanvas, raster);
-          var overlayBounds = boundsForRaster(raster);
+          // Unpadded: the overlay canvas covers exactly the raster's cells (the tile canvas keeps the padding).
+          var overlayBounds = boundsForRaster(raster, 0);
           var overlayTopLeftPx = map.project(overlayBounds.getNorthWest(), zoom);
           var overlayBottomRightPx = map.project(overlayBounds.getSouthEast(), zoom);
+          // Render the felt patches at ~1 canvas pixel per output pixel so the stitched seam is crisp.
+          var pxPerCell = (overlayBottomRightPx.x - overlayTopLeftPx.x) / raster.w;
+          renderHomeRangePortrait(overlayCanvas, raster, Math.max(1, Math.min(24, Math.round(pxPerCell))));
           ctx.drawImage(
             overlayCanvas,
             overlayTopLeftPx.x - topLeftPixel.x,
