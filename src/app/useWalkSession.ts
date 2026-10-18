@@ -12,7 +12,7 @@ import { newClientId } from '../sync/ids';
 import { t } from '../i18n';
 import { AppRepositories } from './repositories';
 import { finishTrackedWalk, FinishTrackedWalkDeps, WalkRewardsOutcome } from './finishTrackedWalk';
-import { appendLocation, applyLocationToCues, createWalkCueState, startWalkCueState } from './walkSessionHelpers';
+import { applyLocationToCues, createWalkCueState, startWalkCueState } from './walkSessionHelpers';
 
 export interface UseWalkSessionDeps {
   repos: AppRepositories;
@@ -31,6 +31,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const [appState, setAppState] = useState<AppState>({ walk: null, isTracking: false, error: null });
 
   // Refs, not state: nothing renders from them.
+  // Single source of truth for the walk's locations: the GPS callback appends here
+  // and finishWalk reads from here, never from a render-captured `appState.walk`.
+  // React state mirrors it for rendering only.
+  const walkRef = useRef<Walk | null>(null);
   const startingRef = useRef(false);
   const startTokenRef = useRef(0);
   const cueTracker = useRef(createWalkCueTracker({ now: Date.now, minCells: MIN_CELLS_FOR_REWARD })).current;
@@ -74,6 +78,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       startWalkCueState(walkCueState, initialLoc);
 
       // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
+      walkRef.current = newWalk; // before the watcher, so no early fix is dropped
       let fixCount = 0;
       const watching = await startWatchingLocation((location) => {
         fixCount++;
@@ -81,7 +86,11 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         // Audio cues only (never visual); sounds.play() also checks the sound pref.
         const cue = applyLocationToCues(walkCueState, location, cueTracker);
         if (cue) play(cue);
-        setAppState((prev) => appendLocation(prev, location));
+        const current = walkRef.current;
+        if (!current) return;
+        walkRef.current = { ...current, locations: [...current.locations, location] };
+        const next = walkRef.current;
+        setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
       });
       if (!watching) {
         // Previously swallowed: the walk then "tracked" with only its first point.
@@ -90,6 +99,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       }
       if (cancelled()) {
         // cancelWalk ran while the watcher was starting; it may have stopped nothing yet.
+        walkRef.current = null;
         await stopWatchingLocation();
         return;
       }
@@ -113,7 +123,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         background: bg.status,
       });
 
-      setAppState((prev) => ({ ...prev, walk: newWalk, isTracking: true }));
+      setAppState((prev) => ({ ...prev, walk: walkRef.current ?? newWalk, isTracking: true }));
 
       // Replan reminders so one doesn't fire mid-walk (the walk isn't in the
       // repository until it finishes, so pass it in explicitly).
@@ -128,12 +138,14 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const finishWalk = async () => {
     await stopWatchingLocation();
 
-    if (!appState.walk) {
+    const walkToFinish = walkRef.current;
+    if (!walkToFinish) {
       setAppState((prev) => ({ ...prev, isTracking: false }));
       return;
     }
+    log('WALK_FINISH', { id: walkToFinish.id, points: walkToFinish.locations.length });
 
-    await finishTrackedWalk(appState.walk, {
+    await finishTrackedWalk(walkToFinish, {
       repos,
       dogName,
       onFinishCue: (qualifies) => {
@@ -141,7 +153,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         return cueTracker.onFinish(qualifies);
       },
       playCue: play,
-      onWalkFinished: (finishedWalk) => setAppState((prev) => ({ ...prev, walk: finishedWalk, isTracking: false })),
+      onWalkFinished: (finishedWalk) => {
+        walkRef.current = finishedWalk;
+        setAppState((prev) => ({ ...prev, walk: finishedWalk, isTracking: false }));
+      },
       onRangeChanged,
       onRewards,
       sync,
@@ -154,9 +169,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     walkCueState.active = false;
     cueTracker.reset();
     await stopWatchingLocation();
-    if (appState.walk) {
-      log('WALK_CANCELLED', { id: appState.walk.id, points: appState.walk.locations.length });
+    if (walkRef.current) {
+      log('WALK_CANCELLED', { id: walkRef.current.id, points: walkRef.current.locations.length });
     }
+    walkRef.current = null;
     setAppState({ walk: null, isTracking: false, error: null });
   };
 

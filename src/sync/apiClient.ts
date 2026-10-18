@@ -18,6 +18,8 @@ import {
   ImportResponse,
   JoinRequest,
   JoinResponse,
+  LogUploadRequest,
+  LogUploadResponse,
   SnapshotResponse,
   WalkUploadRequest,
   WalkUploadResponse,
@@ -69,6 +71,8 @@ export interface ApiClient {
   gifts(): Promise<GiftsResponse>;
   openGift(giftId: string, clientId: string): Promise<CommandResponse>;
   coopWeek(): Promise<CoopWeekResponse>;
+  /** Device diagnostics batch (log shipping). */
+  uploadLogs(request: LogUploadRequest): Promise<LogUploadResponse>;
 }
 
 export function normalizeBaseUrl(url: string): string {
@@ -142,5 +146,6 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     gifts: () => request<GiftsResponse>('GET', API_PATHS.gifts),
     openGift: (giftId, clientId) => request<CommandResponse>('POST', giftOpenPath(giftId), { clientId }),
     coopWeek: () => request<CoopWeekResponse>('GET', API_PATHS.coopWeek),
+    uploadLogs: (req) => request<LogUploadResponse>('POST', API_PATHS.logs, req),
   };
 }

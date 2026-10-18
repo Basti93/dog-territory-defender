@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Image, ScrollView, StyleProp, StyleSheet, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { artOr } from '../art/artAssets';
 import { material, palette, spacing } from './theme';
@@ -19,6 +19,7 @@ export interface ScreenProps {
 
 export function Screen({ children, scroll = false, backdrop = 'none', style, contentStyle, padded = true }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   const pad: ViewStyle = {
     paddingTop: insets.top + spacing.md,
     paddingBottom: padded ? insets.bottom + spacing.lg : insets.bottom,
@@ -28,7 +29,13 @@ export function Screen({ children, scroll = false, backdrop = 'none', style, con
   const linen = backdrop === 'linen' ? artOr('linen', null) : null;
   return (
     <View style={[styles.root, backdrop === 'linen' && styles.linenRoot, style]}>
-      {linen && <Image source={linen} resizeMode="repeat" style={StyleSheet.absoluteFillObject} testID="screen-linen" />}
+      {/* Backdrop sits beside the ScrollView, never in its content. The tile gets an explicit pixel size
+          (Android's 'repeat' needs one); the clipped wrapper keeps it from ever affecting layout. */}
+      {linen && (
+        <View pointerEvents="none" style={styles.backdrop}>
+          <Image source={linen} resizeMode="repeat" style={{ width: window.width, height: window.height }} testID="screen-linen" />
+        </View>
+      )}
       {sky && (
         <View pointerEvents="none" style={styles.sky}>
           <Image source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />
@@ -58,6 +65,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.background },
   linenRoot: { backgroundColor: material.linen },
   fill: { flex: 1 },
+  backdrop: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   // flexGrow, never flex: 1: flex: 1 on a ScrollView content container locks it to the viewport on iOS (no scrolling).
   grow: { flexGrow: 1 },
   sky: { position: 'absolute', top: 0, left: 0, right: 0, height: 260, opacity: 0.55, overflow: 'hidden' },

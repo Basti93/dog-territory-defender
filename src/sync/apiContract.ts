@@ -23,6 +23,7 @@ export const API_PATHS = {
   gifts: '/v1/gifts', // GET list; POST /v1/gifts/:id/open (see giftOpenPath)
   coopWeek: '/v1/coop/week',
   import: '/v1/households/import',
+  logs: '/v1/logs', // POST only: device diagnostics; read via the operator CLI, never over HTTP
 } as const;
 
 export const giftOpenPath = (giftId: string) => `/v1/gifts/${encodeURIComponent(giftId)}/open`;
@@ -46,6 +47,10 @@ export const API_LIMITS = {
   maxImportWalks: 2000,
   maxImportCells: 100000,
   maxImportTerritories: 500,
+  /** Device log shipping: entries per batch, serialized size per entry (bytes) and the per-device daily row cap. */
+  maxLogEntriesPerBatch: 200,
+  maxLogEntryBytes: 2048,
+  maxLogRowsPerDayPerDevice: 2000,
 } as const;
 
 // ------------------------------------------------------------------ errors
@@ -237,6 +242,30 @@ export interface WalkUploadResponse {
   den: ApiDenState;
   serverTime: number;
   seq: number;
+}
+
+// ------------------------------------------------------------------ device logs
+
+export interface ApiLogEntry {
+  /** ms since epoch on the phone. */
+  t: number;
+  /** The log tag, e.g. WALK_FINISHED. */
+  event: string;
+  /** Already redacted by the app (no tokens, codes, backup data or raw locations). */
+  payload: Record<string, unknown>;
+  /** Foreground/background state at the time ('active' | 'background' | 'inactive' ...). */
+  appState: string;
+}
+
+/** `deviceSeq` numbers the FIRST entry; entry i is deviceSeq + i. Resending a batch is harmless (idempotent per device and seq). */
+export interface LogUploadRequest {
+  deviceSeq: number;
+  entries: ApiLogEntry[];
+}
+
+export interface LogUploadResponse {
+  /** Rows newly stored (duplicates and oversized entries are not counted). */
+  stored: number;
 }
 
 export type WalkGetResponse = ApiWalkFull;

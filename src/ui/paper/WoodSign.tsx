@@ -121,7 +121,8 @@ const styles = StyleSheet.create({
     borderBottomColor: material.woodDark,
     borderRadius: 10,
   },
-  sprite: { width: '100%', height: '100%' },
+  // absoluteFill, not percentages: a % height against an auto-height sign can resolve to the PNG's intrinsic size.
+  sprite: { ...StyleSheet.absoluteFillObject },
   stretch: { alignSelf: 'stretch' },
   text: { color: material.ink, textAlign: 'center' },
 });

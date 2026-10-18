@@ -30,6 +30,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'syncIdentity')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN syncIdentity TEXT');
     }
+    if (!columns.some((c) => c.name === 'logShipping')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN logShipping INTEGER NOT NULL DEFAULT 1');
+    }
     return db;
   });
 
@@ -118,6 +121,22 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET wildExtrasLastShown = excluded.wildExtrasLastShown`,
         SINGLETON_ID,
         JSON.stringify(normalizeLastShown(lastShown))
+      );
+    },
+
+    async getLogShippingEnabled(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ logShipping: number }>('SELECT logShipping FROM app_settings WHERE id = ?', SINGLETON_ID);
+      return row ? row.logShipping !== 0 : true;
+    },
+
+    async saveLogShippingEnabled(enabled: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, logShipping) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET logShipping = excluded.logShipping`,
+        SINGLETON_ID,
+        enabled ? 1 : 0
       );
     },
   };

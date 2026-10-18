@@ -7,6 +7,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let onboardingDone = false;
   let wildExtrasLastShown: Record<string, string> = {};
   let syncIdentity: SyncIdentity | null = null;
+  let logShippingEnabled = true;
   return {
     async getSyncIdentity() {
       return syncIdentity ? { ...syncIdentity } : null;
@@ -31,6 +32,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveWildExtrasLastShown(lastShown) {
       wildExtrasLastShown = normalizeLastShown(lastShown);
+    },
+    async getLogShippingEnabled() {
+      return logShippingEnabled;
+    },
+    async saveLogShippingEnabled(enabled) {
+      logShippingEnabled = enabled !== false;
     },
   };
 }

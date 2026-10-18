@@ -38,6 +38,9 @@ export interface SettingsRepository {
   /** Wild Extras (cosmetic yard cameos): local ISO day each extra last played. Never fails: returns {} when nothing saved. */
   getWildExtrasLastShown(): Promise<Record<string, string>>;
   saveWildExtrasLastShown(lastShown: Record<string, string>): Promise<void>;
+  /** "Protokoll an den Server senden" (log shipping, only acts while joined). Defaults to true when nothing is saved. */
+  getLogShippingEnabled(): Promise<boolean>;
+  saveLogShippingEnabled(enabled: boolean): Promise<void>;
 }
 
 export function normalizeLocalePreference(value: unknown): LocalePreference {

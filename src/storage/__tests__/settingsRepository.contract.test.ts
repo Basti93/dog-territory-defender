@@ -45,4 +45,13 @@ describe('SettingsRepository contract', () => {
     await repo.saveOnboardingDone(true);
     expect(await repo.getWildExtrasLastShown()).toEqual({ 'tea-time': '2026-10-18' });
   });
+
+  it('logShippingEnabled defaults to true and round-trips', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getLogShippingEnabled()).toBe(true);
+    await repo.saveLogShippingEnabled(false);
+    expect(await repo.getLogShippingEnabled()).toBe(false);
+    await repo.saveLogShippingEnabled(true);
+    expect(await repo.getLogShippingEnabled()).toBe(true);
+  });
 });
