@@ -1,50 +1,11 @@
-# walk-storage Specification
+# Walk storage and history
 
-## Purpose
+Every walk the user ends is durably saved locally, retrievable individually or as a full history, in a way that stays forward-compatible with future cloud sync.
 
-Guarantees that a walk's data survives beyond the current app session — every walk the user ends is durably saved locally, retrievable individually or as a full history, and stored in a way that stays forward-compatible with a future cloud sync.
-
-## Requirements
-
-### Requirement: Walks are saved on end
-The system SHALL durably persist a walk's full record (locations, start time, finished status) as soon as the walk ends, whether by finishing it with a qualifying amount of ground covered or finishing it short of that floor. The walk record no longer carries a territory polygon; the ground it covered is instead reflected in the separately persisted Home Range grid (see `home-range`).
-
-#### Scenario: Closing a walk persists it
-- **WHEN** a walk is finished with enough ground covered to qualify for a reward
-- **THEN** the walk is retrievable from storage after the app restarts
-
-#### Scenario: Ending a walk early persists it
-- **WHEN** a walk is finished without covering enough ground to qualify for a reward
-- **THEN** the walk is retrievable from storage after the app restarts, and it is distinguishable from a reward-qualifying walk
-
-### Requirement: Cancelled walks are not persisted
-The system SHALL NOT persist a walk that was discarded via Cancel.
-
-#### Scenario: Cancel leaves no trace in storage
-- **WHEN** a walk is cancelled
-- **THEN** it is not retrievable from storage afterward
-
-### Requirement: Walks are individually and collectively retrievable
-The system SHALL allow retrieving a single previously saved walk by its identifier, and retrieving the full set of saved walks.
-
-#### Scenario: Fetching one walk
-- **WHEN** a saved walk's identifier is looked up
-- **THEN** its full record is returned
-
-#### Scenario: Fetching all walks
-- **WHEN** all saved walks are requested
-- **THEN** every previously saved walk is returned
-
-### Requirement: Storage survives app data being cleared only intentionally
-The system SHALL persist walk data independent of React/JavaScript app state — an app restart, crash, or backgrounding SHALL NOT lose a saved walk.
-
-#### Scenario: Data survives a restart
-- **WHEN** the app is closed and reopened
-- **THEN** all previously saved walks are still present
-
-### Requirement: Storage schema is forward-compatible with future sync
-The system SHALL record, per walk, whether it has been synced to a remote store, defaulting to not-synced, without requiring any remote connectivity or sync behavior to exist yet.
-
-#### Scenario: New walks start unsynced
-- **WHEN** a walk is saved
-- **THEN** it is recorded as not yet synced to any remote store
+- A walk's full record (locations, start time, finished status) is persisted as soon as it ends, whether it qualified for a reward or was finished short of the ground-covered floor (distinguishable from a qualifying walk). The record carries no territory polygon; the ground covered lives in the separately persisted Home Range grid (see `home-range`). It is retrievable after an app restart.
+- A walk discarded via Cancel is never persisted (not retrievable afterward).
+- A single walk is retrievable by identifier (full record), and the full set of saved walks is retrievable.
+- Persistence is independent of React/JS app state: restart, crash or backgrounding never loses a saved walk.
+- Each walk records whether it has been synced to a remote store, defaulting to not-synced, with no remote connectivity or sync behaviour required yet.
+- **Looking back:** since 2026-10-18 saved walks are viewed as the Album of postcards (`visual-design.md`, "Postcards on the Bench"): newest started first, each entry identifies its walk (date/time); an empty Album shows a friendly on-tone empty state, never a blank or broken screen. A walk that painted nothing shows no card; no "rewarded / short" status is shown (nothing is framed as lesser).
+- **Delete is permanent**, so it asks for confirmation first (from the open card, "Diese Karte wegnehmen"). It removes only that walk's record from storage and the Album; the ground stays: no cell it painted leaves the Home Range or the Range/Bloom (see `home-range`, monotonic Range). The confirmation copy never implies deleting undoes its effect on the map.

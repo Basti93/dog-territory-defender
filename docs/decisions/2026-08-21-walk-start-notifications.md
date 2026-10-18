@@ -1,0 +1,18 @@
+# Walk-start notifications and "Log a walk we missed" (2026-08-21, shipped)
+**Why:** Technical split of the MVP decided in `docs/decisions/2026-08-22-walk-start-experience.md`: real walks outnumber tracked walks because starting tracking loses to the rushed leash-in-hand moment. Ship the cheap half: a notification that only reports something already true, plus a manual way to claim a missed walk.
+**Decisions:**
+- New dependency `expo-notifications` (pin `~0.32.0` was a guess, to be corrected by `npx expo install`); needs a dev-client rebuild. Local notifications only, no backend.
+- Earned-trigger notification fires only for a real unclaimed Den-economy overflow (`treats >= storageCap`), never on a clock-invented condition; silence is the default. Copy is the accepted string with the real number substituted: `overflowNotificationBody(treatsWaiting)` = "Your Treat Bakery overflowed! ${treatsWaiting} treats waiting." (the "124" in the concept was illustrative; a hardcoded one would be false).
+- Delivery time = learned coarse bucket from past walk start times: morning 5:00-11:59, midday 12:00-17:59, evening 18:00-4:59; mapped to 08:00 / 13:00 / 19:00 local (`src/notifications/notificationDecision.ts`, `scheduler.ts`). First-pass numbers, not tuned.
+- Bookkeeping (overflow already surfaced, learned bucket) is new local state in its own repository (interface + sqlite + in-memory under `src/storage/`, later `NotificationRepository`), not bolted onto Den or Walk repositories. Recomputed/rescheduled on app open, honest about the no-backend limit.
+- Permission requested lazily, on first need, not at launch. No opt-in toggle for this notification (earned triggers are fun-safe; the OS prompt is the consent surface).
+- "Log a walk we missed": one in-app action, goes through the same reward path (treats, XP, stats, achievements) as a closed walk, no "unverified" label, no reduced reward. Requires extracting the reward logic out of the inline `stopWalk` closure into a shared function. A manual log has no trail, so distance and area are 0 and XP is the flat base only.
+- Look-back cap: the logged walk must have started today or yesterday (local calendar day; `isWithinManualLogWindow` in `src/utils/manualWalkLog.ts`). First-pass number, revisit with real usage; reason: beyond that it becomes a backfill tool that invites gaming treats/XP.
+- `Walk.startSource: 'button' | 'manual-log'` added to `src/types.ts` so tracked vs manual walks can be told apart when measuring walks/day.
+- Entry point sat on the main screen next to "Start Walk" (not in history), to avoid threading a callback through history.
+- Open at the time: celebration copy for a manual log with no `territory` (area line) needed a game-master pass; later settled by the postcards flow (manual log = handwriting-only card).
+**Rejected:**
+- Second trigger "manually-logged walk sitting unclaimed", because the log awards its reward the instant it is tapped, so no unclaimed state exists; making it real needs a two-phase flag-now/claim-later redesign (separate later change if data supports it).
+- Home/lock-screen widget (needs `expo prebuild`/EAS native work), the clock-fired reminder (shipped later as `docs/decisions/walk-reminder.md`), and automatic missed-walk detection (new always-on sensing, battery/GDPR cost): all deferred.
+- Open-ended backfill window, because of economy gaming.
+**Links:** `docs/specs/den-economy.md` (overflow notification), `docs/specs/walk-lifecycle.md`, `src/notifications/notificationDecision.ts`, `src/notifications/scheduler.ts`, `src/components/LogMissedWalkScreen.tsx`, `src/app/useManualWalkLog.ts`.

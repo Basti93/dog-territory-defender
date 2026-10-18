@@ -1,66 +1,16 @@
-# Visual Prototype
+# Visual prototype
 
-Clickable HTML demo of **Dog Territory Defender**. No build step, no dependencies — just open in Chrome.
+Clickable HTML demo of the game: a **design spec**, not production code. React + Babel standalone in a single HTML file, no build step. Match its visuals, tokens, animations, tone and copy in React Native; never import its structure into `src/`.
 
-This folder contains a **design spec**, not production code. It uses React + Babel standalone so the entire app runs from a single HTML file without a bundler. When implementing the real app (React Native + Expo), match the visual output, not the internal structure.
-
----
-
-## How to run
-
-```bash
-open "Dog Territory Defender.html"
-```
-
-Or drag the file into Chrome/Safari. The prototype initialises instantly.
-
-A live-editing **Tweaks Panel** appears in the bottom-right. Use it to change the dog name, breed, primary color, map style, passive treat rate, starting treats, Den level, and celebration intensity.
-
----
-
-## Files
+Run: `open "Dog Territory Defender.html"` (any browser). A Tweaks Panel (bottom-right) edits dog name, breed, primary colour, map style, passive treat rate, starting treats, Den level and celebration intensity.
 
 | File | Purpose |
 |---|---|
-| `Dog Territory Defender.html` | Entry point. Owns design tokens, animations, map scene, post-walk celebration, tab bar, state, and composes the Den. Read this top-to-bottom first. |
-| `ios-frame.jsx` | Reusable iOS 26 liquid-glass device frame: `IOSDevice`, `IOSStatusBar`, `IOSNavBar`, `IOSGlassPill`, `IOSList`, `IOSListRow`, `IOSKeyboard`. |
-| `den-screen.jsx` | Den: SVG garden scene, 3 buildings (Doghouse, Treat Bakery, Sniff Garden), upgrade modals, tappable building cards. |
-| `tweaks-panel.jsx` | Live-editing panel (`useTweaks`, `TweaksPanel`, form-control helpers — slider, radio, color, toggle, section). |
+| `Dog Territory Defender.html` | Entry point: design tokens (`T.green`, `T.blue`, ...), animations, map scene, celebration, tab bar, state. Read top-to-bottom first. |
+| `ios-frame.jsx` | iOS 26 liquid-glass device frame (`IOSDevice`, `IOSStatusBar`, `IOSNavBar`, `IOSGlassPill`, `IOSList`, `IOSListRow`, `IOSKeyboard`). |
+| `den-screen.jsx` | Den: SVG garden, 3 buildings (Doghouse, Treat Bakery, Sniff Garden), upgrade modals. |
+| `tweaks-panel.jsx` | Live-editing panel (`useTweaks`, `TweaksPanel`, form controls). |
 
----
+Implemented: device frame; map (streets, park, territory polygon, trail, paw prints, collectibles, rival territory, pulsing player dot); walk flow start, track, close perimeter, celebration (confetti, XP tick, +50 treats, next-upgrade tease); Den with passive treat counter and upgrade modals; 4-tab nav (Map, Den, Dog, More); 7 tweaks.
 
-## What's implemented (core loop)
-
-- iOS 26 liquid-glass device frame
-- Map view: neighborhood streets, park (Görlitzer Park), territory polygon, walk trail, paw prints, collectibles (bone/hydrant/treat/star), rival territory, player dot with pulse
-- Active walk flow: start → track → close perimeter → celebration
-- Post-walk celebration: confetti, XP tick, +50 treats reward, next-upgrade tease
-- **Den screen**: garden scene with 3 buildings, passive treat counter ticking up, tappable buildings with upgrade modals showing current vs next effect and cost
-- 4-tab bottom nav: Map, Den, Dog, More
-- Tweaks panel with 7 controls
-
-## Backlog ideas (not built yet)
-
-See the `BACKLOG IDEAS (not built yet)` comment block at the top of `Dog Territory Defender.html` and `docs/specs/game-backlog.md`. Pull them by owner feedback, not in a fixed order:
-
-- **Repetition loop:** scent strength visualization, seasonal map variations (summer/autumn/winter), evening recap notifications
-- **Social layer:** local leaderboard (zip code), async multiplayer events, rolling 7-day scoring, soft territory overlap
-- **Long-term hooks:** full Den (7 more buildings), Pack collection, Beginner's Luck badge, mentor system, seasonal cosmetic resets
-
----
-
-## Extending the prototype
-
-Use [`../docs/05-design-update-prompt.md`](../docs/05-design-update-prompt.md) — it's a Claude prompt that evolves this prototype one backlog item at a time. Don't hand-add features.
-
----
-
-## Implementing for real
-
-This is a prototype, not the app. For the real build:
-
-- **Target stack:** React Native + Expo + Supabase (PostGIS) + MapLibre (tentative, to be locked in when needed)
-- **Don't copy structure:** the Babel-standalone approach is for fast iteration, not production
-- **Do match:** visual tokens, screen intents, animations, tone, copy
-
-See [`../docs/01-prototype-plan-prompt.md`](../docs/01-prototype-plan-prompt.md) for the original build plan prompt.
+Deferred ideas live in the `BACKLOG IDEAS (not built yet)` block atop the HTML file and in `docs/specs/game-backlog.md`; pull them by owner feedback. Don't hand-add features to the prototype. The shipped app has since moved to the "Unser Viertel" scene (see `docs/decisions/LOG.md`).

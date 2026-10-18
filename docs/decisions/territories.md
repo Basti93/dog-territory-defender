@@ -1,0 +1,27 @@
+# Territories (shipped; drafted 2026-08, entry point decided 2026-08-22)
+**Why:** A dog with two neighbourhoods (home, office, parents' house) should see them as separate, nameable places, and the Den gets a second small always-growing passive income tied to total claimed ground. Territories are never ranked weak vs. strong (snowball/competition frame); each gets at most one flavour title instead.
+**Decisions:**
+- Every Home Range cell belongs to exactly one Territory (`id`, `name`, `createdAt`, monotonic `walksHere`, `treatsEarnedHere`). `territoryId` lives on `Cell` in `HomeRangeRepository` (sole writer; null only during migration); `TerritoryRepository` owns only the entity.
+- Birth/assimilate threshold `SPAWN_DISTANCE_M = 400` (20 cells at `CELL_M = 20`, `src/utils/territoryCluster.ts`): new cell within 400 m of an existing territory joins it, else orphan; orphans grouped by 8-neighbour-or-within-400 m components (lowest-(ix,iy) tie-break) and each group births one territory. Not balance-critical (does not affect income), retune with a LOG entry.
+- Merge threshold is stricter: literal 8-neighbour adjacency between different territoryIds, checked only around this walk's new cells. Older (`createdAt`) survives and keeps id/name; counters sum; "Buddy connected his two worlds!" beat. Every merge is visible as connected ground.
+- Runs once per finished tracked walk; manual logs paint no cells, so never birth/merge/attribute. Credit (`walksHere += 1`, `treatsEarnedHere += treats`) goes to the one territory with most of the walk's painted cells (tie: lowest id string). First-ever territory is silent; later births and merges get optional celebration beats.
+- Naming: reverse-geocode via `src/utils/streetLookup.ts` -> "Buddy's {place} Range" (dog name via `dogDisplayName`); fallback "Buddy's New Range" (placeholder copy, game-master to finalize); rename anytime by pencil edit on the card, never on the celebration screen.
+- Card shows four monotonic stats only (streets known, walks here, treats earned ever, first claimed). Never: ranked list, percent of total, strength score, days-since-visited.
+- Titles computed live, never persisted: Everyday (most `walksHere`), Wild One (highest mean `wildness()`), Far One (furthest from oldest territory = "home"). Priority Everyday > Wild One > Far One; a territory holds at most one; categories may go unawarded; one territory = no title.
+- Somewhere Wild stays one pick app-wide; copy prefers the winning cluster's territory name.
+- Passive income (game-economist validated, do not alter without new validation): `mass(t) = cells(t) + 2*visits(t)`; `worldMass = sum mass(t)`; `territoryRate = R_max * (1 - exp(-worldMass/300000))` (`WORLD_MASS_SCALE`); `R_max = buddyPayout(level)/48`; added inside `applyPassiveAccrual`.
+- Split-invariance guardrail (MUST): `worldMass` comes from one ungrouped aggregate `HomeRangeRepository.getWorldMass()` (no territory parameter), saturation applied once. Required test: same totals as one vs. three territories give bit-identical `territoryRate`.
+- Anti-farming: `visits` credited at most +1 per cell per calendar day (`lastVisitCreditedDayKey`, `calendarDayKey`), silently; other stats unaffected; raw `visits` never displayed.
+- Reveal: hidden until global rate >= 1 treat/hour, then `DenEconomyState.territoryIncomeRevealed` flips once (safe: worldMass is monotonic), one-off away-strip beat, then permanent line on Doorstep and Den. Per-territory card shows `territoryRate * mass(t)/worldMass` as absolute "treats/hour" (never a percent), gated on the same global flag.
+- `anti-snowball`: `territoryRate` added to the existing Hard Power Gap Soft-Cap exclusion list (like Buddy's Level, `bloomMultiplier`): income effect, not a capped bonus.
+- Migration `runTerritoryMigrationIfNeeded` (flag `territoriesBackfillComplete`) replays the same clustering over existing cells in insertion order.
+- Entry point to `TerritoriesScreen`: the map screen chrome (owner, 2026-08-22), not Doorstep or Stats. Cards reuse `TerritoryPortrait` raster path scoped via `getCellsByTerritory`.
+**Rejected:**
+- Compute membership on read via connected components, because birth (400 m) and merge (touching) thresholds make membership depend on history, and merges would have no one-time event.
+- Join table for membership, because it is 1:1 mandatory (a nullable column is the existing pattern).
+- One shared proximity threshold for birth and merge, because it would merge named territories with no visible bridge.
+- Proportional attribution across territories, because multi-territory walks are rare edge cases.
+- Force every territory to hold a title, because it manufactures hollow distinctions.
+- Per-territory reveal thresholds, because they read as an implicit ranking.
+- Splitting into two changes (structure vs. income): split-invariance spans both halves.
+**Links:** `src/utils/territoryCluster.ts`, `src/economy/territoryEconomy.ts`, `src/storage/TerritoryRepository.ts`, `src/storage/territoryMigration.ts`, `src/components/TerritoriesScreen.tsx`, `src/utils/streetLookup.ts`, `docs/specs/home-range.md`, `docs/specs/anti-snowball.md`, `docs/specs/den-economy.md` (no dedicated territories spec exists in `docs/specs/`; this file and the code are the record). Related: `docs/decisions/somewhere-wild.md`.
