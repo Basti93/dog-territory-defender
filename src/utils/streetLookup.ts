@@ -54,6 +54,23 @@ export async function resolveLabelForPoint(latitude: number, longitude: number):
   }
 }
 
+/**
+ * The street at a point and nothing broader (a district or a city would make a poor corner name), or `null`. Never
+ * throws. Used for the auto-name of "Unsere Ecken": "Ecke Lindenstraße".
+ */
+export async function resolveStreetForPoint(latitude: number, longitude: number): Promise<string | null> {
+  try {
+    const results = await ExpoLocation.reverseGeocodeAsync({ latitude, longitude });
+    for (const address of results) {
+      const street = address.street?.trim();
+      if (street) return street;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** In-memory cache — a resolved (or failed) label isn't re-fetched more than once per session for the same key (anchor cell id, or a New Ground event's occurredAt). Persisted caching is optional polish per design.md Decision 5, not required for correctness. */
 const labelCache = new Map<string, string | null>();
 

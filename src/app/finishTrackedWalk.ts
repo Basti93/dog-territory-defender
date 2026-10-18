@@ -8,6 +8,7 @@ import { awardWalkRewards, WalkRewardsCelebration } from '../economy/walkRewards
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { WalkCue } from '../feedback/walkCues';
 import { log } from '../utils/log';
+import { updateCorners } from './updateCorners';
 import { flushLogShipper } from '../utils/logShipper';
 import { AppRepositories } from './repositories';
 
@@ -29,6 +30,8 @@ export interface WalkRewardsOutcome {
   /** Name of the territory this walk was credited to, for the homecoming's closing line. */
   territoryName?: string | null;
   wildExtra?: { distanceKm: number; walkIndex: number; closedAt: number };
+  /** "Unsere Ecken": this walk completed a corner (at most one); the homecoming's beat 3 asks for a name. `street` is the auto-name's source (null = neutral name). Absent = no new corner. */
+  newCorner?: { id: string; street: string | null };
 }
 
 export interface FinishTrackedWalkDeps {
@@ -54,7 +57,7 @@ export interface FinishTrackedWalkDeps {
  * (MIN_CELLS_FOR_REWARD).
  */
 export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps): Promise<void> {
-  const { homeRangeRepository, territoryRepository, walkRepository, notificationRepository, denEconomyRepository, personalStatsRepository } =
+  const { homeRangeRepository, territoryRepository, walkRepository, notificationRepository, denEconomyRepository, personalStatsRepository, cornerRepository } =
     deps.repos;
   const painted = paintedCells(walk.locations);
   const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
@@ -176,6 +179,18 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
   // Walk saved: send the walk's log lines to the server (rate limited, no-op when not joined).
   void flushLogShipper();
 
+  // "Unsere Ecken": did this walk complete a corner? Runs for every saved walk, rewarded or not, and never breaks the finish.
+  let newCorner: WalkRewardsOutcome['newCorner'];
+  if (cornerRepository) {
+    try {
+      const created = await updateCorners({ walkRepository, cornerRepository });
+      const mine = created.find((c) => c.walkId === finishedWalk.id);
+      if (mine) newCorner = { id: mine.id, street: (await cornerRepository.getCorners()).find((c) => c.id === mine.id)?.street ?? null };
+    } catch (err) {
+      log('CORNERS_UPDATE_ERROR', { id: finishedWalk.id, error: String(err) });
+    }
+  }
+
   // Refresh the idle map's Home Range render now that new cells (if any) are persisted.
   deps.onRangeChanged();
 
@@ -221,6 +236,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
       distanceMeters,
       territoryName: creditedTerritoryName,
       wildExtra: { distanceKm: distanceMeters / 1000, walkIndex, closedAt: Date.now() },
+      ...(newCorner ? { newCorner } : {}),
     });
 
     // Second patch write (walk-portrait/design.md Decision 5): records

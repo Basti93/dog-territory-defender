@@ -50,6 +50,8 @@ interface MapViewProps {
   onEmbeddedPress?: () => void;
   /** Idle map only: the territory/numbers signs and the handwritten notes (SHOW_NOTES). Omitted = the plain map with the old Territories button. */
   chrome?: ViertelChromeData | null;
+  /** Full map only: a tap on a corner sign ("Unsere Ecken") with the corner's id. Omitted = the signs are just signs. */
+  onCornerPress?: (cornerId: string) => void;
   /** Embedded only: the bottom part of the page the scene's parallax pushes out of view. The Range fit, the empty-Range centre and the numbers sign keep clear of it; the tiles still fill it. */
   bottomInset?: number;
 }
@@ -67,6 +69,7 @@ export function MapView({
   embedded = false,
   onEmbeddedPress,
   chrome,
+  onCornerPress,
   bottomInset = 0,
 }: MapViewProps) {
   useLocale(); // the chalk hint and the labels below resolve through t(); re-render on a language switch
@@ -99,6 +102,10 @@ export function MapView({
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type === 'NEIGHBOUR_TAPPED' && typeof msg.id === 'string') {
         setCardBotId(msg.id);
+        return;
+      }
+      if (msg.type === 'CORNER_TAPPED' && typeof msg.id === 'string') {
+        onCornerPress?.(msg.id);
         return;
       }
       log(msg.tag, msg.data);
@@ -188,6 +195,14 @@ export function MapView({
     post('SHOW_NOTES', { notes: notes ?? [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, notes]);
+
+  // "Unsere Ecken": the wood signs, on the embedded band and the full map alike (hidden while a walk is tracked, like the other signs).
+  const corners = chrome?.loaded && !isTracking ? chrome.corners : null;
+  useEffect(() => {
+    if (!isReady) return;
+    post('SHOW_CORNERS', { corners: corners ?? [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, corners]);
 
   // Embedded with no Range yet: centre on the last known position at street level (the chalk hint sits there).
   const emptyCenter = embedded && chrome?.loaded && chrome.rangeEmpty ? chrome.fallbackCenter : null;

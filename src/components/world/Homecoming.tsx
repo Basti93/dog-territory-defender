@@ -44,12 +44,14 @@ export interface HomecomingProps {
   onDone: () => void;
   /** Told whenever the beat changes (the scene hangs new fence badges when beat 3 starts). */
   onBeat?: (beat: BeatId) => void;
+  /** "Namen geben" on the corner prompt (beat 3, only for a walk that completed a corner): the scene opens the naming sheet. Skipping needs no callback. */
+  onNameCorner?: (cornerId: string) => void;
 }
 
-export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bowl, level, levelTitle, onCamera, onDone, onBeat }: HomecomingProps) {
-  const { width } = useWindowDimensions();
+export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bowl, level, levelTitle, onCamera, onDone, onBeat, onNameCorner }: HomecomingProps) {
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards)), [walk]);
+  const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards, !!walk.corner)), [walk]);
   const partner = !!walk.partnerName;
   const beats = useMemo(() => planBeats(walk.manual, extras, partner), [walk.manual, extras, partner]);
   const variant = useMemo(() => homecomingVariant(walkCount), [walkCount]);
@@ -107,6 +109,7 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
               spot={spot}
               entryFromLeft={beat === 'bowl' && variant.buddyEntry === 'left'}
               lying={beat === 'rest'}
+              sitting={beat === 'extras' && extras.includes('corner')}
             />
             {beat === 'bowl' && <TreatDots count={walk.rewards.treatsEarned} spot={spot} layout={layout} width={width} />}
           </>
@@ -140,6 +143,10 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
         accessibilityHint={t('homecoming.tapLabel')}
         testID="homecoming-tap"
       />
+      {/* Above the tap area: the one piece of the homecoming that takes a touch of its own. Tapping anywhere else skips it. */}
+      {beat === 'extras' && extras.includes('corner') && walk.corner && (
+        <CornerPrompt corner={walk.corner} bottom={height - spot.top + 4} onName={() => onNameCorner?.(walk.corner!.id)} />
+      )}
     </View>
   );
 }
@@ -237,12 +244,15 @@ function HomecomingBuddy({
   spot,
   entryFromLeft,
   lying,
+  sitting,
 }: {
   appearance: BuddyAppearance;
   dog: string;
   spot: { left: number; top: number; size: number };
   entryFromLeft: boolean;
   lying: boolean;
+  /** Calm and upright, looking at the spot the corner prompt is about (instead of the excited bounce). */
+  sitting: boolean;
 }) {
   const slide = useRef(new Animated.Value(entryFromLeft ? 0 : 1)).current;
   useEffect(() => {
@@ -264,7 +274,7 @@ function HomecomingBuddy({
       {lying && lyingSource ? (
         <Image source={lyingSource} resizeMode="contain" style={{ width: spot.size, height: spot.size }} accessibilityLabel={dog} testID="homecoming-lying" />
       ) : (
-        <BuddyAvatar appearance={appearance} size={spot.size} mood={lying ? 'idle' : 'excited'} excitedSettleMs={null} name={dog} />
+        <BuddyAvatar appearance={appearance} size={spot.size} mood={lying || sitting ? 'idle' : 'excited'} excitedSettleMs={null} name={dog} />
       )}
     </Animated.View>
   );
@@ -387,6 +397,21 @@ function ExtraPieces({
   );
 }
 
+/** "Hier seid ihr oft. Gebt der Ecke einen Namen?": a note over Buddy, who sits at the spot. One button; everything else is a skip. */
+function CornerPrompt({ corner, bottom, onName }: { corner: { id: string; name: string }; bottom: number; onName: () => void }) {
+  return (
+    <PopIn style={[styles.cornerPrompt, { bottom }]}>
+      <PaperNote testID="homecoming-corner" style={styles.cornerNote}>
+        <Text style={[textStyle('hand'), styles.cornerWhere]}>{corner.name}</Text>
+        <Text style={[textStyle('body'), styles.ink]}>{t('corner.prompt')}</Text>
+        <WoodSign size="medium" onPress={onName} accessibilityLabel={t('corner.prompt.name')} testID="homecoming-corner-name">
+          {t('corner.prompt.name')}
+        </WoodSign>
+      </PaperNote>
+    </PopIn>
+  );
+}
+
 function PennantPiece({ building, layout, yard }: { building: keyof WorldYardLayout['world']; layout: SceneLayout; yard: WorldYardLayout }) {
   const pennant = artOr('pennant', null);
   const w = yard.world[building];
@@ -411,6 +436,9 @@ const styles = StyleSheet.create({
   dot: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: '#C9A06A' },
   closing: { position: 'absolute', left: spacing.lg, right: spacing.lg },
   closingNote: { paddingVertical: 12 },
+  cornerPrompt: { position: 'absolute', left: spacing.lg, right: spacing.lg, alignItems: 'center' },
+  cornerNote: { alignItems: 'center', gap: spacing.sm, paddingVertical: 12, paddingHorizontal: spacing.lg },
+  cornerWhere: { color: material.inkGreen, textAlign: 'center' },
   pennantFallback: { width: 24, height: 48, backgroundColor: '#F2786E' },
 });
 

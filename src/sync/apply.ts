@@ -11,8 +11,11 @@
 //  - dog name:     server wins when it has one
 //  - member.joined: remembered for a one-off Doorstep line
 //  - member.updated: a rename; the new name replaces the old in sync state (Doorstep reads names from there)
+//  - corners:      the household's names ("Unsere Ecken"): last writer wins, the server's name replaces ours unless
+//                  our own rename of that corner is still waiting in the outbox
 
 import type { DenEconomyState } from '../economy/denEconomy';
+import type { CornerRepository } from '../storage/CornerRepository';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { NEIGHBOUR_LINES_KEPT, type NeighbourLineEntry, type SyncRepository } from '../storage/SyncRepository';
@@ -21,7 +24,7 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
 import { walkDistanceMeters } from '../utils/geometry';
-import type { ApiCell, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, SnapshotResponse } from './apiContract';
+import type { ApiCell, ApiCorner, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, CommandBody, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
   walks: WalkRepository;
@@ -29,6 +32,8 @@ export interface ApplyRepos {
   territories: TerritoryRepository;
   denEconomy: DenEconomyRepository;
   sync: SyncRepository;
+  /** "Unsere Ecken". Omitted = corner names from the server are ignored (older tests). */
+  corners?: CornerRepository;
 }
 
 export interface ApplyContext {
@@ -61,6 +66,8 @@ export interface ApplyResult {
   partnerWalks: PartnerWalkAdded[];
   /** Neighbour events arrived: the caller may refresh /v1/nearby. */
   neighbourEvents: boolean;
+  /** A corner name from the household was stored: the Viertel signs should be read again. */
+  cornersChanged: boolean;
 }
 
 interface Batch {
@@ -75,6 +82,7 @@ interface Batch {
   players: Record<string, string>;
   memberJoined: { playerName: string; at: number; playerId: string } | null;
   neighbourLines: NeighbourLineEntry[];
+  corners: ApiCorner[];
 }
 
 /** Overlays the server-owned fields onto the local state; per-device fields (backfill flags, manual-log counters, cliffhanger) stay. */
@@ -182,6 +190,22 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     neighbourLines = [...bySeq.values()].sort((a, b) => b.seq - a.seq).slice(0, NEIGHBOUR_LINES_KEPT);
   }
 
+  // Corner names, oldest first so the newest wins. Our own rename still in the outbox beats the server until it has been sent.
+  let cornersChanged = false;
+  if (batch.corners.length > 0 && repos.corners) {
+    const waiting = new Set(
+      (await repos.sync.getPending())
+        .map((i) => i.payload as CommandBody)
+        .filter((c) => c.kind === 'corner.name')
+        .map((c) => (c as { cornerId: string }).cornerId)
+    );
+    for (const corner of batch.corners) {
+      if (waiting.has(corner.id)) continue;
+      await repos.corners.setName(corner.id, corner.name, corner.updatedBy, corner.updatedAt);
+      cornersChanged = true;
+    }
+  }
+
   await repos.sync.saveState({
     players,
     ...(batch.memberJoined ? { lastMemberJoined: batch.memberJoined } : {}),
@@ -194,6 +218,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     walksAdded,
     partnerWalks,
     neighbourEvents: batch.neighbourLines.length > 0,
+    cornersChanged,
   };
 }
 
@@ -213,6 +238,7 @@ export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepo
       players,
       memberJoined: null,
       neighbourLines: [],
+      corners: snapshot.corners ?? [],
     },
     repos,
     ctx,
@@ -240,6 +266,7 @@ export async function applyEvents(
     players: {},
     memberJoined: null,
     neighbourLines: [],
+    corners: [],
   };
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const event of ordered) {
@@ -272,6 +299,9 @@ export async function applyEvents(
         break;
       case 'member.updated':
         batch.players[event.payload.player.id] = event.payload.player.displayName;
+        break;
+      case 'corner.updated':
+        batch.corners.push(event.payload.corner);
         break;
       case 'neighbour.sniffed':
       case 'neighbour.gift':

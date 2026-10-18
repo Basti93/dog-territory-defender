@@ -25,7 +25,7 @@ Offline-first app, everything persists locally in SQLite (`expo-sqlite`); option
 - `src/components/`: screens and pieces (`world/` the "Unser Viertel" home scene, `postcards/` Album + bench, `buddy/`, `den/`, `onboarding/`); `src/screens/`; `src/ui/` clay UI kit (see its README).
 - `src/economy/`: tunable config + pure formulas (treats, Den, stats, territories, neighbours); `src/storage/`: repositories with in-memory fakes for tests.
 - `src/utils/`: GPS, geometry, Home Range grid, territory clustering, street lookup; `src/web/`: Leaflet map HTML in WebViews + Home Range raster renderer.
-- `src/buddy/` (appearance, image/vector skin), `src/art/` (`artOr()` slot access), `src/postcards/` (pure postcard derivation), `src/notifications/`, `src/feedback/` (sounds, haptics), `src/i18n/` (de/en), `src/sync/` (API client, outbox, presence).
+- `src/buddy/` (appearance, image/vector skin), `src/art/` (`artOr()` slot access), `src/postcards/` (pure postcard derivation), `src/utils/cornerDetection.ts` + `src/economy/corners.ts` ("Unsere Ecken"), `src/notifications/`, `src/feedback/` (sounds, haptics), `src/i18n/` (de/en), `src/sync/` (API client, outbox, presence).
 - `server/` Fastify + Postgres API; `deploy/` Docker/Tailscale runbook and backup scripts; `plugins/` Expo config plugins.
 - `assets/` (`art/` Blender sprites, `buddy/` layered parts, `sounds/`, `fonts/`); `scripts/` (`blender/`, `generateArt.mjs`, `generateAssets.mjs`, `generateSounds.mjs`); `testing/` GPX routes.
 - `prototype/` clickable HTML design spec; `handover/claude-design/` brief + samples for Claude Design (no code).
@@ -40,4 +40,4 @@ Core loop feature-complete; the owner validates on Android (iOS via free-team bu
 - Economy: treats, Den XP/levels (Buddy's level sets the payout), milestones, anti-snowball mechanisms.
 - Household sync (two phones, one dog and Range), opt-in live sharing of walks, neighbour dogs behind a server flag.
 - Opt-in walk reminders (3 slots), onboarding, Backup/Restore, i18n de/en.
-- Open: shared postcards (M5) and corners, see `docs/decisions/multiplayer-sync.md`.
+- Open: shared postcards (M5), see `docs/decisions/multiplayer-sync.md`. "Unsere Ecken" (named corners) is built; its server part (migration 0006) needs a deploy before the app update.

@@ -2,12 +2,12 @@ import { and, count, eq, gt, isNull } from 'drizzle-orm';
 import type { JoinRequest, JoinResponse, SnapshotResponse } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
-import { cells, denState, devices, dogs, households, inviteCodes, players, territories, walks } from '../db/schema';
+import { cells, corners, denState, devices, dogs, households, inviteCodes, players, territories, walks } from '../db/schema';
 import { initialDenState, applyPassiveAccrual } from '../economy/denTransitions';
 import { hashInviteCode, newDeviceToken, newInviteCode, sha256Hex } from '../lib/crypto';
 import { isValidTimeZone } from '../lib/time';
 import { appendEvent, currentSeq, type EventBus } from './events';
-import { cellFromRow, denFromRow, dogFromRow, lockDen, territoryFromRow, walkMetaFromRow, worldMass } from './state';
+import { cellFromRow, cornerFromRow, denFromRow, dogFromRow, lockDen, territoryFromRow, walkMetaFromRow, worldMass } from './state';
 import type { AuthCtx } from './walks';
 
 // ----------------------------------------------------------- operator side (CLI)
@@ -159,6 +159,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
   const [denRow] = await db.select().from(denState).where(eq(denState.householdId, hid));
   const cellRows = await db.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
   const territoryRows = await db.select().from(territories).where(eq(territories.householdId, hid));
+  const cornerRows = await db.select().from(corners).where(eq(corners.householdId, hid));
   const walkRows = await db
     .select({
       householdId: walks.householdId,
@@ -192,6 +193,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
     cells: cellRows.map(cellFromRow),
     territories: territoryRows.map(territoryFromRow),
     walks: walkRows.map(walkMetaFromRow),
+    corners: cornerRows.map(cornerFromRow),
   };
 }
 

@@ -19,6 +19,7 @@ export const API_PREFIX = '/v1';
  * `/v2` paths. The server may raise MIN_CLIENT_API_LEVEL (env) to refuse mutating requests from older apps with
  * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
  * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
+ * Additive inside level 2 (no bump): live presence (M4) and named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`).
  */
 export const API_LEVEL = 2;
 
@@ -66,6 +67,8 @@ export const API_LIMITS = {
   maxDisplayNameLength: 40,
   /** `player.rename` (and the app's name fields): trimmed length 1..this. */
   maxRenameLength: 24,
+  /** `corner.name`: trimmed length 1..this ("Unsere Ecken"). */
+  maxCornerNameLength: 24,
   maxDogNameLength: 40,
   /** Founding import ceilings (body limit 5 MiB). */
   maxImportWalks: 2000,
@@ -180,6 +183,21 @@ export interface ApiDog {
   updatedAt: number;
 }
 
+/**
+ * A named favourite corner ("Unsere Ecken"). `id` is the centre cell of the 3x3 block, `"ix,iy"` (CORNER_ID_PATTERN):
+ * both phones detect corners locally and agree on the id, the server only stores the names. Last writer wins.
+ */
+export interface ApiCorner {
+  id: string;
+  name: string;
+  /** The member who wrote the current name. */
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** `"ix,iy"` of the block's centre cell (same format as `cellKey`). */
+export const CORNER_ID_PATTERN = '^-?[0-9]{1,9},-?[0-9]{1,9}$';
+
 export interface ApiPlayer {
   id: string;
   displayName: string;
@@ -217,6 +235,8 @@ export interface SnapshotResponse {
   cells: ApiCell[];
   territories: ApiTerritory[];
   walks: ApiWalkMeta[];
+  /** Named corners. Absent from servers that predate "Unsere Ecken"; treat as empty. */
+  corners?: ApiCorner[];
 }
 
 // ------------------------------------------------------------------ walks
@@ -362,6 +382,11 @@ export type CommandBody =
   /** Changes the caller's own display name (trimmed, 1..maxRenameLength). Emits `member.updated`. */
   | { kind: 'player.rename'; name: string }
   /**
+   * Names (or renames) a favourite corner for the whole household: trimmed, 1..maxCornerNameLength, last writer
+   * wins, no notification. Emits `corner.updated`. Idempotent like every command.
+   */
+  | { kind: 'corner.name'; cornerId: string; name: string }
+  /**
    * Opens a neighbour gift (POST /v1/gifts/:id/open wraps this). First opener wins; a second open is
    * ok with no further credit. The gift's treat sprinkle goes straight into the Den (no reward formulas).
    */
@@ -399,6 +424,7 @@ export type EventKind =
   | 'dog.updated'
   | 'member.joined'
   | 'member.updated'
+  | 'corner.updated'
   // Track B (Nachbarhunde). Payload is a line KEY plus params, never copy; the app renders it via i18n.
   | 'neighbour.sniffed'
   | 'neighbour.gift'
@@ -446,6 +472,7 @@ export interface EventPayloads {
   'dog.updated': { dog: ApiDog };
   'member.joined': { player: ApiPlayer };
   'member.updated': { player: ApiPlayer };
+  'corner.updated': { corner: ApiCorner };
   'neighbour.sniffed': NeighbourEventPayload;
   'neighbour.gift': NeighbourEventPayload;
   'neighbour.reaction': NeighbourEventPayload;

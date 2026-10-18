@@ -3,7 +3,8 @@ import { Alert, StyleSheet, Text, useWindowDimensions, View } from 'react-native
 
 import { useBackAction } from '../../app/backStack';
 import { dogDisplayName } from '../../economy/denEconomy';
-import { daypartPhrase, territoryNameForWalk, type PostcardEntry } from '../../postcards/postcards';
+import { cornerNameForWalk, daypartPhrase, territoryNameForWalk, type PostcardEntry } from '../../postcards/postcards';
+import type { CornerRepository } from '../../storage/CornerRepository';
 import type { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import type { TerritoryRepository } from '../../storage/TerritoryRepository';
 import { Header, material, Screen, spacing, textStyle, TextLink } from '../../ui';
@@ -16,6 +17,8 @@ interface PostcardOverlayProps {
   dogName: string | null;
   homeRangeRepository: HomeRangeRepository;
   territoryRepository?: TerritoryRepository;
+  /** "Unsere Ecken": a walk through a named corner is postmarked with its name. Omitted = territory names only. */
+  cornerRepository?: CornerRepository;
   onClose: () => void;
   /** The player took this card away (the walk record is deleted by the caller). */
   onRemove: (entry: PostcardEntry) => void;
@@ -27,10 +30,11 @@ const MAX_CARD_W = 440;
  * One card, big, over the Album. Android back (and the iOS edge swipe) turn a flipped card face-up first, then close it.
  * Holds the only WebView of the Album, mounted while a tracked card is open.
  */
-export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository, territoryRepository, onClose, onRemove }: PostcardOverlayProps) {
+export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository, territoryRepository, cornerRepository, onClose, onRemove }: PostcardOverlayProps) {
   const { width } = useWindowDimensions();
   const [side, setSide] = useState<PostcardSide>('front');
   const [territoryName, setTerritoryName] = useState<string | null>(null);
+  const [cornerName, setCornerName] = useState<string | null>(null);
   const twoSided = entry.kind === 'tracked';
 
   useBackAction(true, () => {
@@ -43,13 +47,19 @@ export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository
     if (!twoSided) return;
     let alive = true;
     (async () => {
-      const [cells, territories] = await Promise.all([homeRangeRepository.getCells(), territoryRepository ? territoryRepository.getTerritories() : Promise.resolve([])]);
-      if (alive) setTerritoryName(territoryNameForWalk(entry.walk, cells, territories));
+      const [cells, territories, corners] = await Promise.all([
+        homeRangeRepository.getCells(),
+        territoryRepository ? territoryRepository.getTerritories() : Promise.resolve([]),
+        cornerRepository ? cornerRepository.getCorners() : Promise.resolve([]),
+      ]);
+      if (!alive) return;
+      setTerritoryName(territoryNameForWalk(entry.walk, cells, territories));
+      setCornerName(cornerNameForWalk(entry.walk, corners));
     })().catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, [entry, twoSided, homeRangeRepository, territoryRepository]);
+  }, [entry, twoSided, homeRangeRepository, territoryRepository, cornerRepository]);
 
   const confirmRemove = () => {
     Alert.alert(t('history.deleteTitle'), t('history.deleteMessage'), [
@@ -72,6 +82,7 @@ export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository
             homeRangeRepository={homeRangeRepository}
             dog={dogDisplayName(dogName)}
             territoryName={territoryName}
+            cornerName={cornerName}
             favourite={favourite}
           />
           {twoSided && <Text style={[textStyle('hand'), styles.hint]}>{t('album.flipHint')}</Text>}

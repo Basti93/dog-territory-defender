@@ -20,6 +20,14 @@ export interface MapNote {
   kind?: 'ink' | 'chalk';
 }
 
+/** A corner as the map sign needs it: the id (tap target), the sign text and the centre cell. */
+export interface ViertelCorner {
+  id: string;
+  name: string;
+  ix: number;
+  iy: number;
+}
+
 export interface LatLon {
   latitude: number;
   longitude: number;

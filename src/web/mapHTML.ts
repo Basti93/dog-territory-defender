@@ -305,9 +305,9 @@ ${MAP_THEME_PROBE_JS}
         reportToRN('SHOW_WILD_SPOT_APPLIED', { hasSpot: !!payload });
       }
 
-      // "Unsere Ecken" scaffolding: payload is { corners: [{ name, ix, iy }] },
-      // each placed at the centre of grid cell (ix, iy) as a small wood sign.
-      // An empty/missing list clears. The data model comes later.
+      // "Unsere Ecken": payload is { corners: [{ id, name, ix, iy }] }, each placed at the centre of grid cell (ix, iy)
+      // as a small wood sign. An empty/missing list clears. On the full map a tap on a sign posts
+      // { type: 'CORNER_TAPPED', id } to React Native (the naming sheet); the embedded band is not interactive.
       if (type === 'SHOW_CORNERS') {
         if (cornersLayerGroup) {
           map.removeLayer(cornersLayerGroup);
@@ -317,10 +317,15 @@ ${MAP_THEME_PROBE_JS}
         if (corners.length > 0) {
           cornersLayerGroup = L.layerGroup().addTo(map);
           corners.forEach((c) => {
-            L.marker(hrCellCenterLatLng(c.ix, c.iy), {
+            const marker = L.marker(hrCellCenterLatLng(c.ix, c.iy), {
               icon: L.divIcon({ className: 'corner-marker', html: cornerSignHTML(c.name), iconSize: [0, 0] }),
-              interactive: false
+              interactive: !EMBEDDED
             }).addTo(cornersLayerGroup);
+            if (!EMBEDDED) {
+              marker.on('click', function () {
+                if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'CORNER_TAPPED', id: c.id }));
+              });
+            }
           });
         }
         reportToRN('SHOW_CORNERS_APPLIED', { count: corners.length });

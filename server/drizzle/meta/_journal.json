@@ -43,6 +43,13 @@
       "when": 1792346968289,
       "tag": "0005_walk_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792358620437,
+      "tag": "0006_corners",
+      "breakpoints": true
     }
   ]
 }

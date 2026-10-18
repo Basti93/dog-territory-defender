@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { CommandRequest, CommandResponse, CommandErrorCode } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
-import { dogs, economyCommands, gifts, households, players, walks } from '../db/schema';
+import { corners, dogs, economyCommands, gifts, households, players, walks } from '../db/schema';
 import { canonicalJson } from '../lib/canonicalJson';
 import { sameLocalDay } from '../lib/time';
 import { applyPassiveAccrual, upgradeBuilding } from '../economy/denTransitions';
@@ -126,6 +126,19 @@ export async function runCommand(
             player: { id: row.id, displayName: row.displayName, joinedAt: row.createdAt.getTime() },
           });
         }
+        break;
+      }
+      case 'corner.name': {
+        // Last writer wins; the first writer is kept as created_by. Detection is on the phones, so the id is trusted
+        // (format-checked by the schema) and an unknown corner simply becomes known here.
+        const name = cmd.name.trim();
+        await dbx
+          .insert(corners)
+          .values({ householdId: hid, cornerId: cmd.cornerId, name, createdBy: auth.playerId, updatedBy: auth.playerId, createdAt: now, updatedAt: now })
+          .onConflictDoUpdate({ target: [corners.householdId, corners.cornerId], set: { name, updatedBy: auth.playerId, updatedAt: now } });
+        await appendEvent(dbx, hid, 'corner.updated', auth.playerId, {
+          corner: { id: cmd.cornerId, name, updatedBy: auth.playerId, updatedAt: now },
+        });
         break;
       }
       case 'gift.open': {

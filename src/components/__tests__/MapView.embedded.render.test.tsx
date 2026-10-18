@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { t } from '../../i18n';
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
@@ -15,6 +15,7 @@ const chrome = (extra: Partial<ViertelChromeData> = {}): ViertelChromeData => ({
   territory: { name: 'Hinterm Park', title: 'Everyday' },
   statsParts: ['42 walks', '31 streets'],
   notes: [{ text: 'stitched today', lat: 1, lon: 2, anchor: 'below' }],
+  corners: [],
   wildSpot: null,
   fallbackCenter: null,
   rangeEmpty: false,
@@ -44,6 +45,43 @@ describe('MapView embedded (Viertel band)', () => {
     await fireEvent.press(screen.getByRole('button', { name: t('viertel.territoriesLabel') }));
     expect(onOpenTerritories).toHaveBeenCalledTimes(1);
     expect(onEmbeddedPress).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('posts the corner signs (SHOW_CORNERS) and clears them when the list is empty', async () => {
+    const corners = [{ id: '5,6', name: 'Kiosk-Ecke', ix: 5, iy: 6 }];
+    const view = await renderScreen(
+      <MapView embedded locations={[]} homeRangeRepository={createInMemoryHomeRangeRepository()} chrome={chrome({ corners })} />
+    );
+    await flush();
+    expect(messages('SHOW_CORNERS').pop().payload).toEqual({ corners });
+    await view.rerender(
+      <MapView embedded locations={[]} homeRangeRepository={createInMemoryHomeRangeRepository()} chrome={chrome({ corners: [] })} />
+    );
+    expect(messages('SHOW_CORNERS').pop().payload).toEqual({ corners: [] });
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('on the full map a tap on a corner sign reports its id', async () => {
+    const onCornerPress = jest.fn();
+    const view = await renderScreen(
+      <MapView locations={[]} homeRangeRepository={createInMemoryHomeRangeRepository()} chrome={chrome({ corners: [{ id: '5,6', name: 'Kiosk-Ecke', ix: 5, iy: 6 }] })} onCornerPress={onCornerPress} />
+    );
+    await flush();
+    expect(messages('SHOW_CORNERS').pop().payload.corners).toHaveLength(1); // the full map shows the signs too
+    await act(async () => {
+      screen.getByTestId('webview').props.onMessage({ nativeEvent: { data: JSON.stringify({ type: 'CORNER_TAPPED', id: '5,6' }) } });
+    });
+    expect(onCornerPress).toHaveBeenCalledWith('5,6');
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('while a walk is tracked the corner signs are hidden like the other signs', async () => {
+    const view = await renderScreen(
+      <MapView locations={[]} isTracking homeRangeRepository={createInMemoryHomeRangeRepository()} chrome={chrome({ corners: [{ id: '5,6', name: 'Kiosk-Ecke', ix: 5, iy: 6 }] })} />
+    );
+    await flush();
+    expect(messages('SHOW_CORNERS').every((m) => m.payload.corners.length === 0)).toBe(true);
     await unmountAndExpectNoTimers(view);
   });
 

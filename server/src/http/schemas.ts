@@ -3,7 +3,7 @@
 // compile time against the shared contract in src/sync/apiContract.ts: if they drift, tsc fails.
 import { Type, type Static } from '@sinclair/typebox';
 import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
-import { API_LIMITS } from '@game/sync/apiContract';
+import { API_LIMITS, CORNER_ID_PATTERN } from '@game/sync/apiContract';
 import type { CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
@@ -63,6 +63,15 @@ export const CommandSchema = Type.Object(
       Type.Object(
         // pattern: at least one non-space character, so a whitespace-only name is a 400, not an empty name
         { kind: Type.Literal('player.rename'), name: Type.String({ minLength: 1, maxLength: API_LIMITS.maxRenameLength, pattern: '\\S' }) },
+        { additionalProperties: false }
+      ),
+      Type.Object(
+        {
+          kind: Type.Literal('corner.name'),
+          cornerId: Type.String({ minLength: 3, maxLength: 20, pattern: CORNER_ID_PATTERN }),
+          // No control characters: a NUL cannot be stored in Postgres text and would be a 500, not a 400.
+          name: Type.String({ minLength: 1, maxLength: API_LIMITS.maxCornerNameLength, pattern: '^(?=.*\\S)[^\\u0000-\\u001F\\u007F]+$' }),
+        },
         { additionalProperties: false }
       ),
     ]),

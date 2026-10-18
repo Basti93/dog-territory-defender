@@ -1,4 +1,5 @@
-import { ApiError } from '../apiClient';
+import { ApiClient, ApiError } from '../apiClient';
+import { createSyncEngine } from '../syncEngine';
 import { BACKOFF_BASE_MS, MAX_ATTEMPTS, backoffDelayMs, planFailure } from '../outbox';
 import { apiDen, engineWithFetch, IDENTITY, jsonResponse, makeEngine, makeRepos, snapshot } from '../../test/syncHelpers';
 import type { Walk } from '../../types';
@@ -30,6 +31,108 @@ describe('backoff policy', () => {
     expect(planFailure(0, true, 100)).toEqual({ nextAttemptAt: 100 + BACKOFF_BASE_MS, deadAt: null });
     expect(planFailure(MAX_ATTEMPTS - 1, true, 100).deadAt).toBe(100);
     expect(planFailure(0, false, 100).deadAt).toBe(100);
+  });
+});
+
+describe('corner names ("Unsere Ecken")', () => {
+  const commandOk = () => jest.fn(async () => ({ clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 }));
+
+  it('stores the trimmed name on this phone at once, sends corner.name, and refuses empty names and bad ids', async () => {
+    const repos = await joined();
+    const command = commandOk();
+    const engine = makeEngine(repos, { command, events: async () => emptyEvents });
+    expect(await engine.renameCorner('1,2', '   ')).toBe(false);
+    expect(await engine.renameCorner('not-a-corner', 'Kiosk')).toBe(false);
+    expect(await engine.renameCorner('1,2', '  Kiosk-Ecke  ')).toBe(true);
+    expect(await engine.renameCorner('1,2', 'x'.repeat(40))).toBe(true); // cut to 24 characters
+    expect((await repos.corners.getCorners())[0]).toMatchObject({ id: '1,2', name: 'x'.repeat(24), nameBy: 'p-me' });
+    await engine.syncNow();
+    expect(command).toHaveBeenCalledWith(expect.objectContaining({ command: { kind: 'corner.name', cornerId: '1,2', name: 'Kiosk-Ecke' } }));
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+
+  it('names locally without queueing anything when not joined', async () => {
+    const repos = makeRepos();
+    const engine = makeEngine(repos, {});
+    expect(await engine.renameCorner('1,2', 'Kiosk-Ecke')).toBe(true);
+    expect((await repos.corners.getCorners())[0]).toMatchObject({ name: 'Kiosk-Ecke', nameBy: null });
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+
+  it('tells who wrote a name only when that is the other member', async () => {
+    const repos = await joined();
+    await repos.sync.saveState({ players: { 'p-me': 'Sam', 'p-lisa': 'Lisa' } });
+    const engine = makeEngine(repos, {});
+    expect(await engine.cornerNamedBy('p-lisa')).toBe('Lisa');
+    expect(await engine.cornerNamedBy('p-me')).toBeNull();
+    expect(await engine.cornerNamedBy(null)).toBeNull();
+    expect(await makeEngine(makeRepos(), {}).cornerNamedBy('p-lisa')).toBeNull();
+  });
+
+  it('applies a rename from the household feed and asks the app to re-read the signs', async () => {
+    const repos = await joined();
+    const events = jest.fn(async () => ({
+      events: [{ seq: 8, kind: 'corner.updated' as const, actorPlayerId: 'p-lisa', createdAt: 5, payload: { corner: { id: '3,4', name: 'Bank am Park', updatedBy: 'p-lisa', updatedAt: 5 } } }],
+      cursor: 8,
+      hasMore: false,
+      serverTime: 2_000,
+    }));
+    const onRangeChanged = jest.fn();
+    const engine = makeEngine(repos, { events });
+    engine.setCallbacks({ onRangeChanged });
+    await engine.syncNow();
+    expect((await repos.corners.getCorners())[0]).toMatchObject({ id: '3,4', name: 'Bank am Park', nameBy: 'p-lisa' });
+    expect(onRangeChanged).toHaveBeenCalled();
+  });
+
+  it('sends names given before joining when the first snapshot does not know them', async () => {
+    const repos = makeRepos();
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    await repos.corners.setName('1,2', 'Kiosk-Ecke', null, 5);
+    await repos.corners.setName('7,7', 'Schon da', null, 6);
+    const command = commandOk();
+    const engine = makeEngine(repos, {
+      command,
+      snapshot: async () => snapshot({ walks: [{ id: 'w', playerId: 'p-lisa', startTime: 1, startSource: 'button', closed: true, newGroundCellIds: [], treatsEarned: 1, deleted: false }], den: apiDen({ rev: 1 }), corners: [{ id: '7,7', name: 'Von Lisa', updatedBy: 'p-lisa', updatedAt: 9 }] }),
+      getWalk: async () => null,
+      events: async () => emptyEvents,
+    });
+    await engine.syncNow();
+    await engine.syncNow(); // the queued name goes out on the next run
+    expect(command).toHaveBeenCalledTimes(1);
+    expect(command).toHaveBeenCalledWith(expect.objectContaining({ command: { kind: 'corner.name', cornerId: '1,2', name: 'Kiosk-Ecke' } }));
+    expect((await repos.corners.getCorners()).find((c) => c.id === '7,7')?.name).toBe('Von Lisa'); // the household's name replaced ours
+  });
+
+  it('against a server that predates corners: the refused rename is dead-lettered once, the name stays on this phone, other items still go out', async () => {
+    const repos = await joined();
+    const command = jest.fn(async (req: { command: { kind: string } }) => {
+      if (req.command.kind === 'corner.name') throw new ApiError('client', 'HTTP 400', 400);
+      return { clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 };
+    });
+    const engine = makeEngine(repos, { command, events: async () => emptyEvents });
+    await engine.renameCorner('1,2', 'Kiosk-Ecke');
+    await engine.renameCorner('1,3', 'Bank');
+    await engine.syncNow({ force: true });
+    await engine.syncNow({ force: true });
+    expect(command).toHaveBeenCalledTimes(2); // each refused once, never retried
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 2 });
+    expect((await repos.corners.getCorners()).map((c) => c.name).sort()).toEqual(['Bank', 'Kiosk-Ecke']);
+  });
+
+  it('looks for corners after walks of the household arrived', async () => {
+    const repos = await joined();
+    const afterWalksAdded = jest.fn(async () => undefined);
+    const events = jest.fn(async () => ({
+      events: [{ seq: 8, kind: 'walk.added' as const, actorPlayerId: 'p-lisa', createdAt: 5, payload: { walk: { id: 'lw', playerId: 'p-lisa', startTime: 5, startSource: 'button' as const, closed: true, newGroundCellIds: [], treatsEarned: 3, deleted: false }, cellsPainted: 1 } }],
+      cursor: 8,
+      hasMore: false,
+      serverTime: 2_000,
+    }));
+    const getWalk = jest.fn(async (id: string) => ({ id, playerId: 'p-lisa', startTime: 5, startSource: 'button' as const, closed: true, newGroundCellIds: [], treatsEarned: 3, deleted: false, locations: [{ latitude: 1, longitude: 2, timestamp: 5, accuracy: 5 }] }));
+    const engine = createSyncEngine({ ...repos, createClient: () => ({ events, getWalk } as unknown as ApiClient), now: () => 1_000_000, afterWalksAdded });
+    await engine.syncNow();
+    expect(afterWalksAdded).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -62,6 +62,22 @@ describe('planBeats / planExtras', () => {
     expect(extras).toEqual(['badge', 'milestone']);
   });
 
+  it('a new corner is an extra of its own, first in line, and counts as one of the two', () => {
+    expect(planExtras(rewards(), true)).toEqual(['corner']);
+    expect(planBeats(false, planExtras(rewards(), true))).toEqual(['patch', 'bowl', 'extras', 'rest']);
+    expect(planExtras(rewards({ unlockedAchievements: [BADGE] }), true)).toEqual(['corner', 'badge']);
+    // The cap of two holds with a corner: the level-up and the pennant wait in the yard.
+    const everything = rewards({
+      unlockedAchievements: [BADGE],
+      leveledUpTo: 3,
+      oldTreatsPerWalk: 10,
+      newTreatsPerWalk: 12,
+      tease: { building: 'bakery', cost: 5, affordable: true } as never,
+    });
+    expect(planExtras(everything, true)).toEqual(['corner', 'badge']);
+    expect(planExtras(everything, false)).toEqual(['badge', 'milestone']);
+  });
+
   it('a pennant needs an affordable tease', () => {
     expect(planExtras(rewards({ tease: { building: 'bakery', cost: 5, affordable: false } as never }))).toEqual([]);
     expect(planExtras(rewards({ tease: { building: 'bakery', cost: 5, affordable: true } as never }))).toEqual(['pennant']);

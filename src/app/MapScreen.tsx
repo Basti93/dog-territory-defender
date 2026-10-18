@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MapView } from '../components/MapView';
+import { CornerSheet, type CornerTools } from '../components/world/CornerSheet';
 import { useViertelChrome } from '../components/world/useViertelChrome';
 import { SomewhereWildCard, SomewhereWildSpot } from '../components/SomewhereWildCard';
 import { Button, palette, spacing, TextLink, textStyle, tokens } from '../ui';
@@ -9,6 +10,7 @@ import { dogDisplayName } from '../economy/denEconomy';
 import { formatDistanceKm, t } from '../i18n';
 import { walkDistanceMeters } from '../utils/geometry';
 import { Walk } from '../types';
+import type { BuddyAppearance } from '../buddy/buddyAppearance';
 import { AppRepositories } from './repositories';
 import { ScreenFrame } from './ScreenFrame';
 import type { NeighbourhoodActions } from '../sync/neighbourhood';
@@ -37,6 +39,9 @@ interface MapScreenProps {
   onNewWalk: () => void;
   /** The sync engine: Nachbarhund lines for the profile card. */
   neighbourhood?: NeighbourhoodActions;
+  /** "Unsere Ecken": the corner store, rename and namer lookup (the signs on the map, the naming sheet). Omitted = no corners. */
+  cornerTools?: CornerTools;
+  buddyAppearance?: BuddyAppearance;
 }
 
 /** The live/idle map with its bottom controls. Hosts a WebView, so never FadeSlideIn-wrapped. */
@@ -44,12 +49,16 @@ export function MapScreen(p: MapScreenProps) {
   const { walk, isTracking } = p;
   const distance = walk ? walkDistanceMeters(walk) / 1000 : 0;
   // Idle map: territory sign, numbers sign and handwritten notes (konzept section 3). Hidden while a walk is tracked.
+  // A tap on a corner sign opens the naming sheet; a saved name re-reads the signs.
+  const [cornerSheetId, setCornerSheetId] = useState<string | null>(null);
+  const [cornerEdits, setCornerEdits] = useState(0);
   const viertelChrome = useViertelChrome({
     homeRangeRepository: p.repos.homeRangeRepository,
     walkRepository: p.repos.walkRepository,
     territoryRepository: p.repos.territoryRepository,
+    cornerRepository: p.cornerTools?.repository,
     dogName: p.dogName,
-    refreshKey: p.homeRangeRefreshKey,
+    refreshKey: p.homeRangeRefreshKey + cornerEdits,
     wildSpot: p.wildSpot,
   });
   return (
@@ -69,8 +78,24 @@ export function MapScreen(p: MapScreenProps) {
           onOpenTerritories={p.onOpenTerritories}
           neighbourhood={p.neighbourhood}
           chrome={isTracking ? null : viertelChrome}
+          onCornerPress={p.cornerTools ? setCornerSheetId : undefined}
         />
       </View>
+
+      {p.cornerTools && p.buddyAppearance && cornerSheetId && (
+        <CornerSheet
+          cornerId={cornerSheetId}
+          cornerRepository={p.cornerTools.repository}
+          walkRepository={p.repos.walkRepository}
+          buddyAppearance={p.buddyAppearance}
+          onRename={p.cornerTools.rename}
+          namedByOther={p.cornerTools.namedByOther}
+          onClose={(changed) => {
+            setCornerSheetId(null);
+            if (changed) setCornerEdits((n) => n + 1);
+          }}
+        />
+      )}
 
       {/* Bottom controls */}
       <View style={styles.controls}>

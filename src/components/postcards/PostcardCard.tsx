@@ -25,6 +25,8 @@ interface PostcardCardProps {
   homeRangeRepository: HomeRangeRepository;
   dog: string;
   territoryName: string | null;
+  /** The corner the walk ran through (its name replaces the territory on the postmark), or null. */
+  cornerName?: string | null;
   favourite: boolean;
 }
 
@@ -34,10 +36,10 @@ interface PostcardCardProps {
  * while the back is up (no reload when it turns again); the back is just paper and text, covering it.
  * A handwritten card (a logged walk) is the writing side only and does not turn.
  */
-export function PostcardCard({ entry, width, side, onFlip, homeRangeRepository, dog, territoryName, favourite }: PostcardCardProps) {
+export function PostcardCard({ entry, width, side, onFlip, homeRangeRepository, dog, territoryName, cornerName, favourite }: PostcardCardProps) {
   const height = Math.round(width * POSTCARD_ASPECT);
   const twoSided = entry.kind === 'tracked';
-  const words = postcardWords(entry, { dog, territoryName });
+  const words = postcardWords(entry, { dog, territoryName, cornerName });
 
   // `shown` trails `side` by half a turn: the card turns edge-on, swaps faces, then turns the rest of the way.
   const [shown, setShown] = useState<PostcardSide>(twoSided ? side : 'back');

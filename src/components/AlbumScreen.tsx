@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { daypartPhrase, type PostcardEntry } from '../postcards/postcards';
 import { usePostcards } from '../postcards/usePostcards';
+import type { CornerRepository } from '../storage/CornerRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
@@ -20,6 +21,8 @@ interface AlbumScreenProps {
   walkRepository: WalkRepository;
   homeRangeRepository: HomeRangeRepository;
   territoryRepository?: TerritoryRepository;
+  /** Postmarks use a named corner's name when the walk ran through one. */
+  cornerRepository?: CornerRepository;
   dogName: string | null;
   onClose: () => void;
   /** A card was taken away, i.e. its walk deleted locally. App.tsx uses it to tell the household (`walk.delete`); the Range keeps the ground either way. */
@@ -40,7 +43,7 @@ function tiltFor(id: string): number {
  * The Album (what the bench opens): every postcard, newest first, in a calm grid. Tap a card to open it; it turns over
  * by tap or swipe. No counts, no comparisons, nothing to catch up on.
  */
-export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeRepository, territoryRepository, dogName, onClose, onWalkDeleted }: AlbumScreenProps) {
+export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeRepository, territoryRepository, cornerRepository, dogName, onClose, onWalkDeleted }: AlbumScreenProps) {
   const { cards, loaded, favouriteId, forget } = usePostcards({ walkRepository, territoryRepository });
   const [openId, setOpenId] = useState<string | null>(null);
   const { width } = useWindowDimensions();
@@ -106,6 +109,7 @@ export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeReposito
           dogName={dogName}
           homeRangeRepository={homeRangeRepository}
           territoryRepository={territoryRepository}
+          cornerRepository={cornerRepository}
           onClose={() => setOpenId(null)}
           onRemove={remove}
         />

@@ -4,7 +4,10 @@ import type { Cell } from '../storage/HomeRangeRepository';
 import type { StoredWalk } from '../storage/WalkRepository';
 import type { Territory } from '../storage/TerritoryRepository';
 import { walkDistanceMeters, walkHasMovement } from '../utils/geometry';
+import { cornerDisplayName } from '../utils/cornerName';
+import { cornersTouchedBy, resolveCorners } from '../utils/cornerDetection';
 import { NEW_GROUND_MIN_CELLS, cellKey, paintedCells, streetsKnown } from '../utils/grid';
+import type { StoredCorner } from '../storage/CornerRepository';
 import { displayTerritoryName } from '../utils/territoryDisplayName';
 
 // Postcards on the bench (redesign step 5). Nothing is stored: every finished walk that went somewhere IS a postcard,
@@ -175,11 +178,11 @@ export interface PostcardWords {
   streets: string | null;
   buddyLine: string;
   signature: string;
-  /** Territory name, or the fallback ("Unser Viertel"); a handwritten card says it was added later. */
+  /** The corner's name when the walk touched a named corner, else the territory name, else the fallback ("Unser Viertel"); a handwritten card says it was added later. */
   postmark: string;
 }
 
-export function postcardWords(entry: PostcardEntry, opts: { dog: string; territoryName: string | null }): PostcardWords {
+export function postcardWords(entry: PostcardEntry, opts: { dog: string; territoryName: string | null; cornerName?: string | null }): PostcardWords {
   const handwritten = entry.kind === 'handwritten';
   return {
     when: handwritten ? formatDate(entry.startTime, { weekday: 'long' }) : daypartPhrase(entry.startTime),
@@ -187,7 +190,7 @@ export function postcardWords(entry: PostcardEntry, opts: { dog: string; territo
     streets: newStreetsPhrase(entry.newStreets),
     buddyLine: t(pickBuddyLineKey(entry)),
     signature: t('postcard.signature', { dog: opts.dog }),
-    postmark: handwritten ? t('postcard.postmark.manual') : opts.territoryName ?? t('postcard.postmark.fallback'),
+    postmark: handwritten ? t('postcard.postmark.manual') : opts.cornerName ?? opts.territoryName ?? t('postcard.postmark.fallback'),
   };
 }
 
@@ -213,4 +216,19 @@ export function territoryNameForWalk(walk: StoredWalk, cells: readonly Cell[], t
   }
   const territory = bestId ? territories.find((x) => x.id === bestId) : undefined;
   return territory ? displayTerritoryName(territory.name) : null;
+}
+
+/**
+ * The postmark of a tracked walk that ran through a corner of "Unsere Ecken": that corner's name (the household's, else
+ * "Ecke {street}"). A corner with neither is skipped, so the neutral "Unsere Ecke" never replaces a real territory name.
+ * When the walk touched several, the one it spent the most path in wins. Null when it touched none.
+ */
+export function cornerNameForWalk(walk: Pick<StoredWalk, 'locations'>, corners: readonly StoredCorner[]): string | null {
+  const shown = resolveCorners(corners);
+  const byId = new Map(shown.map((c) => [c.id, c]));
+  for (const id of cornersTouchedBy(walk, shown)) {
+    const corner = byId.get(id);
+    if (corner && (corner.name || corner.street)) return cornerDisplayName(corner);
+  }
+  return null;
 }

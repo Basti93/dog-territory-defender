@@ -75,6 +75,12 @@ describe('live map HTML', () => {
     expect(mapHTML).toContain('&lt;');
   });
 
+  it('SHOW_CORNERS signs are tappable on the full map only and report the corner id', () => {
+    expect(mapHTML).toContain("type: 'CORNER_TAPPED', id: c.id");
+    expect(mapHTML).toContain('interactive: !EMBEDDED');
+    expect(mapHTMLEmbedded).toContain('const EMBEDDED = true');
+  });
+
   it('uses the coral pin for Somewhere Wild', () => {
     expect(mapHTML).toContain(encodeURIComponent('#F2786E'));
   });

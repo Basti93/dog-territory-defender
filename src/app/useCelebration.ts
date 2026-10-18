@@ -15,6 +15,8 @@ export interface CelebrationState {
   walkTime?: number;
   /** A manually logged walk gets the short two-beat homecoming. */
   manual?: boolean;
+  /** "Unsere Ecken": the walk completed a corner; beat 3 asks once for a name. `street` feeds the auto-name. */
+  corner?: { id: string; street: string | null };
 }
 
 /** The one-off reward moment shown on top of everything else until "Nice walk!". */

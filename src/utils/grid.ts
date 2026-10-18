@@ -187,8 +187,14 @@ export function paintedCells(locations: Location[]): Set<CellId> {
     }
   };
 
-  if (locations.length === 0) return cells;
-  stamp(locations[0].latitude, locations[0].longitude);
+  forEachPathPoint(locations, SAMPLE_STEP_M, stamp);
+  return cells;
+}
+
+/** Walk the resampled path with the same anti-exploit guards for painting and for corner detection: no point is visited through a dropout or a ride. */
+function forEachPathPoint(locations: Location[], stepM: number, visit: (lat: number, lon: number) => void): void {
+  if (locations.length === 0) return;
+  visit(locations[0].latitude, locations[0].longitude);
 
   for (let i = 1; i < locations.length; i++) {
     const a = locations[i - 1];
@@ -199,13 +205,27 @@ export function paintedCells(locations: Location[]): Set<CellId> {
     const dtSeconds = (b.timestamp - a.timestamp) / 1000;
     if (dtSeconds > 0 && distance / dtSeconds > MAX_SEGMENT_SPEED_MS) continue;
 
-    const steps = Math.max(1, Math.ceil(distance / SAMPLE_STEP_M));
+    const steps = Math.max(1, Math.ceil(distance / stepM));
     for (let s = 1; s <= steps; s++) {
       const u = s / steps;
-      stamp(a.latitude + (b.latitude - a.latitude) * u, a.longitude + (b.longitude - a.longitude) * u);
+      visit(a.latitude + (b.latitude - a.latitude) * u, a.longitude + (b.longitude - a.longitude) * u);
     }
   }
+}
 
+/** Finer than a cell (20 m) is never needed to find every cell a path runs through. */
+const WALKED_STEP_M = 10;
+
+/**
+ * The cells the walked path itself runs through: no paint radius, same dropout and speed guards as `paintedCells`.
+ * Corner detection uses it, so a street 40 m away does not count as passing a corner.
+ */
+export function walkedCells(locations: Location[]): Set<CellId> {
+  const cells = new Set<CellId>();
+  forEachPathPoint(locations, WALKED_STEP_M, (lat, lon) => {
+    const { ix, iy } = cellForLocation(lat, lon);
+    cells.add(cellKey(ix, iy));
+  });
   return cells;
 }
 

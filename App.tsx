@@ -32,6 +32,8 @@ import { TerritoriesScreen } from './src/components/TerritoriesScreen';
 import { AlbumScreen } from './src/components/AlbumScreen';
 import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
 import { WorldScene } from './src/components/world/WorldScene';
+import type { CornerTools } from './src/components/world/CornerSheet';
+import { cornerDisplayName } from './src/utils/cornerName';
 import { partnerHomecomingWalk, type HomecomingWalk } from './src/components/world/homecomingPlan';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
@@ -48,6 +50,16 @@ import { requestNotificationPermission } from './src/notifications/scheduler';
 
 // Stable reference for useLiveSharePrompt's effect.
 const getSyncStatus = () => syncEngine.getStatus();
+
+// "Unsere Ecken": the store, the rename (this phone first, then the household) and who wrote a name. Module-level so the
+// references stay stable for the sheet's effects.
+const cornerTools: CornerTools = {
+  repository: repos.cornerRepository,
+  rename: async (cornerId, name) => {
+    await syncEngine.renameCorner(cornerId, name);
+  },
+  namedByOther: (playerId) => syncEngine.cornerNamedBy(playerId),
+};
 
 // Keep the native splash up until the fonts gate opens, so no blank frame flashes.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -119,6 +131,7 @@ export default function App() {
         distanceMeters: outcome.distanceMeters,
         territoryName: outcome.territoryName,
         walkTime: outcome.wildExtra?.closedAt,
+        corner: outcome.newCorner,
       });
     },
   });
@@ -329,6 +342,7 @@ export default function App() {
         territoryRepository={repos.territoryRepository}
         onOpenTerritories={() => nav.goTo('territories')}
         homeRangeRefreshKey={homeRangeRefreshKey}
+        cornerTools={cornerTools}
       />
     </>
   );
@@ -350,6 +364,7 @@ export default function App() {
             distanceMeters: celebration.distanceMeters ?? null,
             walkTime: celebration.walkTime ?? Date.now(),
             manual: celebration.manual ?? false,
+            ...(celebration.corner ? { corner: { id: celebration.corner.id, name: cornerDisplayName({ name: null, street: celebration.corner.street }) } } : {}),
           },
           onDone: dismissCelebration,
         })}
@@ -399,6 +414,7 @@ export default function App() {
             walkRepository={repos.walkRepository}
             homeRangeRepository={repos.homeRangeRepository}
             territoryRepository={repos.territoryRepository}
+            cornerRepository={repos.cornerRepository}
             dogName={dogName}
             onWalkDeleted={(id) => void syncEngine.enqueueWalkDelete(id).catch(() => undefined)}
             onClose={() => {
@@ -485,6 +501,8 @@ export default function App() {
             onTapWildSpot={(spot) => setPanToSpot({ ...spot, requestId: Date.now() })}
             onOpenTerritories={() => nav.goTo('territories')}
             neighbourhood={syncEngine}
+            cornerTools={cornerTools}
+            buddyAppearance={buddyAppearance}
             onBackToDoorstep={nav.goDoorstep}
             onFinishWalk={walkEnd.finishWalkNow}
             onCancelWalk={walkEnd.requestCancelWalk}

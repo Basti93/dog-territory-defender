@@ -1,5 +1,6 @@
 import { setLocale, t } from '../../i18n';
 import { createInMemoryTerritoryRepository } from '../../storage/inMemoryTerritoryRepository';
+import type { StoredCorner } from '../../storage/CornerRepository';
 import type { Cell } from '../../storage/HomeRangeRepository';
 import type { Territory } from '../../storage/TerritoryRepository';
 import { DAY_MS, manualWalk, newGroundIds, stillWalk, trackedWalk, TUESDAY_AFTERNOON } from '../../test/postcardFixtures';
@@ -14,6 +15,7 @@ import {
   pickBuddyLineKey,
   pickFavouriteId,
   postcardForWalk,
+  cornerNameForWalk,
   postcardWords,
   territoryNameForWalk,
   type PostcardEntry,
@@ -263,5 +265,46 @@ describe('postmark territory', () => {
     expect(territoryNameForWalk(walk, cells, territories)).toBe('Revier am Park');
     expect(territoryNameForWalk(walk, [], territories)).toBeNull();
     expect(territoryNameForWalk(walk, cells.map((c) => ({ ...c, territoryId: null })), territories)).toBeNull();
+  });
+});
+
+describe('the postmark with a corner (Unsere Ecken)', () => {
+  const walk = trackedWalk('w');
+  // The walk runs east from (52.5, 13.4); a corner on its path:
+  const onPath = cellForLocation(walk.locations[60].latitude, walk.locations[60].longitude);
+  const farAway = cellForLocation(48.1, 11.5);
+  const corner = (over: Partial<StoredCorner> = {}): StoredCorner => ({
+    id: `${onPath.ix},${onPath.iy}`,
+    ix: onPath.ix,
+    iy: onPath.iy,
+    createdAt: 1,
+    walkId: 'old',
+    street: null,
+    name: null,
+    nameBy: null,
+    nameAt: null,
+    ...over,
+  });
+
+  it('uses the corner name when the walk ran through a named corner, before the territory name', () => {
+    setLocale('de');
+    expect(cornerNameForWalk(walk, [corner({ name: 'Kiosk-Ecke' })])).toBe('Kiosk-Ecke');
+    const card = postcardForWalk(walk, [])!;
+    expect(postcardWords(card, { dog: 'Rex', territoryName: 'Revier am Park', cornerName: 'Kiosk-Ecke' }).postmark).toBe('Kiosk-Ecke');
+    expect(postcardWords(card, { dog: 'Rex', territoryName: 'Revier am Park', cornerName: null }).postmark).toBe('Revier am Park');
+    expect(postcardWords(card, { dog: 'Rex', territoryName: 'Revier am Park' }).postmark).toBe('Revier am Park');
+  });
+
+  it('falls back to "Ecke {street}" for an unnamed corner, and skips a corner with neither so the territory name stays', () => {
+    setLocale('de');
+    expect(cornerNameForWalk(walk, [corner({ street: 'Lindenstraße' })])).toBe('Ecke Lindenstraße');
+    expect(cornerNameForWalk(walk, [corner()])).toBeNull();
+  });
+
+  it('is null when the walk missed every corner, and never postmarks a handwritten card', () => {
+    expect(cornerNameForWalk(walk, [corner({ id: `${farAway.ix},${farAway.iy}`, ix: farAway.ix, iy: farAway.iy, name: 'Weit weg' })])).toBeNull();
+    expect(cornerNameForWalk(walk, [])).toBeNull();
+    const handwritten = postcardForWalk(manualWalk('m'), [])!;
+    expect(postcardWords(handwritten, { dog: 'Rex', territoryName: null, cornerName: 'Kiosk-Ecke' }).postmark).toBe(t('postcard.postmark.manual'));
   });
 });

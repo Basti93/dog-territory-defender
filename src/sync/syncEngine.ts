@@ -9,15 +9,18 @@
 // copy: offline just means "later" (Buddy anti-guilt rule).
 
 import type { DenEconomyState } from '../economy/denEconomy';
+import type { CornerRepository } from '../storage/CornerRepository';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import type { SettingsRepository, SyncIdentity } from '../storage/SettingsRepository';
 import type { SyncRepository } from '../storage/SyncRepository';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
+import { cleanCornerName } from '../utils/cornerName';
+import { parseCornerId } from '../utils/cornerDetection';
 import { log } from '../utils/log';
 import { ApiClient, ApiError, createApiClient, normalizeBaseUrl } from './apiClient';
-import type { ApiDenState, CommandBody, CommandErrorCode, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
+import type { ApiCorner, ApiDenState, CommandBody, CommandErrorCode, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
 import { API_LIMITS } from './apiContract';
 import { newClientId } from './ids';
 import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
@@ -38,6 +41,10 @@ export interface SyncEngineDeps {
   denEconomy: DenEconomyRepository;
   /** Dog look for the founding import; optional (omitted = empty appearance). */
   buddyAppearance?: BuddyAppearanceRepository;
+  /** "Unsere Ecken": the corner store. Omitted = corner names are neither applied nor sent. */
+  corners?: CornerRepository;
+  /** Called after walks of other members arrived (and were stored): the app looks for corners they completed. Errors are swallowed. */
+  afterWalksAdded?: () => Promise<void>;
   /** Injected in tests. */
   createClient?: (baseUrl: string, token: string | null) => ApiClient;
   now?: () => number;
@@ -102,6 +109,13 @@ export interface SyncEngine extends NeighbourhoodActions {
    * and sent as `player.rename`. Returns false when not joined or the name is empty.
    */
   renamePlayer(name: string): Promise<boolean>;
+  /**
+   * Names a corner for the household: the trimmed name (1..maxCornerNameLength) is stored on this phone at once and,
+   * when joined, sent as `corner.name` (last writer wins). Returns false for an empty name, an unknown id shape or no corner store.
+   */
+  renameCorner(cornerId: string, name: string): Promise<boolean>;
+  /** The display name of the member who wrote a corner's name when that is NOT this player; null for the own name, an unknown writer or when not joined. */
+  cornerNamedBy(playerId: string | null): Promise<string | null>;
   /** Queues `walk.delete` for a walk deleted from History (no-op when not joined). The server keeps the walk's cells. */
   enqueueWalkDelete(walkId: string): Promise<void>;
   /** Push then pull. Coalesces overlapping calls; never throws. `force` ignores retry backoff. */
@@ -132,6 +146,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     territories: deps.territories,
     denEconomy: deps.denEconomy,
     sync: deps.sync,
+    corners: deps.corners,
   };
   const listeners = new Set<() => void>();
   let callbacks: SyncCallbacks = {};
@@ -147,6 +162,27 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     if (result.rangeChanged) callbacks.onRangeChanged?.();
     if (result.walksAdded > 0) callbacks.onHouseholdNews?.();
     if (result.partnerWalks.length > 0) callbacks.onPartnerWalks?.(result.partnerWalks);
+    if (result.cornersChanged) callbacks.onRangeChanged?.();
+  }
+
+  /** Walks of other members were stored: look for corners they completed, then let the signs re-read. Never breaks the sync. */
+  async function afterWalks(result: ApplyResult) {
+    if (result.walksAdded === 0 || !deps.afterWalksAdded) return;
+    try {
+      await deps.afterWalksAdded();
+      callbacks.onRangeChanged?.();
+    } catch (err) {
+      log('CORNERS_AFTER_SYNC_ERROR', { error: String(err) });
+    }
+  }
+
+  /** A first sync or a fresh snapshot: names this phone gave before the household knew them go up (the snapshot's own names have already replaced ours). */
+  async function sendLocalCornerNames(known: ApiCorner[]) {
+    if (!deps.corners) return;
+    const onServer = new Set(known.map((c) => c.id));
+    for (const c of await deps.corners.getCorners()) {
+      if (c.name && !onServer.has(c.id)) await enqueueEconomyCommand(deps.sync, { kind: 'corner.name', cornerId: c.id, name: c.name }, now());
+    }
   }
 
   async function noteServerTime(serverTime: number) {
@@ -333,6 +369,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           await noteServerTime(response.serverTime);
           const applied = await applyEvents(response.events, response.cursor, applyRepos, ctx);
           reportApplied(applied);
+          await afterWalks(applied);
           if (applied.neighbourEvents || !nearbyLoaded) await refreshNeighbourhood(client);
           cursor = response.cursor;
           if (!response.hasMore) break;
@@ -346,7 +383,10 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     }
     const snapshot = await seedOrSnapshot(client);
     await noteServerTime(snapshot.serverTime);
-    reportApplied(await applySnapshot(snapshot, applyRepos, ctx));
+    const appliedSnapshot = await applySnapshot(snapshot, applyRepos, ctx);
+    reportApplied(appliedSnapshot);
+    await afterWalks(appliedSnapshot);
+    await sendLocalCornerNames(snapshot.corners ?? []);
     await refreshNeighbourhood(client);
     await publishLines();
   }
@@ -509,6 +549,25 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       notify();
       void syncNow();
       return true;
+    },
+
+    async renameCorner(cornerId, rawName) {
+      const name = cleanCornerName(rawName);
+      if (!deps.corners || !name || !parseCornerId(cornerId)) return false;
+      const identity = await deps.settings.getSyncIdentity();
+      await deps.corners.setName(cornerId, name, identity?.playerId ?? null, now());
+      if (identity) {
+        await enqueueEconomyCommand(deps.sync, { kind: 'corner.name', cornerId, name }, now());
+        notify();
+        void syncNow();
+      }
+      return true;
+    },
+
+    async cornerNamedBy(playerId) {
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity || !playerId || playerId === identity.playerId) return null;
+      return (await deps.sync.getState()).players[playerId]?.trim() || null;
     },
 
     async enqueueWalkDelete(walkId) {

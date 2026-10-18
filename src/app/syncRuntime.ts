@@ -10,6 +10,7 @@ import { resolveHouseholdLines } from '../sync/householdEvents';
 import type { PartnerWalkAdded } from '../sync/apply';
 import { setFixObserver } from '../utils/gps';
 import { repos } from './repositories';
+import { updateCorners } from './updateCorners';
 
 /** The one sync engine for the running app. Import this instead of building another. */
 export const syncEngine = createSyncEngine({
@@ -20,6 +21,11 @@ export const syncEngine = createSyncEngine({
   territories: repos.territoryRepository,
   denEconomy: repos.denEconomyRepository,
   buddyAppearance: repos.buddyAppearanceRepository,
+  corners: repos.cornerRepository,
+  // The household's walks may complete a corner on this phone too (same ids as on the other one); the street lookup waits only briefly.
+  afterWalksAdded: async () => {
+    await updateCorners({ walkRepository: repos.walkRepository, cornerRepository: repos.cornerRepository, lookupWaitMs: 1500 });
+  },
 });
 
 // Live presence of the household (M4 "Alex im Hof"): this phone's heartbeats while it walks, the foreground

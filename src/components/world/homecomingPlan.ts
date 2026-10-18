@@ -12,7 +12,7 @@ import { planBadgeArrivals } from './fencePlan';
 // how the choreography varies, and which closing sentence is spoken. No React in here.
 
 export type BeatId = 'patch' | 'bowl' | 'extras' | 'rest';
-export type ExtraKind = 'badge' | 'milestone' | 'pennant';
+export type ExtraKind = 'corner' | 'badge' | 'milestone' | 'pennant';
 
 /** The slice of a finished walk the homecoming needs. */
 export interface HomecomingWalk {
@@ -28,6 +28,8 @@ export interface HomecomingWalk {
   manual: boolean;
   /** Set for the mini homecoming of a household partner's walk ("Alex und Buddy sind zurück"). */
   partnerName?: string;
+  /** "Unsere Ecken": this walk completed a corner. `name` is the auto-name the sign shows ("Ecke Lindenstraße"). Beat 3 asks for a real one, once. */
+  corner?: { id: string; name: string };
 }
 
 /** What a partner's walk (seen through sync) gives the mini homecoming. Treats are already in the shared bowl. */
@@ -67,9 +69,13 @@ export function partnerHomecomingWalk(p: PartnerWalkSummary): HomecomingWalk {
   };
 }
 
-/** Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). */
-export function planExtras(rewards: WalkRewardsCelebration): ExtraKind[] {
+/**
+ * Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). A new corner comes first: it is
+ * the one thing that is asked once and never again, and it counts as one extra like any other (badges, level, pennant).
+ */
+export function planExtras(rewards: WalkRewardsCelebration, hasNewCorner = false): ExtraKind[] {
   const all: ExtraKind[] = [];
+  if (hasNewCorner) all.push('corner');
   if (planBadgeArrivals(rewards.unlockedAchievements).length > 0) all.push('badge');
   if (rewards.leveledUpTo !== null) all.push('milestone');
   if (rewards.tease?.affordable) all.push('pennant');

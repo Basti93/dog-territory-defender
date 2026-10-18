@@ -1,8 +1,8 @@
 // Row <-> API mappers and shared reads used by several services.
 import { and, eq, sql } from 'drizzle-orm';
-import type { ApiCell, ApiDenState, ApiDog, ApiTerritory, ApiWalkMeta } from '@game/sync/apiContract';
+import type { ApiCell, ApiCorner, ApiDenState, ApiDog, ApiTerritory, ApiWalkMeta } from '@game/sync/apiContract';
 import type { Db } from '../db/client';
-import { cells, denState, dogs, territories, walks } from '../db/schema';
+import { cells, corners, denState, dogs, territories, walks } from '../db/schema';
 import type { DenState } from '../economy/denTransitions';
 
 export function denFromRow(row: typeof denState.$inferSelect): ApiDenState {
@@ -34,6 +34,13 @@ export const territoryFromRow = (r: typeof territories.$inferSelect): ApiTerrito
   createdAt: r.createdAt,
   walksHere: r.walksHere,
   treatsEarnedHere: r.treatsEarnedHere,
+});
+
+export const cornerFromRow = (r: typeof corners.$inferSelect): ApiCorner => ({
+  id: r.cornerId,
+  name: r.name,
+  updatedBy: r.updatedBy,
+  updatedAt: r.updatedAt,
 });
 
 export const dogFromRow = (r: typeof dogs.$inferSelect): ApiDog => ({

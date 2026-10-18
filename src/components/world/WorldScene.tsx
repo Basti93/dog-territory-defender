@@ -46,6 +46,7 @@ import { signStrip } from './fencePlan';
 import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
 import { NeighbourCard } from './NeighbourCard';
+import { CornerSheet, type CornerTools } from './CornerSheet';
 import { BeatId, HomecomingWalk, homecomingBadgeArrivals } from './homecomingPlan';
 import {
   BOTTOM_ROW_H,
@@ -137,6 +138,8 @@ export interface WorldSceneProps {
   onOpenTerritories?: () => void;
   /** Bump after a walk was finished so the Viertel signs and notes re-read the data. */
   homeRangeRefreshKey?: number;
+  /** "Unsere Ecken": the corner store, rename and namer lookup. Omitted (tests) = no corners and no corner prompt. */
+  cornerTools?: CornerTools;
 }
 
 type NoteKind = 'update' | 'line' | 'neighbour';
@@ -228,11 +231,22 @@ export function WorldScene(props: WorldSceneProps) {
     territoryRepository,
     onOpenTerritories,
     homeRangeRefreshKey,
+    cornerTools,
   } = props;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   // Signs and notes for the Viertel band (before any early return: hooks keep their order).
-  const viertelChrome = useViertelChrome({ homeRangeRepository, walkRepository, territoryRepository, dogName, refreshKey: homeRangeRefreshKey });
+  // A corner named from the homecoming prompt re-reads the signs (the sheet reports it through `cornerEdits`).
+  const [cornerSheetId, setCornerSheetId] = useState<string | null>(null);
+  const [cornerEdits, setCornerEdits] = useState(0);
+  const viertelChrome = useViertelChrome({
+    homeRangeRepository,
+    walkRepository,
+    territoryRepository,
+    cornerRepository: cornerTools?.repository,
+    dogName,
+    refreshKey: (homeRangeRefreshKey ?? 0) + cornerEdits,
+  });
 
   const layout = useMemo(() => sceneLayout(height, width, insets.top), [height, width, insets.top]);
 
@@ -951,6 +965,22 @@ export function WorldScene(props: WorldSceneProps) {
           onCamera={(target) => (target === 'viertel' ? scrollToViertel() : scrollToYard())}
           onDone={homecoming.onDone}
           onBeat={setHomecomingBeat}
+          onNameCorner={cornerTools ? setCornerSheetId : undefined}
+        />
+      )}
+
+      {cornerTools && cornerSheetId && (
+        <CornerSheet
+          cornerId={cornerSheetId}
+          cornerRepository={cornerTools.repository}
+          walkRepository={walkRepository}
+          buddyAppearance={buddyAppearance}
+          onRename={cornerTools.rename}
+          namedByOther={cornerTools.namedByOther}
+          onClose={(changed) => {
+            setCornerSheetId(null);
+            if (changed) setCornerEdits((n) => n + 1);
+          }}
         />
       )}
 

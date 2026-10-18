@@ -257,6 +257,25 @@ export const walkPresence = pgTable(
   ]
 );
 
+/**
+ * "Unsere Ecken": the household's names for favourite corners. Corners themselves are detected on the phones
+ * (deterministic id = centre cell "ix,iy"); the server only keeps the name, last writer wins. No FK on the
+ * player columns on purpose (the name outlives a member who left).
+ */
+export const corners = pgTable(
+  'corners',
+  {
+    householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
+    cornerId: text('corner_id').notNull(),
+    name: text('name').notNull(),
+    createdBy: uuid('created_by').notNull(),
+    updatedBy: uuid('updated_by').notNull(),
+    createdAt: ms('created_at').notNull(),
+    updatedAt: ms('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.householdId, t.cornerId] })]
+);
+
 // ------------------------------------------------------------------ Track B: Nachbarhunde
 
 /** One row per bot household (design Decision 17). `household_id` is the BOT household; the human one is `host_household_id`. */

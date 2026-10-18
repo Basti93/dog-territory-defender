@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, InteractionManager } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
   AwayStripLine,
@@ -18,6 +18,7 @@ import { resolveDoorstepOverflowLine } from '../notifications/notificationDecisi
 import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_ENDED_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from '../notifications/scheduler';
 import { log } from '../utils/log';
 import { t } from '../i18n';
+import { updateCorners } from './updateCorners';
 import { AppRepositories, localePreferenceLoaded, runStartupMigrations } from './repositories';
 
 /** Where a tapped notification sends the player. Pure so it can be tested. */
@@ -85,7 +86,17 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
     localePreferenceLoaded
       .then(() => runStartupMigrations(repos))
       .then(() => deps.onRangeChanged())
-      .catch((err) => log('HOME_RANGE_MIGRATION_ERROR', { error: String(err) }));
+      .catch((err) => log('HOME_RANGE_MIGRATION_ERROR', { error: String(err) }))
+      // "Unsere Ecken": corners the walks so far already make (the first launch with the feature, or walks that arrived
+      // while the app was closed) appear quietly; only a walk that completes one while it is finished asks for a name.
+      // Replaying every walk is JS-thread work and the street lookup can take a moment (or fail offline): so it runs
+      // after the first screens have settled and never holds up the Home Range refresh above.
+      .then(() => new Promise<void>((resolve) => InteractionManager.runAfterInteractions(() => resolve())))
+      .then(() => updateCorners({ walkRepository: repos.walkRepository, cornerRepository: repos.cornerRepository, lookupWaitMs: 1500 }))
+      .then((found) => {
+        if (found.length > 0) deps.onRangeChanged();
+      })
+      .catch((err) => log('CORNERS_LAUNCH_ERROR', { error: String(err) }));
   }, []);
 
   // Tapping a notification navigates — both for a response received while the

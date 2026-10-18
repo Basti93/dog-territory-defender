@@ -295,3 +295,54 @@ describe('unknown event kinds (a newer server)', () => {
     expect((await repos.sync.getState()).cursor).toBe(4);
   });
 });
+
+describe('corner names ("Unsere Ecken")', () => {
+  const cornerEvent = (seq: number, id: string, name: string, updatedBy: string): ApiEvent => ({
+    seq,
+    kind: 'corner.updated',
+    actorPlayerId: updatedBy,
+    createdAt: seq * 10,
+    payload: { corner: { id, name, updatedBy, updatedAt: seq * 10 } },
+  });
+
+  it('stores the household\'s names from a snapshot, even for a corner this phone has not found itself', async () => {
+    const repos = makeRepos();
+    await repos.corners.addCorners([{ id: '1,1', ix: 1, iy: 1, createdAt: 5, walkId: 'w1' }]);
+    const result = await applySnapshot(
+      snapshot({ corners: [{ id: '1,1', name: 'Kiosk-Ecke', updatedBy: 'p-lisa', updatedAt: 50 }, { id: '9,9', name: 'Bank am Park', updatedBy: 'p-me', updatedAt: 60 }] }),
+      repos,
+      ctx()
+    );
+    expect(result.cornersChanged).toBe(true);
+    const byId = new Map((await repos.corners.getCorners()).map((c) => [c.id, c]));
+    expect(byId.get('1,1')).toMatchObject({ name: 'Kiosk-Ecke', nameBy: 'p-lisa', walkId: 'w1' });
+    expect(byId.get('9,9')).toMatchObject({ name: 'Bank am Park', nameBy: 'p-me', walkId: null });
+  });
+
+  it('applies renames from events, the last one wins, and a replay changes nothing', async () => {
+    const repos = makeRepos();
+    const events = [cornerEvent(1, '1,1', 'Erst', 'p-lisa'), cornerEvent(2, '1,1', 'Dann', 'p-me')];
+    await applyEvents(events, 2, repos, ctx());
+    await applyEvents([...events].reverse(), 2, repos, ctx()); // sorted by seq inside, so the newest still wins
+    expect(await repos.corners.getCorners()).toMatchObject([{ id: '1,1', name: 'Dann', nameBy: 'p-me' }]);
+  });
+
+  it('keeps our own rename while it is still waiting in the outbox', async () => {
+    const repos = makeRepos();
+    await repos.corners.setName('1,1', 'Meine Ecke', 'p-me', 100);
+    await repos.sync.enqueue({ id: 'c1', kind: 'command', payload: { kind: 'corner.name', cornerId: '1,1', name: 'Meine Ecke' }, createdAt: 100 });
+    const result = await applyEvents([cornerEvent(1, '1,1', 'Fremde Ecke', 'p-lisa')], 1, repos, ctx());
+    expect(result.cornersChanged).toBe(false);
+    expect((await repos.corners.getCorners())[0].name).toBe('Meine Ecke');
+  });
+
+  it('ignores corner data from an older server (no corners field) and apps without a corner store', async () => {
+    const repos = makeRepos();
+    const snap = snapshot();
+    delete (snap as { corners?: unknown }).corners;
+    expect((await applySnapshot(snap, repos, ctx())).cornersChanged).toBe(false);
+    const { corners: _unused, ...withoutStore } = repos;
+    void _unused;
+    expect((await applyEvents([cornerEvent(1, '1,1', 'X', 'p-lisa')], 1, withoutStore, ctx())).cornersChanged).toBe(false);
+  });
+});

@@ -134,6 +134,46 @@ describe('Homecoming', () => {
     await unmountAndExpectNoTimers(view);
   });
 
+  describe('corner prompt (Unsere Ecken)', () => {
+    const withCorner = () => walk({ corner: { id: '5,6', name: 'Ecke Lindenstraße' } });
+
+    it('asks once in beat 3: the button names the corner, any other tap skips it for free', async () => {
+      const onNameCorner = jest.fn();
+      const { view, onDone } = await setup(withCorner(), { onNameCorner });
+      await tap();
+      await tap();
+      expect(screen.getByTestId('homecoming-corner')).toBeOnTheScreen();
+      expect(screen.getByText(t('corner.prompt'))).toBeOnTheScreen();
+      expect(screen.getByText('Ecke Lindenstraße')).toBeOnTheScreen();
+      await fireEvent.press(screen.getByTestId('homecoming-corner-name'));
+      expect(onNameCorner).toHaveBeenCalledWith('5,6');
+      // Still in beat 3 (the sheet opens over it); a tap elsewhere moves on to the closing line and the prompt is gone for good.
+      expect(screen.queryByTestId('homecoming-closing')).toBeNull();
+      await tap();
+      expect(screen.queryByTestId('homecoming-corner')).toBeNull();
+      expect(screen.getByTestId('homecoming-closing')).toBeOnTheScreen();
+      expect(onNameCorner).toHaveBeenCalledTimes(1);
+      await tap();
+      expect(onDone).toHaveBeenCalledTimes(1);
+      await unmountAndExpectNoTimers(view);
+    });
+
+    it('shares beat 3 with a badge (two extras), and never shows up for a walk without a new corner', async () => {
+      const { view } = await setup(walk({ corner: { id: '5,6', name: 'Unsere Ecke' }, rewards: rewards({ unlockedAchievements: [BADGE] }) }));
+      await tap();
+      await tap();
+      expect(screen.getByTestId('homecoming-corner')).toBeOnTheScreen();
+      expect(screen.getByTestId('homecoming-badge')).toBeOnTheScreen();
+      await unmountAndExpectNoTimers(view);
+
+      const plain = await setup(walk({ rewards: rewards({ unlockedAchievements: [BADGE] }) }));
+      await tap();
+      await tap();
+      expect(screen.queryByTestId('homecoming-corner')).toBeNull();
+      await unmountAndExpectNoTimers(plain.view);
+    });
+  });
+
   it('the manual-log version is bowl then rest, with no camera trip to the Viertel', async () => {
     const { view, onCamera, onDone } = await setup(walk({ manual: true, territoryName: null }));
     expect(screen.queryByTestId('homecoming-number')).toBeNull();
