@@ -66,6 +66,7 @@ React Native / Expo app, no backend yet — everything runs and persists locally
 - **web** — the map's, the Doorstep portrait's, and the Walk Portrait's web content, hosted in WebViews, including the Home Range raster builder and its Gaussian-blur/marching-squares/Lab-colour renderer (shared by the interactive map, the still Doorstep portrait, and the Walk Portrait's muted background layer)
 - **openspec** — spec-driven game backlog and design docs (source of truth)
 - **prototype** — clickable HTML design spec — match its visuals, not its structure
+- **handover/claude-design** — German brief + screenshots, art previews, UI-kit and copy samples to hand to Claude Design (restyle and 3D art direction for the Blender pipeline); no code
 - **testing** — GPX routes for simulated walks
 - **src/app** — the composition behind `App.tsx`: repositories + startup side effects, navigation (`Screen`, `useNavigation`), and the hooks for the walk session, first launch, once-per-launch effects and manual walk log
 - **src/buddy** — Buddy's appearance model, palette, image skin (default) and vector skin (fallback); pure TS, no screens
