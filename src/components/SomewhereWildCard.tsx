@@ -13,7 +13,7 @@ import { displayTerritoryName } from '../utils/territoryDisplayName';
 import { wildestCluster } from '../utils/wildSpot';
 import { formatDate, t, tPlural } from '../i18n';
 
-// The "Somewhere Wild" card — docs/decisions/somewhere-wild/proposal.md
+// The "Somewhere Wild" card — docs/decisions/somewhere-wild.md
 // and design.md. One warm sentence, tappable, never a count, never a
 // dismiss button. Renders one of three states (New Ground takes priority
 // over a wild cluster; most of the time, neither qualifies and this renders
@@ -62,7 +62,7 @@ export interface EvaluateSomewhereWildDeps {
   walkRepository: WalkRepository;
   dogName: string | null;
   now: number;
-  /** Optional so existing callers/tests that don't care about territory-aware copy (docs/decisions/territories) keep working unchanged — omitted means the wild-cluster copy always uses the raw street label. */
+  /** Optional so existing callers/tests that don't care about territory-aware copy (docs/decisions/territories.md) keep working unchanged — omitted means the wild-cluster copy always uses the raw street label. */
   territoryRepository?: TerritoryRepository;
 }
 
@@ -127,7 +127,7 @@ export async function evaluateSomewhereWild(
 
     const label = await resolveWildClusterLabel(cluster, { walkRepository });
     if (label) {
-      // docs/decisions/territories/design.md's "Somewhere Wild becomes
+      // docs/decisions/territories.md's "Somewhere Wild becomes
       // territory-aware" requirement: when the winning cluster's anchor
       // cell belongs to a named Territory, prefer that name over the raw
       // reverse-geocoded street label — still exactly one card app-wide,
@@ -192,7 +192,7 @@ interface SomewhereWildCardProps {
   homeRangeRepository: HomeRangeRepository;
   walkRepository: WalkRepository;
   dogName: string | null;
-  /** Optional — when supplied, a wild cluster inside a named Territory shows that Territory's name instead of the raw street label (docs/decisions/territories). Omitted keeps today's street-label-only behaviour. */
+  /** Optional — when supplied, a wild cluster inside a named Territory shows that Territory's name instead of the raw street label (docs/decisions/territories.md). Omitted keeps today's street-label-only behaviour. */
   territoryRepository?: TerritoryRepository;
   /** Bump to force an immediate re-evaluation (e.g. right after Finish Walk paints new cells) — mirrors MapView's own homeRangeRefreshKey convention. */
   refreshKey?: number;

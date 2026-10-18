@@ -245,7 +245,7 @@ describe('newGroundCells — 8-neighbour dilation (design.md Decision 5)', () =>
   });
 });
 
-describe('splitTrailByNewGround (docs/decisions/walk-portrait/design.md Decision 4)', () => {
+describe('splitTrailByNewGround (docs/decisions/walk-portrait.md Decision 4)', () => {
   // Points spaced 25m apart along a straight line — comfortably more than
   // one CELL_M (20m) apart, so each point lands in its own distinct cell,
   // with no ambiguity from the anti-exploit segment guards (this function

@@ -6,7 +6,7 @@ import { storageCap } from '../../economy/formulas';
 import { resolveDoorstepOverflowLine } from '../notificationDecision';
 import { checkAndScheduleEarnedTriggerNotification } from '../earnedTrigger';
 
-// The sequencing fix (docs/decisions/home-dashboard/design.md Decision 6,
+// The sequencing fix (docs/decisions/home-dashboard.md Decision 6,
 // tasks.md task 4.3): whichever channel resolves+claims the same overflow
 // first wins. This exercises the real bug the architect flagged — a naive
 // two-independent-effects version would let the Doorstep's own overflow

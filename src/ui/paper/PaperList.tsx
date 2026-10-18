@@ -1,5 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import type { ArtKey } from '../../art/artAssets';
+import { ArtImage } from '../ArtImage';
 import { PressableScale } from '../PressableScale';
 import { material, mix, spacing, textStyle } from '../theme';
 import { PaperNote } from './PaperNote';
@@ -28,17 +30,21 @@ export function PaperSection({
   title,
   first,
   onPress,
+  icon,
   children,
 }: {
   title: string;
   first?: boolean;
   onPress?: () => void;
+  /** Small sprite before the title; only shown on a tappable entry. */
+  icon?: ArtKey;
   children?: React.ReactNode;
 }) {
   if (onPress) {
     return (
       <PressableScale onPress={onPress} accessibilityLabel={title} style={[styles.section, !first && styles.divided]}>
         <View style={styles.entry}>
+          {icon && <ArtImage art={icon} size={28} style={styles.entryIcon} />}
           <Text style={[textStyle('sign'), styles.sectionTitle, styles.entryTitle]}>{title}</Text>
           <Text style={[textStyle('sign'), styles.chevron]}>{'\u203A'}</Text>
         </View>
@@ -136,6 +142,7 @@ const styles = StyleSheet.create({
   backSign: { minWidth: 48 },
   headerTitle: { flex: 1, color: material.ink },
   entry: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  entryIcon: { marginRight: spacing.sm },
   entryTitle: { flex: 1, marginBottom: 0 },
   chevron: { color: material.inkGreen },
   section: { paddingVertical: spacing.md },

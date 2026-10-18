@@ -1,5 +1,5 @@
 // Territory passive-income formula — pure functions, no I/O. See
-// docs/decisions/territories/design.md Decision 6, verbatim
+// docs/decisions/territories.md Decision 6, verbatim
 // (game-economist-validated; not to be altered without a new validation
 // pass). Kept in its own file (mirroring milestones.ts's precedent of
 // splitting out a distinct economy concern) rather than folded into

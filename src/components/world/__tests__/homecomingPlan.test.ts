@@ -2,7 +2,7 @@ import { setLocale } from '../../../i18n';
 import type { WalkRewardsCelebration } from '../../../economy/walkRewards';
 import { ACHIEVEMENTS, AchievementId } from '../../../economy/personalStats';
 import { NEW_GROUND_MIN_CELLS } from '../../../utils/grid';
-import { HomecomingWalk, homecomingVariant, partnerHomecomingWalk, pickClosingLine, pickOneNumber, planBeats, planExtras, resetClosingLineMemory } from '../homecomingPlan';
+import { HomecomingWalk, homecomingBadgeArrivals, homecomingVariant, partnerHomecomingWalk, pickClosingLine, pickOneNumber, planBeats, planExtras, resetClosingLineMemory } from '../homecomingPlan';
 
 const rewards = (over: Partial<WalkRewardsCelebration> = {}): WalkRewardsCelebration => ({
   cellsPainted: 40,
@@ -69,6 +69,20 @@ describe('planBeats / planExtras', () => {
 
   it('a manual log is the short two-beat version', () => {
     expect(planBeats(true, [])).toEqual(['bowl', 'rest']);
+  });
+});
+
+describe('homecomingBadgeArrivals', () => {
+  const NEW: AchievementId[] = ['first-steps', 'round-the-block', 'first-bakery-batch'];
+
+  it('lets at most two new badges arrive in beat 3; the rest wait on the fence', () => {
+    expect(homecomingBadgeArrivals(walk({ rewards: rewards({ unlockedAchievements: NEW }) }))).toEqual(['first-steps', 'round-the-block']);
+  });
+
+  it('brings nothing for a manual log or a partner return (they have no beat 3)', () => {
+    expect(homecomingBadgeArrivals(walk({ manual: true, rewards: rewards({ unlockedAchievements: NEW }) }))).toEqual([]);
+    expect(homecomingBadgeArrivals(walk({ partnerName: 'Alex', rewards: rewards({ unlockedAchievements: NEW }) }))).toEqual([]);
+    expect(homecomingBadgeArrivals(walk())).toEqual([]);
   });
 });
 

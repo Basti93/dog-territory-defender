@@ -63,7 +63,7 @@ export const localePreferenceLoaded: Promise<LocalePreference> = repos.settingsR
 /**
  * One-time backfill of every previously saved tracked walk into the Home
  * Range grid, then (only once that's done, since it needs a populated Range to
- * cluster, docs/decisions/territories/tasks.md task 3.3) the one-time
+ * cluster, docs/decisions/territories.md task 3.3) the one-time
  * Territory partition backfill. Both are idempotent (guarded by their own
  * DenEconomyState flags), safe to call on every app load.
  */

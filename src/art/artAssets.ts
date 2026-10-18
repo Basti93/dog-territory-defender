@@ -1,6 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 
-// Registry of pre-rendered 3D sprites (see docs/decisions/buddy-comes-alive/design.md, Decision 12).
+// Registry of pre-rendered 3D sprites (see docs/decisions/buddy-comes-alive.md, Decision 12).
 // Generation checklist: assets/art/README.md.
 
 export type BuildingId = 'doghouse' | 'bakery' | 'garden';
@@ -34,6 +34,11 @@ export type ArtKey =
   | 'linen'
   | 'pennant'
   | 'postcard-blank'
+  // Fence badges (redesign step 6): one rosette, recoloured per achievement family.
+  | 'rosette-walks'
+  | 'rosette-distance'
+  | 'rosette-treats'
+  | 'rosette-den'
   // Wild Extras props (weird streak). Registry lines land with the PNGs; until then YardExtras draws fallbacks.
   | 'prop-ufo'
   | 'prop-beam'
@@ -122,6 +127,10 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'linen': require('../../assets/art/linen.png'),
   'pennant': require('../../assets/art/pennant.png'),
   'postcard-blank': require('../../assets/art/postcard-blank.png'),
+  'rosette-walks': require('../../assets/art/rosette-walks.png'),
+  'rosette-distance': require('../../assets/art/rosette-distance.png'),
+  'rosette-treats': require('../../assets/art/rosette-treats.png'),
+  'rosette-den': require('../../assets/art/rosette-den.png'),
 };
 
 export function hasArt(key: ArtKey): boolean {

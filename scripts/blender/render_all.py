@@ -18,7 +18,7 @@ SIZES = {"celebration-burst": (768, 768), "doorstep-sky": (1024, 1024), "yard-gr
 def out_size(name, w, h):
     if name.startswith("icon-"):
         return 256, 256
-    if name.startswith("prop-"):
+    if name.startswith(("prop-", "rosette-")):
         return 256, 256
     if name.startswith(("doghouse-", "bakery-", "garden-")):
         return 512, 512

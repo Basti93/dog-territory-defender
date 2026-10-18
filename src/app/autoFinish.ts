@@ -4,7 +4,7 @@ import { getDistance } from '../utils/geometry';
  * Auto-finish: a walk ends by itself when the player is back where it started
  * and forgot to tap Finish. Pure rules only; useWalkSession feeds it GPS fixes
  * and a 60 s timer tick. Tunables are plain constants (presentation tuning,
- * see the decisions log in docs/decisions/buddy-comes-alive/design.md).
+ * see the decisions log in docs/decisions/buddy-comes-alive.md).
  */
 
 /** A walk shorter than this never auto-finishes. */

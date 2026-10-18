@@ -5,6 +5,8 @@ import { CELL_M, NEW_GROUND_MIN_CELLS, streetsKnown } from '../../utils/grid';
 import { dayAndTimeOfDayPhrase } from '../../utils/manualWalkLog';
 import { WEIRD_HEADLINE_KEYS, pickWeirdKey, seedHash } from '../weirdCopy';
 import { displayTerritoryName } from '../../utils/territoryDisplayName';
+import type { AchievementId } from '../../economy/personalStats';
+import { planBadgeArrivals } from './fencePlan';
 
 // Pure planning for the Heimkehr (konzept section 6): which beats run, what the one big number is,
 // how the choreography varies, and which closing sentence is spoken. No React in here.
@@ -68,10 +70,19 @@ export function partnerHomecomingWalk(p: PartnerWalkSummary): HomecomingWalk {
 /** Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). */
 export function planExtras(rewards: WalkRewardsCelebration): ExtraKind[] {
   const all: ExtraKind[] = [];
-  if (rewards.unlockedAchievements.length > 0) all.push('badge');
+  if (planBadgeArrivals(rewards.unlockedAchievements).length > 0) all.push('badge');
   if (rewards.leveledUpTo !== null) all.push('milestone');
   if (rewards.tease?.affordable) all.push('pennant');
   return all.slice(0, 2);
+}
+
+/**
+ * The new badges beat 3 shows (at most two; fence badges swing onto their pegs). Manual logs and partner returns have no
+ * beat 3, so nothing arrives there and their badges simply hang on the fence afterwards.
+ */
+export function homecomingBadgeArrivals(walk: HomecomingWalk): AchievementId[] {
+  if (walk.manual || walk.partnerName) return [];
+  return planBadgeArrivals(walk.rewards.unlockedAchievements);
 }
 
 /** Full: patch, bowl, extras (only if any), rest. Manual log: bowl, rest. Partner: patch, bowl, then the closing line (no extras). */

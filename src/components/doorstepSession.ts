@@ -4,7 +4,7 @@ import { calendarDayGap } from '../utils/manualWalkLog';
 import { evaluateSomewhereWild, EvaluateSomewhereWildDeps } from './SomewhereWildCard';
 import { formatNumber, t, tPlural } from '../i18n';
 
-// The "Doorstep" launch logic (docs/decisions/home-dashboard): which session state applies (same-day reopen vs
+// The "Doorstep" launch logic (docs/decisions/home-dashboard.md): which session state applies (same-day reopen vs
 // fresh open), the away-strip lines, and the greeting copy. Pure functions, no React; the old DoorstepScreen
 // component is gone (the world scene is the home screen), these stayed. They are called once per app launch from
 // useLaunchEffects and their results are handed to the WorldScene as props.
@@ -59,7 +59,7 @@ export interface AwayStripDeps {
   /**
    * True only on the one app-open where App.tsx's own applyPassiveAccrual
    * call flipped DenEconomyState.territoryIncomeRevealed from false to true
-   * this session (docs/decisions/territories/design.md Decision 6's
+   * this session (docs/decisions/territories.md Decision 6's
    * one-off discovery beat) — never re-derived here, same "already resolved
    * upstream" convention as showOverflowLine. False on every other open,
    * including every one after the reveal (the permanent line lives
@@ -121,7 +121,7 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
     });
   }
 
-  // docs/decisions/territories/design.md Decision 6 — the one-off
+  // docs/decisions/territories.md Decision 6 — the one-off
   // territory-income discovery beat, reusing this exact away-strip
   // mechanism as its lowest-priority-but-still-real-fact source (lower than
   // Somewhere Wild/achievements/treats, but always shown over the

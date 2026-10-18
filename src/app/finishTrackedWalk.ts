@@ -73,7 +73,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
 
   const now = Date.now();
 
-  // Persisted New Ground event (docs/decisions/somewhere-wild/design.md
+  // Persisted New Ground event (docs/decisions/somewhere-wild.md
   // Decision 4) — the "Somewhere Wild" card needs to still answer "was
   // there a recent discovery" up to 48h after this walk closes. Same
   // NEW_GROUND_MIN_CELLS gate as the celebration beat; overwrites any prior event.
@@ -81,7 +81,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     await homeRangeRepository.recordNewGroundEvent(now, Array.from(newGround));
   }
 
-  // Territory resolution (docs/decisions/territories/design.md Decision 3) —
+  // Territory resolution (docs/decisions/territories.md Decision 3) —
   // runs on every finished tracked walk that painted at least one cell, using
   // the same rangeBefore snapshot. Manual logs never reach this function
   // (design.md Decision 5's structural exclusion).
@@ -142,7 +142,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     await territoryRepository.mergeTerritoryStats(merge.survivorId, merge.loserId);
   }
 
-  // newGroundCellIds (docs/decisions/walk-portrait/design.md Decision 4):
+  // newGroundCellIds (docs/decisions/walk-portrait.md Decision 4):
   // the same newGround Set computed above, written so the Walk Portrait can
   // later highlight this walk's own New Ground segments.
   const finishedWalk: Walk = { ...walk, closed: qualifies, newGroundCellIds: Array.from(newGround) };
@@ -164,7 +164,7 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     await deps.sync?.enqueueWalk(finishedWalk, resolvedTerritoryBeat?.newTerritoryName ?? null).catch((err) =>
       log('SYNC_ENQUEUE_ERROR', { id: finishedWalk.id, error: String(err) })
     );
-    // docs/decisions/walk-reminder/design.md Decision 4: recheck right after
+    // docs/decisions/walk-reminder.md Decision 4: recheck right after
     // a tracked walk finishes, not just at the next app open.
     await checkAndScheduleWalkReminder({ walkRepository, notificationRepository }).catch((err) =>
       log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })

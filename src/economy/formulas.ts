@@ -14,7 +14,7 @@ export function upgradeCost(building: BuildingKey, level: number): number {
  * applied. `buddyPayout(1) === 50`, exactly today's flat treatsPerWalk, so a
  * Level-1 player's experience is unchanged. Grows by a constant relative
  * 5.5% per level, forever — see
- * docs/decisions/virtual-dog-companion/design.md's "buddyPayout(L)"
+ * docs/decisions/2026-08-21-virtual-dog-companion.md's "buddyPayout(L)"
  * decision for why this is income (uncapped) rather than a capped power
  * bonus, and the anti-snowball spec delta for the invariant this must never
  * violate: no capped bonus percentage anywhere may ever read Buddy's Level.
@@ -129,7 +129,7 @@ export function softCapBonusPercent(level: number): number {
  *
  * The area term reads `cellsPainted` (the walk's real Home Range footprint,
  * see utils/grid.ts's paintedCells) rather than a shoelace polygon's
- * enclosed area — see docs/decisions/home-range/design.md's "Consequence
+ * enclosed area — see docs/decisions/2026-08-21-home-range.md's "Consequence
  * that must be resolved" section. `cellsPainted * CELL_M * CELL_M` is the
  * walk's true painted ground in m², a more honest "ground covered" measure
  * than a polygon that claimed block interiors the dog never entered. The
@@ -148,7 +148,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Fresh Ground payout multiplier — treats only, never XP (see
- * denEconomy.ts's awardWalkTreats and docs/decisions/home-range/design.md
+ * denEconomy.ts's awardWalkTreats and docs/decisions/2026-08-21-home-range.md
  * Decision 3). `B` is the mean wildness over the walk's own painted cells;
  * a painted cell that wasn't already in the pre-walk Range counts as
  * wildness 1.0 — "new ground is weighted 1.0, the same as a three-week-old
@@ -187,7 +187,7 @@ export function bloomMultiplier(
  * The fixed Fresh Ground multiplier a manual-log route refresh always
  * earns, regardless of which previously-tracked route is picked or how
  * wild it actually was — the exploit-closing rule from
- * docs/decisions/home-range/design.md Decision 4 ("Can route-picking be
+ * docs/decisions/2026-08-21-home-range.md Decision 4 ("Can route-picking be
  * farmed?"). A manual log has no GPS evidence of what was actually walked,
  * so it can never be allowed to *choose* a better multiplier the way a real
  * walk's own bloomMultiplier can.

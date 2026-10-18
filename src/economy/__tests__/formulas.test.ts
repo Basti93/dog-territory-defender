@@ -173,7 +173,7 @@ describe('softCapBonusPercent', () => {
 describe('xpAwardForWalk', () => {
   // 20 cells * CELL_M(20)^2 = 8000 m² — the same "typical walk" worked figure
   // this test used before the polygon-area term was replaced with a painted-
-  // cell count (docs/decisions/home-range/design.md's "Consequence that
+  // cell count (docs/decisions/2026-08-21-home-range.md's "Consequence that
   // must be resolved" section).
   const CELLS_FOR_8000_M2 = 20;
 
@@ -225,8 +225,8 @@ describe('levelForXp / cumulativeXpForLevel', () => {
   });
 });
 
-// docs/decisions/home-range-rewards/tasks.md task 1.4 — worked table from
-// docs/decisions/home-range/design.md Decision 3 (K = 0.6).
+// docs/decisions/2026-08-21-home-range-rewards.md task 1.4 — worked table from
+// docs/decisions/2026-08-21-home-range.md Decision 3 (K = 0.6).
 describe('bloomMultiplier', () => {
   const NOW = 1_700_000_000_000;
 

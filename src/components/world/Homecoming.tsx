@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { artOr } from '../../art/artAssets';
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyImageSources } from '../../buddy/imageSkinSources';
-import { ACHIEVEMENTS } from '../../economy/personalStats';
+import { ACHIEVEMENTS, AchievementId } from '../../economy/personalStats';
 import * as haptics from '../../feedback/haptics';
 import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
@@ -13,7 +13,7 @@ import { AnimatedNumber, ArtImage, Confetti, DecorImage, PaperNote, WoodSign, ma
 import { MAX_COUNT_UP_MS } from '../../ui/AnimatedNumber';
 import { BuddyAvatar } from '../buddy';
 import { BUDDY_SIZE, SceneLayout, WorldYardLayout } from './sceneLayout';
-import { BeatId, HomecomingVariant, HomecomingWalk, OneNumber, homecomingVariant, pickClosingLine, pickOneNumber, planBeats, planExtras } from './homecomingPlan';
+import { BeatId, HomecomingVariant, HomecomingWalk, OneNumber, homecomingBadgeArrivals, homecomingVariant, pickClosingLine, pickOneNumber, planBeats, planExtras } from './homecomingPlan';
 
 // The Heimkehr (konzept section 6): a guided sequence drawn over WorldScene. The scene's camera (its ScrollView)
 // is moved through `onCamera`; everything here is positioned in viewport coordinates at the yard camera
@@ -42,9 +42,11 @@ export interface HomecomingProps {
   levelTitle: string | null;
   onCamera: (target: 'viertel' | 'yard') => void;
   onDone: () => void;
+  /** Told whenever the beat changes (the scene hangs new fence badges when beat 3 starts). */
+  onBeat?: (beat: BeatId) => void;
 }
 
-export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bowl, level, levelTitle, onCamera, onDone }: HomecomingProps) {
+export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bowl, level, levelTitle, onCamera, onDone, onBeat }: HomecomingProps) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards)), [walk]);
@@ -66,6 +68,12 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
     haptics.success();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    onBeat?.(beat);
+    // Only the beat matters; onBeat is a fresh closure each scene render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beat]);
 
   // Camera follows the beat.
   useEffect(() => {
@@ -113,6 +121,7 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
             level={level}
             levelTitle={levelTitle}
             dog={dog}
+            badgeIds={homecomingBadgeArrivals(walk)}
           />
         )}
         {beat === 'rest' && (
@@ -325,6 +334,7 @@ function ExtraPieces({
   level,
   levelTitle,
   dog,
+  badgeIds,
 }: {
   extras: ReturnType<typeof planExtras>;
   walk: HomecomingWalk;
@@ -334,6 +344,8 @@ function ExtraPieces({
   level: number;
   levelTitle: string | null;
   dog: string;
+  /** The (at most two) new badges named on the sign; the fence badges among them swing onto the fence in the scene. */
+  badgeIds: AchievementId[];
 }) {
   const { rewards } = walk;
   return (
@@ -343,7 +355,7 @@ function ExtraPieces({
           <WoodSign size="medium" testID="homecoming-badge">
             <ArtImage art="icon-badge" size={28} />
             <Text style={[textStyle('small'), styles.ink]}>{t('homecoming.badgeCaption')}</Text>
-            {rewards.unlockedAchievements.map((id) => (
+            {badgeIds.map((id) => (
               <Text key={id} style={[textStyle('sign'), styles.ink, styles.smallSign]}>
                 {ACHIEVEMENTS[id].copyTitle}
               </Text>

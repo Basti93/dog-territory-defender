@@ -152,7 +152,7 @@ describe('resolveNewGroundSpot', () => {
   });
 });
 
-// docs/decisions/territories/design.md Decision 5 — a Territory must
+// docs/decisions/territories.md Decision 5 — a Territory must
 // always get a real, non-empty name, even when reverse-geocoding fails
 // (unlike the wild-cluster/New-Ground states above, which render nothing).
 describe('resolveTerritoryName', () => {

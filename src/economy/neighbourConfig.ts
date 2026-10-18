@@ -1,7 +1,7 @@
 // Tunables for the Nachbarhunde (simulated neighbour dogs, multiplayer-sync Track B).
 // PURE: no imports. Shared by the server (planner, gifts, co-op) and the app. These are balance numbers
 // (CLAUDE.md: tunables live in src/economy); the sprinkle fraction and co-op sizes are new Tier A numbers
-// logged in docs/decisions/multiplayer-sync/design.md (Decisions 20, 21) and still to be confirmed by game-master.
+// logged in docs/decisions/multiplayer-sync.md (Decisions 20, 21) and still to be confirmed by game-master.
 
 export const NEIGHBOUR_CONFIG = {
   /** Escalation: weeks since the neighbours were introduced (week index 0 = W1). */

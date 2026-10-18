@@ -4,7 +4,7 @@ import type { NotificationBookkeepingState } from './notificationDecision';
 import { t } from '../i18n';
 
 // Pure decision logic for the opt-in daily walk reminder
-// (docs/decisions/walk-reminder/design.md). Deliberately has no dependency
+// (docs/decisions/walk-reminder.md). Deliberately has no dependency
 // on `expo-notifications` so it stays unit-testable without a native/dev-
 // client build — mirrors notificationDecision.ts's own separation of pure
 // logic from src/notifications/scheduler.ts's actual OS wiring.

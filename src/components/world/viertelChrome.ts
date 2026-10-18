@@ -39,7 +39,7 @@ export function statsSignText(stats: { walks: number; streets: number; corners: 
 }
 
 /**
- * The handwritten notes: "heute genäht" below the cell painted most recently today, and "hohes Gras, noch nie dort"
+ * The handwritten notes: "heute genäht" below the cell painted most recently today, and "Zeit zum Schnuppern"
  * above the Somewhere-Wild pin. Either is left out when there is nothing to point at.
  */
 export function pickViertelNotes(input: { cells: Cell[]; wildSpot: LatLon | null; now: number }): MapNote[] {

@@ -84,25 +84,25 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     await addColumnIfMissing(db, 'den_economy', 'xp REAL NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'den_economy', 'level INTEGER NOT NULL DEFAULT 1');
     // Migration for rows created before dogName/cliffhangerShownForLevel existed
-    // (docs/decisions/virtual-dog-companion) — both nullable, so an existing
+    // (docs/decisions/2026-08-21-virtual-dog-companion.md) — both nullable, so an existing
     // row's default is exactly the "not set yet" state (task 1.3's fallback,
     // "cliffhanger not yet shown for any level").
     await addColumnIfMissing(db, 'den_economy', 'dogName TEXT');
     await addColumnIfMissing(db, 'den_economy', 'cliffhangerShownForLevel INTEGER');
     // Migration for rows created before the Home Range backfill flag existed
-    // (docs/decisions/home-range) — defaults to 0 ("not backfilled yet"),
+    // (docs/decisions/2026-08-21-home-range.md) — defaults to 0 ("not backfilled yet"),
     // which is exactly what an existing install needs: it has real walk
     // history sitting unbackfilled until the app runs the migration once.
     await addColumnIfMissing(db, 'den_economy', 'homeRangeBackfillComplete INTEGER NOT NULL DEFAULT 0');
     // Migration for rows created before the manual-log/route-refresh caps
-    // existed (docs/decisions/home-range-rewards) — all default to "never
+    // existed (docs/decisions/2026-08-21-home-range-rewards.md) — all default to "never
     // used yet" (null day key / 0 count), which is exactly the correct
     // starting state for an existing install.
     await addColumnIfMissing(db, 'den_economy', 'manualLogDayKey TEXT');
     await addColumnIfMissing(db, 'den_economy', 'manualLogCountToday INTEGER NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'den_economy', 'routeRefreshDayKey TEXT');
     // Migration for rows created before territories existed
-    // (docs/decisions/territories) — both default to "not yet" (0), which
+    // (docs/decisions/territories.md) — both default to "not yet" (0), which
     // is exactly the correct starting state for an existing install: it has
     // real Home Range cells sitting unpartitioned until the backfill runs
     // once, and no territory-income line has ever been revealed.

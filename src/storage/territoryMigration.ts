@@ -1,6 +1,6 @@
 // One-time backfill: partitions every already-painted Home Range cell into
 // Territories, exactly once, on first app load after this feature ships. See
-// docs/decisions/territories/design.md Decision 9.
+// docs/decisions/territories.md Decision 9.
 //
 // Replays the exact same clustering algorithm a live walk uses
 // (src/utils/territoryCluster.ts's resolveTerritoryChanges) over full

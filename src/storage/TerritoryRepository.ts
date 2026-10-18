@@ -1,7 +1,7 @@
 // Owns Territory metadata only — id, name, createdAt, and the two monotonic
 // counters (walksHere, treatsEarnedHere). Never touches the Home Range cells
 // table; HomeRangeRepository remains the sole owner of cell-level territory
-// membership. See docs/decisions/territories/design.md Decision 1.
+// membership. See docs/decisions/territories.md Decision 1.
 
 /** Stable identifier for a Territory. Encodes its createdAt as a sortable,
  * zero-padded decimal prefix (`t<15-digit-ms-epoch>-<random>`) so pure,
@@ -13,7 +13,7 @@
 export type TerritoryId = string;
 
 /** One Territory — a named, auto-discovered sub-region of the single Home
- * Range grid. See docs/decisions/territories/design.md Decision 1. */
+ * Range grid. See docs/decisions/territories.md Decision 1. */
 export interface Territory {
   id: TerritoryId;
   name: string;

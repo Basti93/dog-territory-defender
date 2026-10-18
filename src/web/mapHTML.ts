@@ -67,7 +67,7 @@ function buildMapHTML(embedded: boolean): string {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #map { width: 100%; height: 100%; }
-    /* Toy-world look: see mapTheme.ts. Wild marker = docs/decisions/somewhere-wild's warm accent. */
+    /* Toy-world look: see mapTheme.ts. Wild marker = docs/decisions/somewhere-wild.md's warm accent. */
 ${MAP_THEME_CSS}
 ${MAP_MARKER_CSS}
 ${MAP_NOTES_CSS}
@@ -107,9 +107,9 @@ ${CORNER_SIGN_JS}
     let hasCentered = false;
     // The Home Range layer group (Bloom fill + Range outline), replacing
     // the old per-walk territory polygon layers entirely — see
-    // docs/decisions/home-range/design.md Decision 6.
+    // docs/decisions/2026-08-21-home-range.md Decision 6.
     let homeRangeLayerGroup = null;
-    // The "Somewhere Wild" marker (docs/decisions/somewhere-wild) — the
+    // The "Somewhere Wild" marker (docs/decisions/somewhere-wild.md) — the
     // single most-worth-visiting wild cluster, or a recent New Ground
     // discovery. Mirrors currentMarker's add/remove pattern; only ever one
     // at a time, matching the card's own "one spot" rule.
@@ -120,7 +120,7 @@ ${CORNER_SIGN_JS}
     let neighbourLayerGroup = null;
     // A household partner's walk in progress (SHOW_PARTNER_TRAIL): a stitched thread with a paw head.
     let partnerTrailGroup = null;
-    // Handwritten notes (SHOW_NOTES): "heute genäht", "hohes Gras, noch nie dort", the chalk hint on unknown ground.
+    // Handwritten notes (SHOW_NOTES): "heute genäht", "Zeit zum Schnuppern", the chalk hint on unknown ground.
     let notesLayerGroup = null;
 
     function reset() {
@@ -288,7 +288,7 @@ ${MAP_THEME_PROBE_JS}
         });
       }
 
-      // docs/decisions/somewhere-wild — mirrors SHOW_HOME_RANGE's own
+      // docs/decisions/somewhere-wild.md — mirrors SHOW_HOME_RANGE's own
       // shape: a small, typed bridge message, not a new mechanism. payload
       // is { latitude, longitude } or null to clear (neither the wild
       // cluster nor a recent New Ground discovery currently qualifies).
@@ -369,7 +369,7 @@ ${MAP_THEME_PROBE_JS}
         }, 100);
       }
 
-      // docs/decisions/somewhere-wild — pans/zooms to a specific spot on
+      // docs/decisions/somewhere-wild.md — pans/zooms to a specific spot on
       // "Somewhere Wild" card tap (tasks.md task 5.2). Distinct from
       // SHOW_WILD_SPOT (which only places/clears the marker) so the card can
       // re-pan to an already-shown marker without re-sending it.

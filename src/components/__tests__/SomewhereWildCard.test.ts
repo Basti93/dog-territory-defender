@@ -29,7 +29,7 @@ const WILD_DAYS_AGO = NOW - 10 * MS_PER_DAY;
  * repainting each cell `visitMultiplier` times so its `visits` count is a
  * real, comparable ranking signal (paintCells has no "set visits directly"
  * escape hatch — see storage/HomeRangeRepository.ts). Each repeat visit
- * lands on its own distinct calendar day (docs/decisions/territories'
+ * lands on its own distinct calendar day (docs/decisions/territories.md'
  * daily visits cap would otherwise collapse same-day repaints to a single
  * credited visit) while the LAST visit still lands exactly on `refreshedAt`,
  * so lastRefreshed/wildness stay exactly what callers already expect.
@@ -123,14 +123,29 @@ describe('evaluateSomewhereWild — full path', () => {
 
     expect(result.card).not.toBeNull();
     expect([
-      'Karl-Marx-Straße is looking wild — great sniffing over there.',
-      'Karl-Marx-Straße has gone lovely and overgrown — worth a wander.',
-      'Something wild is happening over by Karl-Marx-Straße.',
-      'Karl-Marx-Straße is greening up again — Buddy would love a look.',
+      'The old scent mark at Karl-Marx-Straße has surely faded by now. Time for a fresh one!',
+      'The neighbour dogs have been busy marking at Karl-Marx-Straße, and Buddy would love to reply.',
+      'Fresh sniff-mail waiting at Karl-Marx-Straße.',
+      'At Karl-Marx-Straße, Buddy would like to go sniffing and marking again.',
     ]).toContain(result.card!.text);
   });
 
-  // docs/decisions/territories/design.md's "Somewhere Wild becomes
+  it.each(['en', 'de'] as const)('no wild-cluster variant starts with the lowercase dog fallback (%s)', async (locale) => {
+    setLocale(locale);
+    try {
+      const homeRangeRepository = createInMemoryHomeRangeRepository();
+      const walkRepository = createInMemoryWalkRepository();
+      await paintBlock(homeRangeRepository, 3500, 3500, 4, 3, WILD_DAYS_AGO);
+      mockReverseGeocodeAsync.mockResolvedValueOnce([{ street: 'Parkweg', district: null, city: null }]);
+      const result = await evaluateSomewhereWild({ homeRangeRepository, walkRepository, dogName: null, now: NOW });
+      expect(result.card!.text).not.toMatch(/\{|^(your pup|dein Hund)/);
+      expect(result.card!.text).toContain('Parkweg');
+    } finally {
+      setLocale('en');
+    }
+  });
+
+  // docs/decisions/territories.md's "Somewhere Wild becomes
   // territory-aware" requirement.
   it('a wild cluster inside a named Territory uses the Territory name instead of the raw street label', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();

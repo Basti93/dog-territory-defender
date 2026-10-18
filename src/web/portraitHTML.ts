@@ -5,7 +5,7 @@ import { PARTNER_TRAIL_SCRIPT } from './partnerTrailScript';
 import { MAP_TILE_ATTRIBUTION, MAP_TILE_FILTER, MAP_TILE_HOST_SUFFIX, MAP_TILE_URL, MAP_TINT_ALPHA, MAP_TINT_COLOR } from './mapTheme';
 import { tokens } from '../ui/tokens';
 
-// The Doorstep's territory portrait host (docs/decisions/home-dashboard,
+// The Doorstep's territory portrait host (docs/decisions/home-dashboard.md,
 // design.md Decision 2, resolved to include OSM tiles behind the shape per
 // the user's 2026-08-22 call — see proposal.md's Open Questions). Unlike
 // mapHTML.ts, this WebView never becomes visible or interactive: no

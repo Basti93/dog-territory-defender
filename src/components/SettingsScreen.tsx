@@ -29,7 +29,7 @@ import { giftOpenedLine } from '../sync/neighbourhood';
 import { useNeighbourhood } from '../sync/useNeighbourhood';
 import { GiftsSection } from './GiftsSection';
 
-// This app's first Settings screen (docs/decisions/walk-reminder/design.md
+// This app's first Settings screen (docs/decisions/walk-reminder.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
 // reminder. Not a general-purpose preferences screen; don't bolt unrelated
 // settings onto this without revisiting that decision first.
@@ -52,6 +52,8 @@ interface SettingsScreenProps {
   onChangeLocalePreference: (pref: LocalePreference) => void | Promise<void>;
   /** Household sync (multiplayer-sync). Omitted = no Household card and Restore stays as before. */
   syncEngine?: SyncEngine;
+  /** Opens the Stats & badges screen (first entry on the sheet). */
+  onOpenStats: () => void;
   /** Opens the "log a walk we missed" screen (a row on the sheet). */
   onOpenLogMissedWalk: () => void;
   /** Opens the debug log screen (a row on the sheet). */
@@ -89,6 +91,7 @@ export function SettingsScreen({
   onChangeLocalePreference,
   syncEngine,
   about,
+  onOpenStats,
   onOpenLogMissedWalk,
   onOpenDebugLog,
 }: SettingsScreenProps) {
@@ -101,7 +104,6 @@ export function SettingsScreen({
   const openGift = async (gift: ApiGift) => {
     setGiftLine((await hood.openGift(gift)) ? giftOpenedLine(gift) : t('neighbours.gift.retry'));
   };
-  const giftsVisible = hood.unopenedGifts.length > 0 || giftLine !== null;
   // Restoring an old file over live synced state would fork the household's history.
   // Until the status has loaded, an engine-equipped screen keeps Restore off rather than flash it on.
   const restoreAllowed = !syncEngine || (syncStatus !== null && isRestoreAllowed(syncStatus.joined));
@@ -270,8 +272,9 @@ export function SettingsScreen({
       <PaperHeader title={t('menu.settings')} onBack={onClose} />
 
       <PaperSheet>
-        <GiftsSection gifts={hood.unopenedGifts} line={giftLine} onOpen={openGift} first />
-        <PaperSection title={t('post.dog')} first={!giftsVisible}>
+        <PaperSection title={t('post.statsBadges')} icon="icon-badge" first onPress={onOpenStats} />
+        <GiftsSection gifts={hood.unopenedGifts} line={giftLine} onOpen={openGift} />
+        <PaperSection title={t('post.dog')}>
           <PaperRow title={dog} />
           <PaperRow
             title={t('settings.changeLook', { dog })}

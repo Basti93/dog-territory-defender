@@ -1,6 +1,6 @@
 // Builds the bounded raster payload the WebView/Leaflet bridge renders (see
 // mapHTML.ts's SHOW_HOME_RANGE handler and
-// docs/decisions/home-range/design.md Decision 6). This is the RN-side
+// docs/decisions/2026-08-21-home-range.md Decision 6). This is the RN-side
 // half — pure, unit-testable TS. The WebView-side half (Gaussian blur,
 // marching-squares contour, Lab colour interpolation, canvas drawing) lives
 // inline in mapHTML.ts's own script, the same way every other WebView

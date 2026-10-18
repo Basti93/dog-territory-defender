@@ -119,14 +119,6 @@ const de: Record<string, string> = {
   "achievement.cozy-den.name": "Gemütlicher Hof",
   "achievement.cozy-den.title": "Gemütlicher Hof",
   "achievement.cozy-den.body": "Hundehütte, Bäckerei und Schnüffelgarten sind alle auf Level 5. Dieser Hof fühlt sich wie zu Hause an.",
-  "achievement.hint.walks": "{target} Spaziergänge, du bist bei {current}",
-  "achievement.hint.distance": "{target} m gelaufen, du bist bei {current}",
-  "achievement.hint.longestWalk": "{target} m in einem Spaziergang, du bist bei {current}",
-  "achievement.hint.biggestArea": "{target} m² in einem Spaziergang, du bist bei {current}",
-  "achievement.hint.treats": "{target} Leckerlis verdient, du bist bei {current}",
-  "achievement.hint.movingIn": "Bau irgendein Gebäude einmal aus",
-  "achievement.hint.handyHomebody": "Ein Gebäude auf Level 10, du bist bei {current}",
-  "achievement.hint.cozyDen": "Alle 3 Gebäude auf Level 5, du bist bei {current}/3",
 
   // ---- territories
   "territories.title": "Reviere",
@@ -159,8 +151,7 @@ const de: Record<string, string> = {
   "doorstep.dogLevel": "{dog} · Level {level}",
   "doorstep.emptyRange": "{dog} hat noch kein Revier markiert. Lass uns eins finden.",
   "doorstep.pastWalks": "Bisherige Runden",
-  "doorstep.statsBadges": "Statistik & Abzeichen",
-
+  
   // ---- world scene (the yard: gate, bench, mailbox, bowl, building signs)
   "world.gate": "Gassi gehen",
   "world.gateLabel": "Tor: Gassi gehen",
@@ -175,15 +166,19 @@ const de: Record<string, string> = {
   "viertel.stats.corners.one": "{count} Ecke",
   "viertel.stats.corners.other": "{count} Ecken",
   "viertel.note.today": "heute genäht",
-  "viertel.note.wild": "hohes Gras, noch nie dort",
+  "viertel.note.wild": "Zeit zum Schnuppern",
   "viertel.note.explore": "Platz zum Entdecken",
   "viertel.territories": "Reviere ›",
   "viertel.territoriesLabel": "Reviere öffnen",
   "viertel.statsLabel": "Euer Viertel: {stats}",
+  "world.fence.badgeLabel": "Zaun-Abzeichen: {name}",
+  "world.fence.earnedOn": "erhalten am {date}",
+  "world.fence.hookSign": "Bald: Rosette",
   "world.album": "Album",
   "world.albumLabel": "Bank: vergangene Runden",
   "world.post": "Post",
   "world.postLabel": "Briefkasten: Einstellungen und mehr",
+  "world.statsLabel": "Statistik und Abzeichen",
   "world.bowlSign": "{count} von {cap} Leckerlis",
   "world.bowlLabel": "Napf: {count} von {cap} Leckerlis",
   "world.upgradePossible": "Ausbau möglich",
@@ -202,6 +197,7 @@ const de: Record<string, string> = {
   // ---- doorstep menu
   "menu.debugLog": "Debug-Protokoll",
   "menu.logMissedWalk": "Verpasste Runde nachtragen",
+  "post.statsBadges": "Statistik & Abzeichen",
   "post.dog": "Dein Hund",
   "post.reminders": "Erinnerungen",
   "post.sounds": "Töne",
@@ -242,16 +238,19 @@ const de: Record<string, string> = {
   "celebration.levelUp.body": "{dog} ist jetzt Level {level}! Pro Runde gibt's {newCount} statt {oldCount} Leckerlis.",
   // ---- stats & badges
   "stats.lifetime": "Gesamtstatistik",
-  "stats.level": "Level",
   "stats.totalWalks": "Runden gesamt",
   "stats.lifetimeDistance": "Gesamtstrecke",
   "stats.biggestTerritory": "Größtes Revier",
   "stats.longestWalk": "Längste Runde",
   "stats.lifetimeTreats": "Leckerlis insgesamt",
+  "stats.level": "Level",
+  "stats.streets": "Straßen",
+  "stats.records": "Rekorde",
   "stats.denLevels": "Level im Hof",
   "stats.denLevelsLine": "Hundehütte {doghouse} · Bäckerei {bakery} · Schnüffelgarten {garden}",
   "stats.badges": "Abzeichen",
   "stats.earnedOn": "Verdient am {date}",
+  "stats.badgesEmpty": "Dein erstes Abzeichen hängt bald am Zaun.",
 
   // ---- walk history
   "history.deleteTitle": "Runde löschen?",
@@ -276,10 +275,10 @@ const de: Record<string, string> = {
   "wild.newGround.withLabel.other": "{dog} hat {when} {count} neue Straßen bei {label} kennengelernt.",
   "wild.newGround.noLabel.one": "{dog} hat {when} {count} neue Straße kennengelernt.",
   "wild.newGround.noLabel.other": "{dog} hat {when} {count} neue Straßen kennengelernt.",
-  "wild.cluster.1": "{place} sieht schön wild aus. Da drüben lässt es sich prima schnüffeln.",
-  "wild.cluster.2": "{place} ist herrlich zugewachsen. Ein kleiner Streifzug lohnt sich.",
-  "wild.cluster.3": "Bei {place} tut sich etwas Wildes.",
-  "wild.cluster.4": "{place} wird wieder grün. {dog} würde sich das gern ansehen.",
+  "wild.cluster.1": "Bei {place} ist die alte Duftmarke bestimmt schon verflogen. Zeit für eine neue!",
+  "wild.cluster.2": "Die Nachbarhunde haben bei {place} fleißig markiert, und {dog} würde gern antworten.",
+  "wild.cluster.3": "Bei {place} gibt's neue Duftnachrichten zu lesen.",
+  "wild.cluster.4": "Bei {place} möchte {dog} mal wieder schnuppern und markieren.",
   // ---- debug log
   "debug.nothingToShare": "Nichts zu teilen",
   "debug.emptyLog": "Das Debug-Protokoll ist leer.",
@@ -433,7 +432,7 @@ const de: Record<string, string> = {
   "primer.granted": "Alles bereit",
   "primer.declined": "Kein Problem, du kannst es später in den Einstellungen einschalten.",
   "primer.later": "Später",
-  // Sweet weird streak (docs/decisions/buddy-comes-alive design.md): warm first, weird second. Picked rarely (1 in 4).
+  // Sweet weird streak (docs/decisions/buddy-comes-alive.md): warm first, weird second. Picked rarely (1 in 4).
   "weird.headline.floating": "Tolle Runde! {dog} ist so stolz, dass er kurz schwebt.",
   "weird.headline.moon": "Gemeinsam unterwegs, und der Mond kichert ein bisschen.",
   "weird.levelUp.comet": "Level geschafft! Ein Komet in Knochenform sagt Danke.",

@@ -21,6 +21,7 @@ import { resetNeighbourhood, setNearby, setNeighbourhood } from '../../sync/neig
 import type { NeighbourhoodActions } from '../../sync/neighbourhood';
 import { clearPartnerPresence, PRESENCE_STALE_MS, setPartnerPresence } from '../../sync/presenceStore';
 import { partnerHomecomingWalk } from '../world/homecomingPlan';
+import { ACHIEVEMENTS, AchievementId, defaultPersonalStatsState } from '../../economy/personalStats';
 
 const { posted } = require('react-native-webview') as { posted: string[] };
 
@@ -50,6 +51,7 @@ async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70, stateExt
     onCancelWalk: jest.fn(),
     onOpenHistory: jest.fn(),
     onOpenSettings: jest.fn(),
+    onOpenStats: jest.fn(),
     onTreatsChanged: jest.fn(),
   };
   const view = await renderScreen(
@@ -147,6 +149,13 @@ describe('WorldScene', () => {
     expect(onOpenHistory).toHaveBeenCalledTimes(2);
     await fireEvent.press(screen.getByRole('button', { name: t('world.postLabel') }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the dog-name sign under the fence opens Stats and badges', async () => {
+    const { view, onOpenStats } = await setup();
+    await fireEvent.press(screen.getByRole('button', { name: t('world.statsLabel') }));
+    expect(onOpenStats).toHaveBeenCalledTimes(1);
     await unmountAndExpectNoTimers(view);
   });
 
@@ -438,6 +447,81 @@ describe('pickSceneNotes', () => {
     }
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
+});
+
+describe('WorldScene fence badges', () => {
+  const walkWith = (ids: AchievementId[]) => ({
+    walkId: 'wb',
+    rewards: {
+      cellsPainted: 40,
+      hasTerritory: true,
+      treatsEarned: 10,
+      tease: null,
+      unlockedAchievements: ids,
+      leveledUpTo: null,
+      oldTreatsPerWalk: null,
+      newTreatsPerWalk: null,
+      cliffhangerTitle: null,
+      newGroundCellCount: 0,
+      bloomMultiplier: 1,
+    },
+    newTerritoryName: null,
+    mergedTerritoryNames: null,
+    territoryName: 'Park',
+    distanceMeters: 1500,
+    walkTime: Date.now(),
+    manual: false,
+  });
+
+  it('hangs every unlocked badge on the fence (no "new" marks) and keeps the territory badges off', async () => {
+    const personalStatsRepository = createInMemoryPersonalStatsRepository();
+    await personalStatsRepository.unlockAchievements(['first-steps', 'ground-claimed', 'moving-in'], 1_700_000_000_000);
+    const { view } = await setup({ personalStatsRepository });
+    expect(screen.getByTestId('fence-badge-first-steps')).toBeOnTheScreen();
+    expect(screen.getByTestId('fence-badge-moving-in')).toBeOnTheScreen();
+    expect(screen.queryByTestId('fence-badge-ground-claimed')).toBeNull();
+    expect(screen.queryByTestId('fence-hook')).toBeNull(); // 3 of 25 walks: nothing near
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('shows one empty hook, with no numbers, once a threshold badge is 80 % away', async () => {
+    const personalStatsRepository = createInMemoryPersonalStatsRepository();
+    await personalStatsRepository.unlockAchievements(['first-steps', 'paws-on-the-pavement'], 1_700_000_000_000);
+    await personalStatsRepository.saveState({ ...defaultPersonalStatsState(), totalWalksClosed: 21 });
+    const { view } = await setup({ personalStatsRepository });
+    expect(screen.getAllByTestId('fence-hook')).toHaveLength(1);
+    expect(screen.getByText(t('world.fence.hookSign'))).toBeOnTheScreen();
+    expect(screen.queryByText(/21|25/)).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a badge earned on the walk stays off its peg until beat 3, then hangs there (at most two arrive)', async () => {
+    const personalStatsRepository = createInMemoryPersonalStatsRepository();
+    const ids: AchievementId[] = ['first-steps', 'round-the-block', 'first-bakery-batch'];
+    await personalStatsRepository.unlockAchievements(ids, Date.now());
+    const onDone = jest.fn();
+    const { view } = await setup({ personalStatsRepository, homecoming: { onDone, walk: walkWith(ids) } });
+    await flush();
+    expect(screen.queryByTestId('fence-badge-first-steps')).toBeNull(); // beat 1: the two arrivals wait
+    expect(screen.queryByTestId('fence-badge-round-the-block')).toBeNull();
+    expect(screen.getByTestId('fence-badge-first-bakery-batch')).toBeOnTheScreen(); // the third just hangs there
+    await advance(500);
+    await fireEvent.press(screen.getByTestId('homecoming-tap')); // -> bowl
+    await advance(500);
+    expect(screen.queryByTestId('fence-badge-first-steps')).toBeNull();
+    await fireEvent.press(screen.getByTestId('homecoming-tap')); // -> beat 3
+    await advance(500);
+    expect(screen.getByTestId('fence-badge-first-steps')).toBeOnTheScreen();
+    expect(screen.getByTestId('fence-badge-round-the-block')).toBeOnTheScreen();
+    expect(screen.getByTestId('fence-badge-first-bakery-batch')).toBeOnTheScreen();
+    // The sign of beat 3 names two, not three.
+    const sign = screen.getByTestId('homecoming-badge');
+    expect(within(sign).getByText(ACHIEVEMENTS['first-steps'].copyTitle)).toBeOnTheScreen();
+    expect(within(sign).getByText(ACHIEVEMENTS['round-the-block'].copyTitle)).toBeOnTheScreen();
+    expect(within(sign).queryByText(ACHIEVEMENTS['first-bakery-batch'].copyTitle)).toBeNull();
+    await advance(2000);
     await unmountAndExpectNoTimers(view);
   });
 });

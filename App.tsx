@@ -321,6 +321,7 @@ export default function App() {
         onOpenMap={() => nav.goTo('map')}
         onOpenHistory={() => nav.goTo('history')}
         onOpenSettings={() => nav.goTo('settings')}
+        onOpenStats={() => nav.goTo('stats')}
         openDenPanel={screen === 'den' && !homecoming}
         onDenPanelHandled={nav.goDoorstep}
         homecoming={homecoming}
@@ -428,6 +429,7 @@ export default function App() {
             syncEngine={syncEngine}
             about={{ versionLabel: ota.currentVersionLabel, onCheck: ota.checkNow }}
             onSaveAppearance={saveAppearance}
+            onOpenStats={() => nav.goTo('stats')}
             onOpenLogMissedWalk={() => nav.goTo('logMissedWalk')}
             onOpenDebugLog={() => nav.goTo('debugLog')}
             localePreference={localePreference}
@@ -444,6 +446,7 @@ export default function App() {
             buddyAppearance={buddyAppearance}
             repository={repos.personalStatsRepository}
             denEconomyRepository={repos.denEconomyRepository}
+            homeRangeRepository={repos.homeRangeRepository}
             onClose={nav.close}
           />
         </ScreenFrame>

@@ -70,7 +70,7 @@ describe('isWithinManualLogWindow', () => {
   });
 });
 
-describe('dayAndTimeOfDayPhrase (docs/decisions/walk-portrait/design.md Decision 7)', () => {
+describe('dayAndTimeOfDayPhrase (docs/decisions/walk-portrait.md Decision 7)', () => {
   it('formats the weekday and day-of-week correctly', () => {
     const tuesdayMorning = new Date(2026, 0, 13, 9, 0, 0).getTime(); // Jan 13 2026 is a Tuesday
     expect(dayAndTimeOfDayPhrase(tuesdayMorning)).toBe('Tuesday morning');
@@ -108,7 +108,7 @@ describe('dayAndTimeOfDayPhrase (docs/decisions/walk-portrait/design.md Decision
   });
 });
 
-// docs/decisions/home-range/design.md Decision 4, rule 1: a manual-log
+// docs/decisions/2026-08-21-home-range.md Decision 4, rule 1: a manual-log
 // route refresh may only pick "the cell set of a previously-completed
 // tracked walk" — never a manual log itself (no GPS evidence to refresh
 // from) and never an empty-trail walk.

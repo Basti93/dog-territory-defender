@@ -21,7 +21,7 @@ describe('NotificationRepository contract', () => {
     expect(reread.learnedTimeOfDayBucket).toBe('evening');
   });
 
-  // Walk-reminder fields (docs/decisions/walk-reminder/design.md Decision 3)
+  // Walk-reminder fields (docs/decisions/walk-reminder.md Decision 3)
   // — round-trip only exercised here against the in-memory implementation.
   // This project has no jest-level harness for the sqlite implementations at
   // all yet (expo-sqlite has no jest-expo mock, and no existing repository's

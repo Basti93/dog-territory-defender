@@ -99,7 +99,7 @@ describe('WalkRepository contract', () => {
     expect(saved?.locations).toEqual([]);
   });
 
-  // docs/decisions/walk-portrait — three new optional fields, additive and
+  // docs/decisions/walk-portrait.md — three new optional fields, additive and
   // backward-compatible (design.md Decisions 4/5/6).
   it('round-trips newGroundCellIds, treatsEarned, and refreshedRouteWalkId when a walk is re-saved with them added', async () => {
     const repo = createInMemoryWalkRepository();

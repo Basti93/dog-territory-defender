@@ -1,9 +1,9 @@
 // Persists the Home Range grid — the per-cell record described in
-// docs/decisions/home-range/design.md Decision 1. Mirrors WalkRepository's
+// docs/decisions/2026-08-21-home-range.md Decision 1. Mirrors WalkRepository's
 // shape: an interface, a sqlite implementation for the app, and an in-memory
 // implementation for tests.
 //
-// Also owns the New Ground event (docs/decisions/somewhere-wild/design.md
+// Also owns the New Ground event (docs/decisions/somewhere-wild.md
 // Decision 4) — a single overwritten row, same singleton-row convention
 // DenEconomyState already uses elsewhere, so the "Somewhere Wild" card can
 // still answer "was there a recent discovery" up to 48h after the walk that
@@ -23,13 +23,13 @@ export interface Cell {
   /** Monotonic, tracked-walk paints only. The ghost-trail brightness channel. */
   visits: number;
   /**
-   * Which Territory (docs/decisions/territories) this cell belongs to.
+   * Which Territory (docs/decisions/territories.md) this cell belongs to.
    * `null` only transiently, before the one-time territory migration backfill
    * has run (see storage/territoryMigration.ts) — every cell is assigned
    * exactly one Territory once that completes. Set once at insert time, and
    * only ever reassigned afterward by a Territory merge
    * (reassignCellsToTerritory below) — never by an ordinary repaint. See
-   * docs/decisions/territories/design.md Decision 1.
+   * docs/decisions/territories.md Decision 1.
    */
   territoryId: TerritoryId | null;
 }
@@ -42,7 +42,7 @@ export interface PaintCellInput {
   tracked: boolean;
   /**
    * The resolved Territory this cell belongs to — used ONLY on the INSERT
-   * path for a brand-new cell row (docs/decisions/territories/design.md
+   * path for a brand-new cell row (docs/decisions/territories.md
    * Decision 1/tasks.md task 1.1). The UPDATE path for an already-existing
    * cell must never touch its territoryId column; omit this field (or pass
    * anything) when repainting a cell that's already in the Range.
@@ -50,7 +50,7 @@ export interface PaintCellInput {
   territoryId?: TerritoryId;
 }
 
-/** The most recent New Ground discovery — see docs/decisions/somewhere-wild/design.md Decision 4. `cellIds` is this discovery's own New Ground cell set (not the whole Range), kept only so a future consumer could re-derive the same "N new streets" figure without re-running newGroundCells(); the "Somewhere Wild" card itself only needs the count. */
+/** The most recent New Ground discovery — see docs/decisions/somewhere-wild.md Decision 4. `cellIds` is this discovery's own New Ground cell set (not the whole Range), kept only so a future consumer could re-derive the same "N new streets" figure without re-running newGroundCells(); the "Somewhere Wild" card itself only needs the count. */
 export interface NewGroundEvent {
   occurredAt: number;
   cellIds: CellId[];
@@ -62,17 +62,17 @@ export interface HomeRangeRepository {
   paintCells(cells: PaintCellInput[]): Promise<void>;
   /** Viewport-scoped read for rendering (Decision 6's bridge payload needs a bounded query, not the whole table). Bounds are inclusive. */
   getCellsInBounds(minIx: number, maxIx: number, minIy: number, maxIy: number): Promise<Cell[]>;
-  /** The single most recent New Ground event, or `null` if none has ever fired. Freshness (the 48h card window) is evaluated by the caller at read time — this just returns whatever was last recorded, however old. See docs/decisions/somewhere-wild/design.md Decision 4. */
+  /** The single most recent New Ground event, or `null` if none has ever fired. Freshness (the 48h card window) is evaluated by the caller at read time — this just returns whatever was last recorded, however old. See docs/decisions/somewhere-wild.md Decision 4. */
   getLastNewGroundEvent(): Promise<NewGroundEvent | null>;
-  /** Overwrites any previous New Ground event — a singleton row, not an event log (only the most recent discovery is ever relevant to the card). See docs/decisions/somewhere-wild/design.md Decision 4. */
+  /** Overwrites any previous New Ground event — a singleton row, not an event log (only the most recent discovery is ever relevant to the card). See docs/decisions/somewhere-wild.md Decision 4. */
   recordNewGroundEvent(occurredAt: number, cellIds: CellId[]): Promise<void>;
 
-  /** Every cell currently assigned to `territoryId` — used by the territories list screen and per-territory portrait rendering (docs/decisions/territories/tasks.md task 1.3). Scoped read, mirroring getCellsInBounds's viewport-scoped shape. */
+  /** Every cell currently assigned to `territoryId` — used by the territories list screen and per-territory portrait rendering (docs/decisions/territories.md task 1.3). Scoped read, mirroring getCellsInBounds's viewport-scoped shape. */
   getCellsByTerritory(territoryId: TerritoryId): Promise<Cell[]>;
   /**
    * Bulk-reassigns every cell from `fromTerritoryId` to `toTerritoryId` — the
    * one write a Territory merge makes to the cells table
-   * (docs/decisions/territories/design.md Decision 3 Step 4). `null` is
+   * (docs/decisions/territories.md Decision 3 Step 4). `null` is
    * accepted for `fromTerritoryId` for exactly one other caller: the one-time
    * territory migration backfill (storage/territoryMigration.ts), which
    * needs to move a specific, already-resolved set of previously-untracked
@@ -96,7 +96,7 @@ export interface HomeRangeRepository {
   /**
    * The single global, ungrouped aggregate `{ cellCount, visitsSum }` over
    * the WHOLE cells table — the only correct way to compute the Territory
-   * passive-income formula's `worldMass` term (docs/decisions/territories/
+   * passive-income formula's `worldMass` term (docs/decisions/territories.md
    * design.md Decision 6's split-invariance guardrail). This method MUST
    * NEVER gain a `territoryId` parameter, and there MUST NEVER be a
    * territory-scoped variant of it — `worldMass` summed correctly is always

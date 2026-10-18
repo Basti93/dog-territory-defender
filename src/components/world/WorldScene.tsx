@@ -41,9 +41,12 @@ import { BENCH_WALK_WINDOW } from '../../postcards/postcards';
 import { usePostcards } from '../../postcards/usePostcards';
 import { BenchPostcards } from '../postcards/BenchPostcards';
 import { BuildingPanel } from './BuildingPanel';
+import { FenceBadges } from './FenceBadges';
+import { signStrip } from './fencePlan';
+import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
 import { NeighbourCard } from './NeighbourCard';
-import type { HomecomingWalk } from './homecomingPlan';
+import { BeatId, HomecomingWalk, homecomingBadgeArrivals } from './homecomingPlan';
 import {
   BOTTOM_ROW_H,
   BUDDY_SIZE,
@@ -77,6 +80,9 @@ const MAX_NOTES = 2;
 const NO_LOCATIONS: never[] = [];
 /** The yard's wooden-sign text is smaller than the 20pt default so long names fit under a building. */
 const SMALL_SIGN_TEXT = { fontSize: 15, lineHeight: 18 } as const;
+const STATUS_SIGN_TEXT = { fontSize: 13, lineHeight: 16 } as const;
+/** The fence layer reaches this far below the fence line so the strip signs and a badge's sign sit inside its bounds (touch). */
+const FENCE_LAYER_ROOM = 170;
 
 export interface WorldSceneProps {
   dogName: string | null;
@@ -112,6 +118,8 @@ export interface WorldSceneProps {
   onOpenMap: () => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  /** The dog-name sign under the fence opens Stats & badges. Omitted = the sign is plain decoration. */
+  onOpenStats?: () => void;
   /** The `den` screen alias (notification taps): scroll to the yard and open the next-upgrade panel. */
   openDenPanel?: boolean;
   onDenPanelHandled?: () => void;
@@ -210,6 +218,7 @@ export function WorldScene(props: WorldSceneProps) {
     onOpenMap,
     onOpenHistory,
     onOpenSettings,
+    onOpenStats,
     openDenPanel = false,
     onDenPanelHandled,
     homecoming = null,
@@ -345,6 +354,19 @@ export function WorldScene(props: WorldSceneProps) {
     };
   }, [homecomingActive, personalStatsRepository]);
 
+  // ---- Fence badges: unlocked achievements read once per mount / stats change (never per frame) ----
+  // New badges of a homecoming stay off their pegs until beat 3 and then swing on; everything else just hangs.
+  const [homecomingBeat, setHomecomingBeat] = useState<BeatId | null>(null);
+  useEffect(() => {
+    if (!homecomingActive) setHomecomingBeat(null);
+  }, [homecomingActive]);
+  const fence = useFenceBadges(
+    personalStatsRepository,
+    `${homeRangeRefreshKey ?? 0}:${den.achievementNotices.length}:${pendingDenAchievements.length}:${homecomingActive ? 'h' : ''}`
+  );
+  const badgeArrivals = useMemo(() => (homecoming ? homecomingBadgeArrivals(homecoming.walk) : []), [homecoming]);
+  const fenceHiddenIds = homecoming && homecomingBeat !== 'extras' && homecomingBeat !== 'rest' ? badgeArrivals : [];
+
   // ---- Gate: swing open, Buddy trots through, then the existing walk flow ----
   type GateFrame = 'sit' | 'a' | 'b';
   const [leaving, setLeaving] = useState<GateFrame | null>(null);
@@ -461,6 +483,8 @@ export function WorldScene(props: WorldSceneProps) {
   const curiousFacing = curiousTarget === 'doghouse' ? 'left' : 'right';
   const gardenStage3 = artTierForLevel(levels.sniffGarden) >= 3;
   const showsTerritorySign = state.territoryIncomeRevealed && Math.round(territoryIncomeRate) >= 1;
+  const statusCount = [showsTerritorySign, !!coopText, !!partnerWalk].filter(Boolean).length;
+  const strip = signStrip({ width, fenceBottom: layout.fenceBottom, hasTitle: !!title, statusCount });
   const cap = projection.cap;
   const shownTreats = projection.projected;
   const treatCount = formatNumber(Math.floor(shownTreats));
@@ -653,13 +677,13 @@ export function WorldScene(props: WorldSceneProps) {
                 onPress={() => dismiss(bubbleNote.key)}
                 accessibilityRole="button"
                 accessibilityLabel={bubbleNote.text}
-                style={[styles.abs, { left: width / 2 + 52, top: 0, width: width / 2 - 56, zIndex: 7 }]}
+                style={[styles.abs, { left: width / 2 + 52, top: strip.rightH, width: width / 2 - 56, zIndex: 7 }]}
               >
                 <SpeechBubble tail="left">{bubbleNote.text}</SpeechBubble>
               </Pressable>
             )}
             {paperNote && (
-              <View pointerEvents="box-none" style={[styles.abs, { left: 8, top: 8, width: Math.max(120, width / 2 - 82), zIndex: 7, transform: [{ rotate: '-3deg' }] }]}>
+              <View pointerEvents="box-none" style={[styles.abs, { left: 8, top: Math.max(8, strip.leftH), width: Math.max(120, width / 2 - 82), zIndex: 7, transform: [{ rotate: '-3deg' }] }]}>
                 {paperNote.kind === 'update' && updateCard ? (
                   <PaperNote>
                     <Text style={[textStyle('small'), styles.noteText]}>{paperNote.text}</Text>
@@ -772,7 +796,7 @@ export function WorldScene(props: WorldSceneProps) {
         </Animated.View>
 
         {/* ---- ZAUN ---- */}
-        <View pointerEvents="box-none" style={[styles.layer, { top: layout.tailTop, height: layout.fenceBottom + FENCE_FOOT_PAD, zIndex: 3 }]}>
+        <View pointerEvents="box-none" style={[styles.layer, { top: layout.tailTop, height: layout.fenceBottom + FENCE_FOOT_PAD + FENCE_LAYER_ROOM, zIndex: 3 }]}>
           {Array.from({ length: fenceTiles }, (_, i) => {
             const seg = artOr('fence-segment', null);
             return seg ? (
@@ -795,6 +819,17 @@ export function WorldScene(props: WorldSceneProps) {
               </>
             );
           })()}
+          <FenceBadges
+            badges={fence.badges}
+            hook={fence.hook}
+            hookHidden={walkActive || !!homecoming}
+            width={width}
+            fenceBottom={layout.fenceBottom}
+            hasTitle={!!title}
+            statusCount={statusCount}
+            hiddenIds={fenceHiddenIds}
+            swingIds={badgeArrivals}
+          />
           {gate && (
             <DecorImage
               source={gate}
@@ -829,45 +864,28 @@ export function WorldScene(props: WorldSceneProps) {
               </View>
             )}
           </View>
-          <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 160, transform: [{ rotate: '3deg' }] }]}>
+          {/* The strip of signs under the fence line (the picket band is for the badges): dog name right, status signs left. */}
+          <View pointerEvents="box-none" style={[styles.abs, { left: strip.dog.x, top: strip.dog.y, width: strip.signW, transform: [{ rotate: '3deg' }] }]}>
             {title ? (
               // Name on line 1, title on line 2 (shrinks to fit, never breaks inside a word).
-              <WoodSign size="small" accessibilityLabel={`${dog} · ${title}`}>
+              <WoodSign size="small" onPress={onOpenStats} accessibilityLabel={onOpenStats ? t('world.statsLabel') : `${dog} · ${title}`}>
                 <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[textStyle('sign'), styles.dogSignText, SMALL_SIGN_TEXT]}>{dog}</Text>
                 <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[textStyle('sign'), styles.dogSignText, SMALL_SIGN_TEXT]}>{title}</Text>
               </WoodSign>
             ) : (
-              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
+              <WoodSign size="small" onPress={onOpenStats} accessibilityLabel={onOpenStats ? t('world.statsLabel') : undefined} textStyleOverride={SMALL_SIGN_TEXT}>
                 {t('doorstep.dogLevel', { dog, level })}
               </WoodSign>
             )}
           </View>
-          {showsTerritorySign && (
-            <View pointerEvents="none" style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '-3deg' }] }]}>
-              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
-                {t('world.territorySign', { n: formatNumber(Math.round(territoryIncomeRate)) })}
-              </WoodSign>
-            </View>
-          )}
-          {coopText && (
-            <View
-              pointerEvents="none"
-              style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4 + (showsTerritorySign ? 64 : 0), width: 190, alignItems: 'flex-start', transform: [{ rotate: '-2deg' }] }]}
-            >
-              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT} accessibilityLabel={coopText}>
-                {coopText}
-              </WoodSign>
-            </View>
-          )}
-          {partnerWalk && (
-            <View
-              pointerEvents="none"
-              testID="partner-sign"
-              style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4 + (showsTerritorySign ? 64 : 0) + (coopText ? 64 : 0), width: 190, alignItems: 'flex-start', transform: [{ rotate: '-2deg' }] }]}
-            >
-              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT} accessibilityLabel={t('world.partnerOut', { name: partnerWalk.name, dog })}>
-                {t('world.partnerOut', { name: partnerWalk.name, dog })}
-              </WoodSign>
+          {statusCount > 0 && (
+            // A plain column: each sign takes the height its text needs (German and English wrap differently).
+            <View pointerEvents="none" style={[styles.abs, { left: strip.status[0].x, top: strip.status[0].y, width: strip.signW, gap: 4 }]}>
+              {showsTerritorySign && (
+                <StatusSign text={t('world.territorySign', { n: formatNumber(Math.round(territoryIncomeRate)) })} />
+              )}
+              {coopText && <StatusSign text={coopText} />}
+              {partnerWalk && <StatusSign text={t('world.partnerOut', { name: partnerWalk.name, dog })} testID="partner-sign" />}
             </View>
           )}
           <Pressable
@@ -932,6 +950,7 @@ export function WorldScene(props: WorldSceneProps) {
           levelTitle={title}
           onCamera={(target) => (target === 'viertel' ? scrollToViertel() : scrollToYard())}
           onDone={homecoming.onDone}
+          onBeat={setHomecomingBeat}
         />
       )}
 
@@ -949,6 +968,16 @@ export function WorldScene(props: WorldSceneProps) {
 }
 
 /** Decor sprite by key; renders nothing while the PNG is missing. */
+function StatusSign({ text, testID }: { text: string; testID?: string }) {
+  return (
+    <View testID={testID} style={{ alignItems: 'flex-start', transform: [{ rotate: '-2deg' }] }}>
+      <WoodSign size="small" textStyleOverride={STATUS_SIGN_TEXT} accessibilityLabel={text}>
+        {text}
+      </WoodSign>
+    </View>
+  );
+}
+
 function ArtDecor({ art, style }: { art: ArtKey; style: React.ComponentProps<typeof DecorImage>['style'] }) {
   const source = artOr(art, null);
   return source ? <DecorImage source={source} resizeMode="contain" style={style} /> : null;

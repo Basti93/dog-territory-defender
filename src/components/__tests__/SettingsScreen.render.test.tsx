@@ -22,11 +22,13 @@ afterEach(() => {
 function Harness({
   walkActive = false,
   onClose = () => {},
+  onOpenStats = () => {},
   onOpenLogMissedWalk = () => {},
   onOpenDebugLog = () => {},
 }: {
   walkActive?: boolean;
   onClose?: () => void;
+  onOpenStats?: () => void;
   onOpenLogMissedWalk?: () => void;
   onOpenDebugLog?: () => void;
 }) {
@@ -42,6 +44,7 @@ function Harness({
       buddyAppearance={defaultBuddyAppearance()}
       walkActive={walkActive}
       onSaveAppearance={jest.fn()}
+      onOpenStats={onOpenStats}
       onOpenLogMissedWalk={onOpenLogMissedWalk}
       onOpenDebugLog={onOpenDebugLog}
       localePreference={pref}
@@ -83,6 +86,14 @@ describe('SettingsScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: t('menu.debugLog') }));
     expect(onOpenLogMissedWalk).toHaveBeenCalledTimes(1);
     expect(onOpenDebugLog).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the first entry on the Post list opens Stats & badges', async () => {
+    const onOpenStats = jest.fn();
+    const view = await setup({ onOpenStats });
+    await fireEvent.press(screen.getByRole('button', { name: t('post.statsBadges') }));
+    expect(onOpenStats).toHaveBeenCalledTimes(1);
     await unmountAndExpectNoTimers(view);
   });
 
@@ -135,6 +146,7 @@ describe('SettingsScreen with a household', () => {
         buddyAppearance={defaultBuddyAppearance()}
         walkActive={false}
         onSaveAppearance={jest.fn()}
+        onOpenStats={jest.fn()}
         onOpenLogMissedWalk={jest.fn()}
         onOpenDebugLog={jest.fn()}
         localePreference="en"
@@ -187,6 +199,7 @@ describe('SettingsScreen gifts from the neighbour dogs', () => {
         buddyAppearance={defaultBuddyAppearance()}
         walkActive={false}
         onSaveAppearance={jest.fn()}
+        onOpenStats={jest.fn()}
         onOpenLogMissedWalk={jest.fn()}
         onOpenDebugLog={jest.fn()}
         localePreference="en"

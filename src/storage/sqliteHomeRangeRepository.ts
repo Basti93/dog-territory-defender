@@ -63,13 +63,13 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       );
     `);
     // Migration for rows created before territories existed
-    // (docs/decisions/territories) — both nullable; territoryId starts
+    // (docs/decisions/territories.md) — both nullable; territoryId starts
     // NULL until the one-time territory migration backfill assigns it
     // (storage/territoryMigration.ts), and lastVisitCreditedDayKey starts
     // NULL, which correctly reads as "no visit credited yet this scheme."
     await addColumnIfMissing(db, 'home_range_cells', 'territoryId TEXT');
     await addColumnIfMissing(db, 'home_range_cells', 'lastVisitCreditedDayKey TEXT');
-    // docs/decisions/somewhere-wild/design.md Decision 4 — a single
+    // docs/decisions/somewhere-wild.md Decision 4 — a single
     // overwritten row (same singleton-row convention den_economy already
     // uses), not an event log. cellIds is stored as JSON since it's never
     // queried by content, only read back whole.
@@ -123,7 +123,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
           const nextLastRefreshed = Math.max(existing.lastRefreshed, refreshedAt);
           const nextLastTracked = tracked ? Math.max(existing.lastTracked, refreshedAt) : existing.lastTracked;
 
-          // Anti-farming daily visits cap (docs/decisions/territories/
+          // Anti-farming daily visits cap (docs/decisions/territories.md
           // design.md Decision 6): a tracked repaint only bumps `visits`
           // once per local calendar day, completely silently. territoryId is
           // deliberately absent from this UPDATE — only reassignCellsToTerritory
@@ -282,7 +282,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       const db = await dbPromise;
       // A single ungrouped aggregate over every cell, regardless of
       // territory — see HomeRangeRepository.getWorldMass's doc comment and
-      // docs/decisions/territories/design.md Decision 6's split-invariance
+      // docs/decisions/territories.md Decision 6's split-invariance
       // guardrail. This query MUST NEVER gain a WHERE/GROUP BY territoryId.
       const row = await db.getFirstAsync<{ cellCount: number; visitsSum: number | null }>(
         'SELECT COUNT(*) AS cellCount, SUM(visits) AS visitsSum FROM home_range_cells'

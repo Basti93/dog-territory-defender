@@ -2,7 +2,7 @@ import { Walk } from '../types';
 import { walkDistanceMeters } from '../utils/geometry';
 import { CELL_M } from '../utils/grid';
 import { DenEconomyState } from './denEconomy';
-import { formatNumber, t } from '../i18n';
+import { t } from '../i18n';
 
 export interface PersonalStatsState {
   totalWalksClosed: number;
@@ -138,61 +138,31 @@ interface ThresholdAchievement {
   id: AchievementId;
   threshold: number;
   statKey: keyof PersonalStatsState;
-  /** i18n key of the "{target} <noun> — you're at {current}" progress hint. */
-  hintKey: string;
 }
 
 const ALL_THRESHOLD_ACHIEVEMENTS: ThresholdAchievement[] = [
-  ...WALK_COUNT_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalWalksClosed' as const, hintKey: 'achievement.hint.walks' })),
-  ...LIFETIME_DISTANCE_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'lifetimeDistanceMeters' as const, hintKey: 'achievement.hint.distance' })),
-  ...LONGEST_WALK_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'longestWalkDistanceM' as const, hintKey: 'achievement.hint.longestWalk' })),
-  ...BIGGEST_TERRITORY_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'biggestTerritoryAreaM2' as const, hintKey: 'achievement.hint.biggestArea' })),
-  ...TREATS_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalTreatsEarnedLifetime' as const, hintKey: 'achievement.hint.treats' })),
+  ...WALK_COUNT_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalWalksClosed' as const })),
+  ...LIFETIME_DISTANCE_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'lifetimeDistanceMeters' as const })),
+  ...LONGEST_WALK_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'longestWalkDistanceM' as const })),
+  ...BIGGEST_TERRITORY_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'biggestTerritoryAreaM2' as const })),
+  ...TREATS_ACHIEVEMENTS.map((a) => ({ ...a, statKey: 'totalTreatsEarnedLifetime' as const })),
 ];
 
-export interface AchievementProgress {
-  current: number;
-  target: number;
-  hint: string;
-}
-
-export function getAchievementProgress(
-  id: AchievementId,
-  stats: PersonalStatsState,
-  denState: DenEconomyState
-): AchievementProgress {
+/**
+ * Progress of a lifetime-stat threshold badge (walks, distance, treats, territory) as plain numbers, or null for Den-building
+ * badges. It has no copy and needs no Den state.
+ */
+export function thresholdAchievementProgress(id: AchievementId, stats: PersonalStatsState): { current: number; target: number } | null {
   const threshold = ALL_THRESHOLD_ACHIEVEMENTS.find((a) => a.id === id);
-  if (threshold) {
-    const current = Math.floor(stats[threshold.statKey] as number);
-    return {
-      current,
-      target: threshold.threshold,
-      hint: t(threshold.hintKey, { target: formatNumber(threshold.threshold), current: formatNumber(current) }),
-    };
-  }
-
-  if (id === 'moving-in') {
-    const sum = denState.doghouseLevel + denState.bakeryLevel + denState.sniffGardenLevel;
-    return { current: Math.min(sum, 4), target: 4, hint: t('achievement.hint.movingIn') };
-  }
-
-  if (id === 'handy-homebody') {
-    const max = Math.max(denState.doghouseLevel, denState.bakeryLevel, denState.sniffGardenLevel);
-    return { current: max, target: 10, hint: t('achievement.hint.handyHomebody', { current: max }) };
-  }
-
-  // 'cozy-den'
-  const atFive = [denState.doghouseLevel, denState.bakeryLevel, denState.sniffGardenLevel].filter(
-    (level) => level >= 5
-  ).length;
-  return { current: atFive, target: 3, hint: t('achievement.hint.cozyDen', { current: atFive }) };
+  if (!threshold) return null;
+  return { current: Math.floor(stats[threshold.statKey] as number), target: threshold.threshold };
 }
 
 /**
  * `cellsPainted` is this walk's real Home Range footprint (see
  * utils/grid.ts's paintedCells), 0 for a manual log — replaces the deleted
  * `walk.territory?.area` polygon reading. See
- * docs/decisions/home-range/design.md's "Consequence that must be
+ * docs/decisions/2026-08-21-home-range.md's "Consequence that must be
  * resolved" section (written about the XP formula, applied here for the
  * same reason: there is no polygon area left to read).
  *

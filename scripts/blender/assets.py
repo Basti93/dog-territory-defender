@@ -1192,3 +1192,30 @@ for n, fn in (("prop-ufo", prop_ufo), ("prop-beam", prop_beam), ("prop-comet-bon
               ("prop-cloud-tea", prop_cloud_tea), ("prop-moon-cheese", prop_moon_cheese),
               ("prop-firefly", prop_firefly), ("prop-lightbulb", prop_lightbulb), ("prop-question", prop_question)):
     ASSETS[n] = (fn, 512, 512, PROP, 0.88, False)
+
+
+# ---------- fence badges (redesign step 6): one rosette, recoloured per achievement family ----------
+
+def rosette(color):
+    """Scalloped clay rosette with two ribbon tails, facing -Y. Recoloured per family (walks, distance, treats, den)."""
+    for a, x in ((12, -0.32), (-12, 0.32)):
+        box((x, 0.12, -0.95), (0.42, 0.1, 1.1), color, bev=0.04, rot=(0, R(a), 0))
+        # notched tail end: a cream strip so the tails read as ribbon, not planks
+        box((x + (0.06 if a > 0 else -0.06), 0.1, -1.3), (0.3, 0.12, 0.1), "cream", bev=0.02, rot=(0, R(a), 0))
+    n = 12
+    for i in range(n):
+        ang = i * 2 * math.pi / n
+        sph((math.cos(ang) * 0.82, 0, 0.3 + math.sin(ang) * 0.82), 0.26, color, (1, 0.55, 1))
+    cyl((0, 0.02, 0.3), 0.86, 0.3, color, bev=0.1, rot=(R(90), 0, 0))
+    torus((0, -0.17, 0.3), 0.58, 0.06, "cream", rot=(R(90), 0, 0))
+    cyl((0, -0.16, 0.3), 0.5, 0.12, "cream", bev=0.04, rot=(R(90), 0, 0))
+    # a tiny paw in the middle: the dog is the star
+    sph((0, -0.32, 0.22), 0.17, "brown", (1.1, 0.4, 0.85))
+    for x, z in ((-0.2, 0.46), (-0.07, 0.6), (0.07, 0.6), (0.2, 0.46)):
+        sph((x, -0.32, z), 0.07, "brown", (0.9, 0.4, 1.1))
+
+
+# Family colours are palette keys derived from the design tokens (green, blue, warm, brown).
+ROSETTE_FAMILIES = {"walks": "grass_dark", "distance": "blue", "treats": "warm", "den": "brown"}
+for _fam, _col in ROSETTE_FAMILIES.items():
+    ASSETS[f"rosette-{_fam}"] = (lambda c=_col: rosette(c), 512, 512, ICON, 0.86, False)

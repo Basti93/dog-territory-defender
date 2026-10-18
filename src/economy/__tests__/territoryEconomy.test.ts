@@ -4,7 +4,7 @@ import * as path from 'path';
 import { territoryDisplayRate, territoryMass, territoryRate, TERRITORY_INCOME_DISPLAY_FLOOR } from '../territoryEconomy';
 
 describe('territoryRate', () => {
-  // docs/decisions/territories/design.md Decision 6 — the REQUIRED
+  // docs/decisions/territories.md Decision 6 — the REQUIRED
   // split-invariance test: an identical total cell/visit count must produce
   // a bit-identical territoryRate whether held as one territory or split
   // across several. This is the concrete, automatable form of the
@@ -89,7 +89,7 @@ describe('TERRITORY_INCOME_DISPLAY_FLOOR', () => {
   });
 });
 
-// docs/decisions/territories/design.md Decision 6: "assert getWorldMass()'s
+// docs/decisions/territories.md Decision 6: "assert getWorldMass()'s
 // underlying query contains no GROUP BY (a static/code-inspection test...)".
 describe('HomeRangeRepository.getWorldMass source shape', () => {
   it('the sqlite implementation\'s actual SQL never groups or filters by territoryId', () => {

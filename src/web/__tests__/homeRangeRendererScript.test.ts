@@ -286,7 +286,7 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
   });
 
   it('HR_WILD_CONTOUR_THRESHOLD is derived from BALANCE, not hardcoded, and sits strictly above 0 and below 1', () => {
-    // docs/decisions/somewhere-wild/design.md Decision 2: this must always
+    // docs/decisions/somewhere-wild.md Decision 2: this must always
     // be a real wildness value (0..1, see utils/grid.ts's wildness()), and
     // must be computable purely from BALANCE.freshGround's own constants —
     // this test would catch a future change accidentally hardcoding a literal.
@@ -331,7 +331,7 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
     expect(belowSegments.length).toBe(0);
   });
 
-  it('renderHomeRangePortrait fills the canvas with felt colours and stitches the Range outline in cream, but never the wild-ground contour or a marker (docs/decisions/home-dashboard)', () => {
+  it('renderHomeRangePortrait fills the canvas with felt colours and stitches the Range outline in cream, but never the wild-ground contour or a marker (docs/decisions/home-dashboard.md)', () => {
     const { renderHomeRangePortrait, HR_SEAM_HEX, HR_WILD_CONTOUR_HEX } = loadRendererInternals() as {
       renderHomeRangePortrait: (canvas: unknown, payload: unknown) => void;
       HR_SEAM_HEX: string;
@@ -384,7 +384,7 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
   });
 });
 
-// docs/decisions/walk-portrait/design.md Decisions 2/3: renderHomeRangeMuted
+// docs/decisions/walk-portrait.md Decisions 2/3: renderHomeRangeMuted
 // is the one function in this script that calls document.createElement and
 // references the Leaflet global directly (renderHomeRangeToMap does too, but
 // has never had test coverage for that exact reason — see this file's own
@@ -392,7 +392,7 @@ describe('HOME_RANGE_RENDERER_SCRIPT — syntax and pure math', () => {
 // fakes are installed as ambient globals only for the duration of this
 // describe block, mirroring how the real WebView provides `L`/`document` as
 // ambient globals to this same script.
-describe('renderHomeRangeMuted (docs/decisions/walk-portrait)', () => {
+describe('renderHomeRangeMuted (docs/decisions/walk-portrait.md)', () => {
   afterEach(() => {
     delete (global as unknown as { document?: unknown }).document;
     delete (global as unknown as { L?: unknown }).L;

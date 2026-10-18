@@ -192,7 +192,7 @@ export async function getReminderDiagnostics(): Promise<ReminderDiagnostics> {
 
 /**
  * Cancels this feature's own pending scheduled notification only
- * (docs/decisions/walk-reminder/design.md Decision 5) — deliberately never
+ * (docs/decisions/walk-reminder.md Decision 5) — deliberately never
  * `cancelAllScheduledNotificationsAsync()`, which would also cancel a still-
  * pending Den-overflow notification sharing the same OS scheduling queue.
  */

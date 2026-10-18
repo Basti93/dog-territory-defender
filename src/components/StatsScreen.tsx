@@ -1,126 +1,170 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Image, ImageSourcePropType, StyleSheet, Text, View } from 'react-native';
 
+import { artOr } from '../art/artAssets';
 import { DenEconomyState, dogDisplayName } from '../economy/denEconomy';
-import { ACHIEVEMENTS, AchievementId, getAchievementProgress, PersonalStatsState } from '../economy/personalStats';
+import { ACHIEVEMENTS, PersonalStatsState } from '../economy/personalStats';
 import { DenEconomyRepository } from '../storage/DenEconomyRepository';
+import { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import { PersonalStatsRepository, UnlockedAchievement } from '../storage/PersonalStatsRepository';
 import { BuddyAppearance } from '../buddy/buddyAppearance';
+import { streetsKnown } from '../utils/grid';
 import { BuddyLoading } from './BuddyLoading';
-import { ArtImage, Card, Header, palette, radii, Screen, spacing, StatTile, textStyle } from '../ui';
-import { formatDate, formatDistanceKm, formatNumber, t } from '../i18n';
+import { FenceFamily, fenceFamily, pickEmptyHook, rosetteArt } from './world/fencePlan';
+import { material, PaperHeader, PaperHint, PaperRow, PaperSection, PaperSheet, Screen, spacing, textStyle, WoodSign } from '../ui';
+import { formatDate, formatDistanceKm, formatNumber, t, useLocale } from '../i18n';
 
 interface StatsScreenProps {
   buddyAppearance: BuddyAppearance;
   repository: PersonalStatsRepository;
   denEconomyRepository: DenEconomyRepository;
+  /** Gives the "streets" sign. Omitted = that sign is left out. */
+  homeRangeRepository?: HomeRangeRepository;
   onClose: () => void;
 }
 
-export function StatsScreen({ buddyAppearance, repository, denEconomyRepository, onClose }: StatsScreenProps) {
+// The three territory badges stay off the fence (fencePlan has no family for them) but are listed here as earned.
+const TERRITORY_BADGE_FAMILY: FenceFamily = 'distance';
+const ROSETTE_SIZE = 48;
+const HOOK_SILHOUETTE_OPACITY = 0.4;
+
+export function StatsScreen({ buddyAppearance, repository, denEconomyRepository, homeRangeRepository, onClose }: StatsScreenProps) {
+  useLocale(); // re-render on a language switch
   const [stats, setStats] = useState<PersonalStatsState | null>(null);
   const [denState, setDenState] = useState<DenEconomyState | null>(null);
   const [unlocked, setUnlocked] = useState<UnlockedAchievement[] | null>(null);
+  const [streets, setStreets] = useState(0);
 
   useEffect(() => {
     repository.getState().then(setStats);
     repository.getUnlockedAchievements().then(setUnlocked);
     denEconomyRepository.getState().then(setDenState);
-  }, [repository, denEconomyRepository]);
+    // The streets sign is a bonus: if the read fails, it is simply left out.
+    homeRangeRepository?.getCells().then((cells) => setStreets(streetsKnown(cells.length))).catch(() => {});
+  }, [repository, denEconomyRepository, homeRangeRepository]);
+
+  // The same "nearest threshold badge from 80 %" rule as the fence; at most one.
+  const hook = useMemo(() => (stats && unlocked ? pickEmptyHook(stats, unlocked) : null), [stats, unlocked]);
 
   if (!stats || !denState || !unlocked) {
     return (
-      <Screen>
+      <Screen backdrop="linen">
         <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
       </Screen>
     );
   }
 
-  const unlockedIds = new Set(unlocked.map((a) => a.id));
-  const unlockedAtById = new Map(unlocked.map((a) => [a.id, a.unlockedAt]));
-  const allAchievements = Object.values(ACHIEVEMENTS);
   const km1 = (meters: number) => formatDistanceKm(meters / 1000, 1);
   const km2 = (meters: number) => formatDistanceKm(meters / 1000, 2);
+  // Oldest first, like the fence; each id once.
+  const earned = [...new Map(unlocked.map((a) => [a.id, a])).values()].sort((a, b) => a.unlockedAt - b.unlockedAt);
+
+  const lifetimeSigns: { key: string; value: string; label: string }[] = [
+    { key: 'walks', value: formatNumber(stats.totalWalksClosed), label: t('stats.totalWalks') },
+    { key: 'distance', value: km1(stats.lifetimeDistanceMeters), label: t('stats.lifetimeDistance') },
+    ...(streets > 0 ? [{ key: 'streets', value: formatNumber(streets), label: t('stats.streets') }] : []),
+    { key: 'treats', value: formatNumber(Math.floor(stats.totalTreatsEarnedLifetime)), label: t('stats.lifetimeTreats') },
+  ];
+  const recordSigns = [
+    { key: 'longest', value: km2(stats.longestWalkDistanceM), label: t('stats.longestWalk') },
+    { key: 'territory', value: `${formatNumber(Math.round(stats.biggestTerritoryAreaM2))} m²`, label: t('stats.biggestTerritory') },
+  ];
 
   return (
-    <Screen scroll backdrop="sky">
-      <Header title={t('doorstep.statsBadges')} icon="icon-badge" onBack={onClose} />
+    <Screen scroll backdrop="linen">
+      <PaperHeader title={t('post.statsBadges')} onBack={onClose} />
 
-      <Text style={[textStyle('small'), styles.sectionLabel]}>{t('stats.lifetime')}</Text>
-      <Card tint="warm" title={t('stats.level')} style={styles.fullCard}>
-        <Text style={textStyle('body')}>{t('den.dogLevel', { dog: dogDisplayName(denState.dogName), level: denState.level })}</Text>
-      </Card>
-      <View style={styles.statGrid}>
-        <StatTile style={styles.statTile} icon="icon-walks" label={t('stats.totalWalks')} value={stats.totalWalksClosed} />
-        <StatTile style={styles.statTile} icon="icon-paw" label={t('stats.lifetimeDistance')} value={stats.lifetimeDistanceMeters} format={km1} />
-        <StatTile
-          style={styles.statTile}
-          icon="icon-pin"
-          label={t('stats.biggestTerritory')}
-          value={stats.biggestTerritoryAreaM2}
-          format={(v) => `${formatNumber(Math.round(v))} m²`}
-        />
-        <StatTile style={styles.statTile} icon="icon-walks" label={t('stats.longestWalk')} value={stats.longestWalkDistanceM} format={km2} />
-        <StatTile
-          style={styles.statTile}
-          icon="icon-treat"
-          label={t('stats.lifetimeTreats')}
-          value={Math.floor(stats.totalTreatsEarnedLifetime)}
-        />
-      </View>
-      <Card tint="sky" title={t('stats.denLevels')} style={styles.fullCard}>
-        <Text style={textStyle('body')}>
-          {t('stats.denLevelsLine', { doghouse: denState.doghouseLevel, bakery: denState.bakeryLevel, garden: denState.sniffGardenLevel })}
-        </Text>
-      </Card>
+      <PaperSheet>
+        <PaperSection title={t('stats.lifetime')} first>
+          <SignGrid signs={lifetimeSigns} />
+        </PaperSection>
 
-      <Text style={[textStyle('small'), styles.sectionLabel, { marginTop: spacing.xl }]}>{t('stats.badges')}</Text>
-      {allAchievements.map((achievement) => {
-        const isUnlocked = unlockedIds.has(achievement.id);
-        if (isUnlocked) {
-          const unlockedAt = unlockedAtById.get(achievement.id)!;
-          return (
-            <Card key={achievement.id} tint="meadow" style={styles.badgeCard}>
-              <ArtImage art="icon-badge" size={44} style={styles.badgeIcon} />
-              <View style={styles.badgeText}>
-                <Text style={textStyle('h2')}>{achievement.copyTitle}</Text>
-                <Text style={textStyle('body')}>{achievement.copyBody}</Text>
-                <Text style={[textStyle('small'), styles.muted]}>{t('stats.earnedOn', { date: formatDate(unlockedAt) })}</Text>
-              </View>
-            </Card>
-          );
-        }
+        <PaperSection title={t('stats.records')}>
+          <SignGrid signs={recordSigns} />
+        </PaperSection>
 
-        const progress = getAchievementProgress(achievement.id as AchievementId, stats, denState);
-        return (
-          <Card key={achievement.id} style={[styles.badgeCard, styles.badgeCardLocked]}>
-            <View style={styles.badgePlaceholder} />
-            <View style={styles.badgeText}>
-              <Text style={[textStyle('h2'), styles.muted]}>{achievement.name}</Text>
-              <Text style={[textStyle('small'), styles.muted]}>{progress.hint}</Text>
-            </View>
-          </Card>
-        );
-      })}
+        <PaperSection title={t('stats.denLevels')}>
+          <PaperRow title={t('den.dogLevel', { dog: dogDisplayName(denState.dogName), level: denState.level })} />
+          <PaperHint>
+            {t('stats.denLevelsLine', { doghouse: denState.doghouseLevel, bakery: denState.bakeryLevel, garden: denState.sniffGardenLevel })}
+          </PaperHint>
+        </PaperSection>
+
+        <PaperSection title={t('stats.badges')}>
+          {earned.length === 0 && !hook && <PaperHint>{t('stats.badgesEmpty')}</PaperHint>}
+          {earned.map((a) => (
+            <BadgeRow
+              key={a.id}
+              family={fenceFamily(a.id) ?? TERRITORY_BADGE_FAMILY}
+              testID={`stats-badge-${a.id}`}
+              name={ACHIEVEMENTS[a.id].name}
+              date={t('stats.earnedOn', { date: formatDate(a.unlockedAt) })}
+            />
+          ))}
+          {hook && <BadgeRow family={hook.family} silhouette testID="stats-hook" name={t('world.fence.hookSign')} />}
+        </PaperSection>
+      </PaperSheet>
     </Screen>
   );
 }
 
+/** Small wood signs in two columns; the numbers are in the sign type, the label under them. */
+function SignGrid({ signs }: { signs: { key: string; value: string; label: string }[] }) {
+  return (
+    <View style={styles.grid}>
+      {signs.map((s, i) => (
+        <View key={s.key} style={styles.gridCell}>
+          <WoodSign size="small" fullWidth rotate={i % 2 === 0 ? -1.5 : 1.5} accessibilityLabel={`${s.label}: ${s.value}`} testID={`stats-sign-${s.key}`}>
+            <Text style={[textStyle('signBig'), styles.signValue]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {s.value}
+            </Text>
+            <Text style={[textStyle('small'), styles.signLabel]} numberOfLines={2}>
+              {s.label}
+            </Text>
+          </WoodSign>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One clay rosette with its name (and date) in handwriting. `silhouette` = the faint "soon" hook. */
+function BadgeRow({ family, name, date, silhouette, testID }: { family: FenceFamily; name: string; date?: string; silhouette?: boolean; testID: string }) {
+  const source = artOr(rosetteArt(family), null) as ImageSourcePropType | null;
+  return (
+    <View style={styles.badgeRow} testID={testID} accessible accessibilityLabel={date ? `${name}, ${date}` : name}>
+      <View style={[styles.rosette, silhouette && { opacity: HOOK_SILHOUETTE_OPACITY }]}>
+        {source ? (
+          <Image
+            source={source}
+            resizeMode="contain"
+            style={[styles.rosetteImage, silhouette && { tintColor: material.woodDark }]}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          />
+        ) : (
+          <View style={styles.rosetteFallback} />
+        )}
+      </View>
+      <View style={styles.badgeText}>
+        <Text style={[textStyle('hand'), silhouette ? styles.hookName : styles.badgeName]}>{name}</Text>
+        {date ? <Text style={[textStyle('hand'), styles.badgeDate]}>{date}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  sectionLabel: { color: palette.muted, textTransform: 'uppercase', marginBottom: spacing.sm },
-  fullCard: { marginBottom: spacing.md },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.md },
-  statTile: { flexBasis: '46%', flexGrow: 1 },
-  badgeCard: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
-  badgeCardLocked: { opacity: 0.7 },
-  badgeIcon: { marginRight: spacing.md },
-  badgePlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
-    backgroundColor: palette.border,
-    marginRight: spacing.md,
-  },
-  badgeText: { flex: 1, gap: spacing.xs },
-  muted: { color: palette.muted },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.sm },
+  gridCell: { flexBasis: '46%', flexGrow: 1 },
+  signValue: { color: material.ink, textAlign: 'center' },
+  signLabel: { color: material.ink, textAlign: 'center' },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+  rosette: { width: ROSETTE_SIZE, height: ROSETTE_SIZE },
+  rosetteImage: { width: ROSETTE_SIZE, height: ROSETTE_SIZE },
+  rosetteFallback: { width: ROSETTE_SIZE, height: ROSETTE_SIZE, borderRadius: ROSETTE_SIZE / 2, backgroundColor: material.woodLight, borderWidth: 2, borderColor: material.woodRim },
+  badgeText: { flex: 1 },
+  badgeName: { color: material.ink },
+  badgeDate: { color: material.inkGreen, fontSize: 18, lineHeight: 22 },
+  hookName: { color: material.muted },
 });

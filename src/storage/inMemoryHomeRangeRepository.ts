@@ -7,7 +7,7 @@ function cellKey(ix: number, iy: number): string {
   return `${ix},${iy}`;
 }
 
-/** Internal-only per-cell bookkeeping not part of the public Cell shape — see sqliteHomeRangeRepository.ts's identical lastVisitCreditedDayKey column for why this exists (docs/decisions/territories/design.md's anti-farming visits cap). */
+/** Internal-only per-cell bookkeeping not part of the public Cell shape — see sqliteHomeRangeRepository.ts's identical lastVisitCreditedDayKey column for why this exists (docs/decisions/territories.md's anti-farming visits cap). */
 interface InternalCell extends Cell {
   lastVisitCreditedDayKey: string | null;
 }
@@ -48,14 +48,14 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
             lastTracked: tracked ? refreshedAt : 0,
             visits: tracked ? 1 : 0,
             // Territory membership is set once, only on insert — see
-            // docs/decisions/territories/design.md Decision 1.
+            // docs/decisions/territories.md Decision 1.
             territoryId: territoryId ?? null,
             lastVisitCreditedDayKey: tracked ? todayKey : null,
           });
           continue;
         }
 
-        // Anti-farming daily visits cap (docs/decisions/territories/
+        // Anti-farming daily visits cap (docs/decisions/territories.md
         // design.md Decision 6): a tracked repaint only bumps `visits` once
         // per local calendar day, completely silently — every other field
         // (lastRefreshed, lastTracked, and every stat outside this file)
@@ -146,7 +146,7 @@ export function createInMemoryHomeRangeRepository(): HomeRangeRepository {
     async getWorldMass(): Promise<{ cellCount: number; visitsSum: number }> {
       // A single ungrouped aggregate over every cell, regardless of
       // territory — see HomeRangeRepository.getWorldMass's doc comment and
-      // docs/decisions/territories/design.md Decision 6. Never filter or
+      // docs/decisions/territories.md Decision 6. Never filter or
       // group this by territoryId.
       let cellCount = 0;
       let visitsSum = 0;

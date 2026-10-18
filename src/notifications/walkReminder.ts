@@ -66,7 +66,7 @@ export function updateReminderSlot(
 
 /**
  * Recomputes and (re)schedules the opt-in daily walk reminder
- * (docs/decisions/walk-reminder/design.md). Call this at the three points
+ * (docs/decisions/walk-reminder.md). Call this at the three points
  * Decision 4 names: the app's merged mount effect, right after a tracked
  * walk finishes, and right after a walk is manually logged — not a single
  * always-on OS-repeating trigger (there's no backend to wake the app while

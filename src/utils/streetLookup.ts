@@ -1,5 +1,5 @@
 // Street-name (and, for the New Ground state, real-location) resolution for
-// the "Somewhere Wild" card — see docs/decisions/somewhere-wild/design.md
+// the "Somewhere Wild" card — see docs/decisions/somewhere-wild.md
 // Decision 3 (wild-cluster label, with its bounded walk-history fallback)
 // and Decision 4 (New Ground label, reusing the same walk-history scan
 // since the persisted event carries no location of its own — see
@@ -214,7 +214,7 @@ export async function resolveNewGroundSpot(
 }
 
 /**
- * Resolves a new Territory's name — docs/decisions/territories/design.md
+ * Resolves a new Territory's name — docs/decisions/territories.md
  * Decision 5. Unlike the wild-cluster/New-Ground states above (which render
  * nothing on a geocoding failure — the fact they describe is optional and
  * re-evaluated later), a Territory MUST exist and be nameable the instant

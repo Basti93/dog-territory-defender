@@ -26,7 +26,7 @@ interface TerritoriesScreenProps {
 /**
  * The territories list screen — a read-only, repository-backed list of the
  * player's Territory cards (mirrors StatsScreen.tsx's shape), entered from
- * the map screen's own chrome (docs/decisions/territories/design.md
+ * the map screen's own chrome (docs/decisions/territories.md
  * Decision 8, tasks.md task 10.3). Titles are computed fresh on every render
  * (never persisted) and per-territory income lines are gated on the same
  * global `territoryIncomeRevealed` flag every territory-income surface

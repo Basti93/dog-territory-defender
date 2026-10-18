@@ -29,6 +29,7 @@ describe('SettingsScreen scroll content layout', () => {
         buddyAppearance={defaultBuddyAppearance()}
         walkActive={false}
         onSaveAppearance={jest.fn()}
+        onOpenStats={() => {}}
         onOpenLogMissedWalk={() => {}}
         onOpenDebugLog={() => {}}
         localePreference="en"

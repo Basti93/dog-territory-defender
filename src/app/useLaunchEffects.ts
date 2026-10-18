@@ -60,7 +60,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
   // Passed down to the WorldScene as already-computed values — re-deriving
   // either after the launch routine has already advanced lastTickAt/consumed
   // the achievement queue would silently produce ~0 or an empty queue (see
-  // docs/decisions/home-dashboard/design.md Decision 7).
+  // docs/decisions/home-dashboard.md Decision 7).
   const [accruedDelta, setAccruedDelta] = useState(0);
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   // The Doorstep's session state, greeting copy, and away-strip lines —

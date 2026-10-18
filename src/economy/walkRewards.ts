@@ -16,7 +16,7 @@ import { BALANCE } from './balanceConfig';
  * Per-day diminishing-returns multiplier for the flat parts of a walk's
  * reward (the treat payout, and the XP flat base only — never the
  * distance/area XP terms). Defends against two exploits measured in
- * docs/decisions/virtual-dog-companion/design.md's "Exploits" table
+ * docs/decisions/2026-08-21-virtual-dog-companion.md's "Exploits" table
  * (Decisions > "Degenerate-exploit mitigations..."):
  *   - closing many tiny real-GPS loops back-to-back — twenty 100m loops/hour
  *     measured at 2.7x XP / 10x treats vs. an honest walking hour, and
@@ -114,7 +114,7 @@ export interface WalkRewardsCelebration {
   /**
    * Count of this walk's painted cells that are New Ground (see
    * utils/grid.ts's newGroundCells) — computed and carried here per
-   * docs/decisions/home-range/tasks.md task 6.1, even though the
+   * docs/decisions/2026-08-21-home-range.md task 6.1, even though the
    * celebration beat/copy for it ships in the sibling change
    * home-range-rewards. Always 0 for a manual log (structurally cannot
    * discover new ground).
@@ -151,7 +151,7 @@ export interface AwardWalkRewardsDeps {
  * real GPS trail), which awardWalkXp/recordWalkClosed already treat
  * correctly — the walk still earns the same flat per-walk treats and the XP
  * formula's flat per-walk base component. See
- * docs/decisions/walk-start-notifications/design.md's "existing
+ * docs/decisions/2026-08-21-walk-start-notifications.md's "existing
  * closed-walk reward logic needs extracting" decision.
  *
  * Also applies the per-day diminishing-returns multiplier (see

@@ -26,7 +26,7 @@ describe('HomeRangeRepository contract', () => {
     const repo = createInMemoryHomeRangeRepository();
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // Different calendar days — docs/decisions/territories' anti-farming
+    // Different calendar days — docs/decisions/territories.md' anti-farming
     // daily visits cap (see this file's own "daily visits cap" describe
     // block below) only credits one visit per cell per local calendar day,
     // so a same-day repaint would NOT bump visits; two genuinely different
@@ -97,7 +97,7 @@ describe('HomeRangeRepository contract', () => {
     expect(inBounds.map((c) => `${c.ix},${c.iy}`).sort()).toEqual(['-1,-1', '0,0']);
   });
 
-  // docs/decisions/somewhere-wild/design.md Decision 4 — a single
+  // docs/decisions/somewhere-wild.md Decision 4 — a single
   // overwritten row, not an event log.
   describe('New Ground event', () => {
     it('reading with no event ever recorded returns null', async () => {
@@ -124,7 +124,7 @@ describe('HomeRangeRepository contract', () => {
     });
   });
 
-  // docs/decisions/territories/design.md Decision 1 — Cell.territoryId.
+  // docs/decisions/territories.md Decision 1 — Cell.territoryId.
   describe('territory membership', () => {
     it('a brand-new cell is created with the territoryId supplied on insert', async () => {
       const repo = createInMemoryHomeRangeRepository();
@@ -209,7 +209,7 @@ describe('HomeRangeRepository contract', () => {
     });
   });
 
-  // docs/decisions/territories/design.md Decision 6 — worldMass must be a
+  // docs/decisions/territories.md Decision 6 — worldMass must be a
   // single ungrouped aggregate, independent of territory partitioning.
   describe('getWorldMass', () => {
     it('returns zero for an empty range', async () => {
@@ -232,7 +232,7 @@ describe('HomeRangeRepository contract', () => {
     });
   });
 
-  // docs/decisions/territories/design.md Decision 6 — anti-farming visits cap.
+  // docs/decisions/territories.md Decision 6 — anti-farming visits cap.
   describe('daily visits cap', () => {
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
