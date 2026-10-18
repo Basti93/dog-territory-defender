@@ -41,6 +41,9 @@ export interface SettingsRepository {
   /** "Protokoll an den Server senden" (log shipping, only acts while joined). Defaults to true when nothing is saved. */
   getLogShippingEnabled(): Promise<boolean>;
   saveLogShippingEnabled(enabled: boolean): Promise<void>;
+  /** "Runde automatisch beenden": finish a walk by itself when back home. Defaults to true when nothing is saved. */
+  getAutoFinishEnabled(): Promise<boolean>;
+  saveAutoFinishEnabled(enabled: boolean): Promise<void>;
 }
 
 export function normalizeLocalePreference(value: unknown): LocalePreference {

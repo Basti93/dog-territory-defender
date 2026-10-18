@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as Location from 'expo-location';
 import { play } from '../feedback/sounds';
@@ -12,6 +12,16 @@ import { newClientId } from '../sync/ids';
 import { t } from '../i18n';
 import { AppRepositories } from './repositories';
 import { finishTrackedWalk, FinishTrackedWalkDeps, WalkRewardsOutcome } from './finishTrackedWalk';
+import {
+  AUTO_FINISH_TICK_MS,
+  AutoFinishDecision,
+  AutoFinishState,
+  evaluateAutoFinish,
+  homeCountdownMinutes,
+  startAutoFinish,
+  WalkEndedBy,
+} from './autoFinish';
+import { notifyAutoFinishedIfBackgrounded } from './autoFinishNotify';
 import { applyLocationToCues, createWalkCueState, startWalkCueState } from './walkSessionHelpers';
 
 export interface UseWalkSessionDeps {
@@ -39,6 +49,39 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const startTokenRef = useRef(0);
   const cueTracker = useRef(createWalkCueTracker({ now: Date.now, minCells: MIN_CELLS_FOR_REWARD })).current;
   const walkCueState = useRef(createWalkCueState()).current;
+
+  // Auto-finish bookkeeping (autoFinish.ts). `finishRef` always points at the latest
+  // render's finish so the GPS callback and the timer never use a stale dogName/repos.
+  const autoFinishRef = useRef<AutoFinishState | null>(null);
+  const finishingRef = useRef(false);
+  const finishRef = useRef<(endedBy?: WalkEndedBy) => Promise<void>>(async () => undefined);
+  const [autoFinishEnabled, setAutoFinishEnabled] = useState(false);
+  const [homeCountdownMin, setHomeCountdownMin] = useState<number | null>(null);
+
+  /** Run one evaluation (fix or timer tick); finishes the walk when the rules say so. */
+  const runAutoFinish = (fix: { latitude: number; longitude: number } | null) => {
+    const current = autoFinishRef.current;
+    if (!current || !walkRef.current || finishingRef.current) return;
+    const now = Date.now();
+    const result = evaluateAutoFinish(current, fix, now);
+    autoFinishRef.current = result.state;
+    setHomeCountdownMin(homeCountdownMinutes(result.state, now));
+    if (result.decision) {
+      const decision: AutoFinishDecision = result.decision;
+      const endedBy: WalkEndedBy = decision === 'home' ? 'auto-home' : 'auto-still';
+      log('WALK_AUTO_FINISH', { id: walkRef.current.id, decision });
+      void finishRef.current(endedBy);
+    }
+  };
+  const runAutoFinishRef = useRef(runAutoFinish);
+  runAutoFinishRef.current = runAutoFinish;
+
+  // Timer tick: GPS may stop delivering while the phone lies still.
+  useEffect(() => {
+    if (!appState.isTracking) return;
+    const timer = setInterval(() => runAutoFinishRef.current(null), AUTO_FINISH_TICK_MS);
+    return () => clearInterval(timer);
+  }, [appState.isTracking]);
 
   const setError = useCallback((error: string | null) => setAppState((prev) => ({ ...prev, error })), []);
 
@@ -79,6 +122,13 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
 
       // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
       walkRef.current = newWalk; // before the watcher, so no early fix is dropped
+      finishingRef.current = false;
+      const autoEnabled = await Promise.resolve()
+        .then(() => repos.settingsRepository.getAutoFinishEnabled())
+        .catch(() => true);
+      autoFinishRef.current = startAutoFinish(initialLoc, newWalk.startTime, autoEnabled);
+      setAutoFinishEnabled(autoEnabled);
+      setHomeCountdownMin(null);
       let fixCount = 0;
       const watching = await startWatchingLocation((location) => {
         fixCount++;
@@ -91,6 +141,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
         walkRef.current = { ...current, locations: [...current.locations, location] };
         const next = walkRef.current;
         setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
+        runAutoFinishRef.current(location);
       });
       if (!watching) {
         // Previously swallowed: the walk then "tracked" with only its first point.
@@ -135,10 +186,14 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     }
   };
 
-  const finishWalk = async () => {
+  const runFinish = async (endedBy?: WalkEndedBy) => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    autoFinishRef.current = null;
+    setHomeCountdownMin(null);
     await stopWatchingLocation();
 
-    const walkToFinish = walkRef.current;
+    const walkToFinish = walkRef.current && endedBy ? { ...walkRef.current, endedBy } : walkRef.current;
     if (!walkToFinish) {
       setAppState((prev) => ({ ...prev, isTracking: false }));
       return;
@@ -161,13 +216,22 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       onRewards,
       sync,
     });
+    // Auto-finished while the app is not in front: say so (the celebration state is
+    // already set, so the Homecoming plays on the next foreground).
+    if (endedBy) void notifyAutoFinishedIfBackgrounded(dogName);
   };
+  finishRef.current = runFinish;
+  // Button handler: takes no arguments (onPress would pass the press event).
+  const finishWalk = () => runFinish();
 
   const cancelWalk = async () => {
     startTokenRef.current++; // cancels a startWalk still in its async steps
     startingRef.current = false;
     walkCueState.active = false;
     cueTracker.reset();
+    autoFinishRef.current = null;
+    finishingRef.current = false;
+    setHomeCountdownMin(null);
     await stopWatchingLocation();
     if (walkRef.current) {
       log('WALK_CANCELLED', { id: walkRef.current.id, points: walkRef.current.locations.length });
@@ -181,6 +245,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     isTracking: appState.isTracking,
     error: appState.error,
     setError,
+    autoFinishEnabled,
+    homeCountdownMin,
     startWalk,
     finishWalk,
     cancelWalk,

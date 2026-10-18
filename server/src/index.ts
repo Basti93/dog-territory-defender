@@ -1,6 +1,7 @@
 import { loadConfig } from './config';
 import { connectPostgres, runMigrations } from './db/client';
 import { buildApp, buildReadyApp } from './http/app';
+import { startLogRetention } from './services/logRetention';
 import { startNeighbourScheduler } from './neighbours/scheduler';
 
 async function main() {
@@ -17,9 +18,12 @@ async function main() {
 
   const stopScheduler = startNeighbourScheduler(conn.db, bus, config, (msg, extra) => app.log.info({ extra }, msg));
 
+  const stopRetention = startLogRetention(conn.db, (msg, extra) => app.log.info({ extra }, msg));
+
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'shutting down');
     stopScheduler();
+    stopRetention();
     bus.shutdown(); // release long-pollers now so close() does not wait out their 25 s
     await ready?.close();
     await app.close();

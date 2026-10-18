@@ -7,6 +7,7 @@ import type {
   CommandRequest,
   ImportRequest,
   JoinRequest,
+  LogUploadRequest,
   CoopWeekResponse,
   GiftsResponse,
   NearbyResponse,
@@ -24,6 +25,7 @@ import { getNearby } from '../neighbours/nearby';
 import { runCommand } from '../services/commands';
 import { EventBus, pullEventsLongPoll } from '../services/events';
 import { buildSnapshot, joinHousehold } from '../services/households';
+import { ingestLogs } from '../services/deviceLogs';
 import { importHousehold } from '../services/importSeed';
 import { getWalk, ingestWalk, type AuthCtx } from '../services/walks';
 import { DeviceTokenAuthenticator, type Authenticator } from './auth';
@@ -35,6 +37,7 @@ import {
   ImportSchema,
   EventsQuerySchema,
   JoinSchema,
+  LogUploadSchema,
   NearbyQuerySchema,
   WalkParamsSchema,
   WalkUploadSchema,
@@ -90,6 +93,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
   });
 
   const deviceLimiter = new FixedWindowLimiter(config.limits.devicePerMin, 60_000);
+  // Log shipping: 30 requests / 10 min per device (the daily row cap lives in ingestLogs).
+  const logLimiter = new FixedWindowLimiter(30, 10 * 60_000);
   const joinDayLimiter = new FixedWindowLimiter(config.limits.joinPerDayPerIp, 24 * 3600_000);
   const joinHourGlobal = new FixedWindowLimiter(config.limits.joinPerHourGlobal, 3600_000);
 
@@ -244,6 +249,17 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
       return result.response;
     }
   );
+
+  app.post(API_PATHS.logs, { schema: { body: LogUploadSchema }, bodyLimit: 64 * 1024 }, async (req, reply) => {
+    const t = now();
+    if (!logLimiter.hit(req.auth!.deviceId, t)) {
+      reply.header('Retry-After', String(logLimiter.retryAfterSeconds(req.auth!.deviceId, t)));
+      return reply.code(429).send({ error: 'rate_limited' } satisfies ApiError);
+    }
+    const result = await ingestLogs(db, req.auth!, req.body as LogUploadRequest, t);
+    if (result.kind === 'capped') return reply.code(429).send({ error: 'daily_cap' } satisfies ApiError);
+    return { stored: result.stored };
+  });
 
   app.get(API_PATHS.walks + '/:id', { schema: { params: WalkParamsSchema } }, async (req, reply) => {
     const walk = await getWalk(db, req.auth!.householdId, (req.params as { id: string }).id);

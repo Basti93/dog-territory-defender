@@ -21,6 +21,8 @@ export interface Walk {
    */
   closed: boolean;
   startSource: WalkStartSource;
+  /** Set when the app finished the walk itself (auto-finish). Local only: never part of the server upload (sync/outbox.ts builds its payload field by field). */
+  endedBy?: 'auto-home' | 'auto-still';
   /**
    * This walk's own painted cells that were New Ground discoveries at the
    * time it happened (see utils/grid.ts's newGroundCells) — set once, right

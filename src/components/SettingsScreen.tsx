@@ -15,7 +15,10 @@ import { isAnyReminderEnabled, REMINDER_SLOT_IDS, ReminderSlot, ReminderSlotId }
 import { updateReminderSlot } from '../notifications/walkReminder';
 import { pickAndImportBackup, shareBackup } from '../storage/backupIO';
 import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n';
+import { AutoFinishSwitch } from './AutoFinishSwitch';
 import { HouseholdCard } from './HouseholdCard';
+import type { SettingsRepository } from '../storage/SettingsRepository';
+import { LogShippingSwitch } from './LogShippingSwitch';
 import { isRestoreAllowed } from '../sync/restoreGuard';
 import type { SyncEngine } from '../sync/syncEngine';
 import { useSyncStatus } from '../sync/useSyncStatus';
@@ -29,6 +32,8 @@ interface SettingsScreenProps {
   onClose: () => void;
   notificationRepository: NotificationRepository;
   walkRepository: WalkRepository;
+  /** Holds the "finish walks automatically" switch. Omitted = no switch row. */
+  settingsRepository?: SettingsRepository;
   dogName: string | null;
   buddyAppearance: BuddyAppearance;
   /** A walk is being tracked: backup/restore is disabled so it can't be overwritten mid-walk. */
@@ -69,6 +74,7 @@ export function SettingsScreen({
   onClose,
   notificationRepository,
   walkRepository,
+  settingsRepository,
   dogName,
   buddyAppearance,
   walkActive,
@@ -257,6 +263,7 @@ export function SettingsScreen({
             onPress={() => setEditingLook(true)}
             right={<Text style={[textStyle('h2'), styles.chevron]}>{'\u203A'}</Text>}
           />
+          {settingsRepository && <AutoFinishSwitch settingsRepository={settingsRepository} />}
         </PaperSection>
 
         <PaperSection title={t('post.reminders')}>
@@ -337,6 +344,7 @@ export function SettingsScreen({
               onShareBackup={handleShareBackup}
               deviceLabel={Platform.OS === 'ios' ? 'iPhone' : 'Android'}
             />
+            {syncStatus?.joined && <LogShippingSwitch />}
           </PaperSection>
         )}
 

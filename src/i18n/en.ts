@@ -23,6 +23,13 @@ const en: Record<string, string> = {
   "notification.overflow.body.other": "Your Treat Bakery overflowed! {count} treats waiting.",
   "notification.channel.walkReminder": "Walk reminder",
   "notification.channel.den": "Den treats",
+  "notification.channel.walkEnded": "Walk finished",
+  "notification.walkEnded.title": "Walk finished",
+  "notification.walkEnded.body": "{dog} is back home. The homecoming is waiting in the yard.",
+  "autoFinish.hint": "Ends by itself once you are back home",
+  "autoFinish.countdown": "Home? {n} min to go…",
+  "autoFinish.setting": "Finish walks automatically",
+  "autoFinish.settingHint": "When you are back where you started and forgot to tap Finish, the walk ends by itself.",
 
   // ---- phrases / names
   "phrase.dayAndTime.night": "{weekday} night",
@@ -448,6 +455,10 @@ const en: Record<string, string> = {
   "weird.upgrade.bakery": "The bakery has gone cosmic. The bones are orbiting, very peacefully.",
 
   // ---- household (multiplayer-sync). Wording pass by game-master still owed.
+  "logShipping.switch": "Send log to the server",
+  "logShipping.hint": "Helps with troubleshooting. No locations, no codes, only to your household server.",
+  "logShipping.lastSent": "Last sent: {time}",
+  "logShipping.never": "Nothing sent since the app started.",
   "household.title": "Household",
   "household.subtitle": "Share one dog, one Range and one Den with the people you walk with. Ask them for an invite code.",
   "household.serverUrl": "Server address",

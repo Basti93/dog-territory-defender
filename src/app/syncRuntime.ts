@@ -1,4 +1,6 @@
+import { createApiClient } from '../sync/apiClient';
 import { createSyncEngine } from '../sync/syncEngine';
+import { configureLogShipper } from '../utils/logShipper';
 import { resolveHouseholdLines } from '../sync/householdEvents';
 import { repos } from './repositories';
 
@@ -11,6 +13,16 @@ export const syncEngine = createSyncEngine({
   territories: repos.territoryRepository,
   denEconomy: repos.denEconomyRepository,
   buddyAppearance: repos.buddyAppearanceRepository,
+});
+
+// Device log shipping (utils/logShipper.ts): uses the same identity (token, server URL) as sync.
+configureLogShipper({
+  getIdentity: () => repos.settingsRepository.getSyncIdentity(),
+  isEnabled: () => repos.settingsRepository.getLogShippingEnabled(),
+  setEnabled: (enabled) => repos.settingsRepository.saveLogShippingEnabled(enabled),
+  send: async (identity, request) => {
+    await createApiClient({ baseUrl: identity.serverUrl, token: identity.token }).uploadLogs(request);
+  },
 });
 
 /** How long app open waits for the first sync before showing the Doorstep anyway. */

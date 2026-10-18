@@ -4,7 +4,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
 import { API_LIMITS } from '@game/sync/apiContract';
-import type { CommandRequest, ImportRequest, JoinRequest, WalkUploadRequest } from '@game/sync/apiContract';
+import type { CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
 const Id = Type.String({ minLength: 8, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' });
@@ -164,10 +164,30 @@ export const ImportSchema = Type.Object(
   { additionalProperties: false }
 );
 
+export const LogUploadSchema = Type.Object(
+  {
+    deviceSeq: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER - 1_000_000 }),
+    entries: Type.Array(
+      Type.Object(
+        {
+          t: Type.Number({ minimum: 0 }),
+          event: Type.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9_.:-]+$' }),
+          payload: Type.Record(Type.String({ maxLength: 80 }), Type.Unknown()),
+          appState: Str(1, 20),
+        },
+        { additionalProperties: false }
+      ),
+      { minItems: 1, maxItems: API_LIMITS.maxLogEntriesPerBatch }
+    ),
+  },
+  { additionalProperties: false }
+);
+
 // ---- compile-time drift checks (assignable both ways)
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _join: Same<Static<typeof JoinSchema>, JoinRequest> = true;
 const _walk: Same<Static<typeof WalkUploadSchema>, WalkUploadRequest> = true;
 const _cmd: Same<Static<typeof CommandSchema>, CommandRequest> = true;
 const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
-void [_join, _walk, _cmd, _import];
+const _logs: Same<Static<typeof LogUploadSchema>, LogUploadRequest> = true;
+void [_join, _walk, _cmd, _import, _logs];

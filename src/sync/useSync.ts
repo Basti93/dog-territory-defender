@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { flushLogShipper } from '../utils/logShipper';
 import type { SyncCallbacks, SyncEngine } from './syncEngine';
 
 /** Don't re-sync on every quick app switch. */
@@ -25,6 +26,7 @@ export function useSync(engine: SyncEngine, callbacks: SyncCallbacks) {
     });
     let lastRun = Date.now();
     const subscription = AppState.addEventListener('change', (state) => {
+      void flushLogShipper(); // foreground and background transitions (rate limited inside)
       if (state !== 'active') return;
       const t = Date.now();
       if (t - lastRun < MIN_RESUME_INTERVAL_MS) return;

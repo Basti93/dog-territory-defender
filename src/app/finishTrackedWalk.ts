@@ -8,6 +8,7 @@ import { awardWalkRewards, WalkRewardsCelebration } from '../economy/walkRewards
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { WalkCue } from '../feedback/walkCues';
 import { log } from '../utils/log';
+import { flushLogShipper } from '../utils/logShipper';
 import { AppRepositories } from './repositories';
 
 export interface TerritoryBeat {
@@ -172,6 +173,8 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
     console.error('Failed to save walk:', err);
     log('STORAGE_WALK_SAVE_ERROR', { id: finishedWalk.id, error: String(err) });
   }
+  // Walk saved: send the walk's log lines to the server (rate limited, no-op when not joined).
+  void flushLogShipper();
 
   // Refresh the idle map's Home Range render now that new cells (if any) are persisted.
   deps.onRangeChanged();

@@ -4,16 +4,20 @@
 //   docker compose exec api node dist/ops/cli.js create-invite --household "Muster"
 //   docker compose exec api node dist/ops/cli.js list
 //   docker compose exec api node dist/ops/cli.js revoke-device --device <device-id>
+//   docker compose exec api node dist/ops/cli.js logs --household Zuhause [--device <label>] [--since 2h] [--event WALK_%] [--limit 200]
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../config';
 import { connectPostgres } from '../db/client';
+import { queryDeviceLogs } from '../services/deviceLogs';
+import { formatLogLine, parseSince } from './logFormat';
 import { createHousehold, createInvite, findHousehold, listHouseholds, revokeDevice } from '../services/households';
 
 const USAGE = `usage:
   cli create-household --name <name> [--timezone Europe/Berlin] [--allow-import]
   cli create-invite --household <id|name>      (alias: invite)
   cli list
-  cli revoke-device --device <device-id>`;
+  cli revoke-device --device <device-id>
+  cli logs --household <id|name> [--device <label|id>] [--since 2h] [--event WALK_%] [--limit 200]`;
 
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
@@ -25,6 +29,9 @@ async function main() {
       'allow-import': { type: 'boolean' },
       household: { type: 'string' },
       device: { type: 'string' },
+      since: { type: 'string' },
+      event: { type: 'string' },
+      limit: { type: 'string' },
     },
   });
   const config = loadConfig({ ...process.env, DATABASE_URL: process.env.DATABASE_URL });
@@ -62,6 +69,21 @@ async function main() {
       case 'revoke-device': {
         if (!values.device) throw new Error('--device is required');
         console.log((await revokeDevice(conn.db, values.device)) ? 'device revoked' : 'no active device with that id');
+        break;
+      }
+      case 'logs': {
+        if (!values.household) throw new Error('--household is required');
+        const h = await findHousehold(conn.db, values.household);
+        const limit = values.limit ? Number(values.limit) : 200;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 5000) throw new Error('--limit must be 1..5000');
+        const rows = await queryDeviceLogs(conn.db, {
+          householdId: h.id,
+          device: values.device,
+          sinceMs: values.since ? parseSince(values.since, Date.now()) : undefined,
+          event: values.event,
+          limit,
+        });
+        for (const row of rows) console.log(formatLogLine(row));
         break;
       }
       default:

@@ -15,7 +15,7 @@ import { AchievementId, recordTreatsEarned } from '../economy/personalStats';
 import { checkAndScheduleEarnedTriggerNotification } from '../notifications/earnedTrigger';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { resolveDoorstepOverflowLine } from '../notifications/notificationDecision';
-import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from '../notifications/scheduler';
+import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_ENDED_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from '../notifications/scheduler';
 import { log } from '../utils/log';
 import { t } from '../i18n';
 import { AppRepositories, localePreferenceLoaded, runStartupMigrations } from './repositories';
@@ -26,6 +26,8 @@ export function destinationForNotificationType(type: unknown): 'den' | 'doorstep
   // walk-reminder design.md Decision 9: the Doorstep, not the Den, is this
   // reminder's destination — its Start Walk button is what the reminder prompts.
   if (type === WALK_REMINDER_NOTIFICATION_DATA.type) return 'doorstep';
+  // Auto-finished walk: the Homecoming plays over the scene (celebration state is already set).
+  if (type === WALK_ENDED_NOTIFICATION_DATA.type) return 'doorstep';
   return null;
 }
 

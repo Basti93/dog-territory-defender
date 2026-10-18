@@ -55,3 +55,12 @@ describe('SettingsRepository contract', () => {
     expect(await repo.getLogShippingEnabled()).toBe(true);
   });
 });
+
+describe('autoFinishEnabled (in-memory)', () => {
+  it('defaults to true and round-trips', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getAutoFinishEnabled()).toBe(true);
+    await repo.saveAutoFinishEnabled(false);
+    expect(await repo.getAutoFinishEnabled()).toBe(false);
+  });
+});

@@ -8,6 +8,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let wildExtrasLastShown: Record<string, string> = {};
   let syncIdentity: SyncIdentity | null = null;
   let logShippingEnabled = true;
+  let autoFinishEnabled = true;
   return {
     async getSyncIdentity() {
       return syncIdentity ? { ...syncIdentity } : null;
@@ -32,6 +33,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveWildExtrasLastShown(lastShown) {
       wildExtrasLastShown = normalizeLastShown(lastShown);
+    },
+    async getAutoFinishEnabled() {
+      return autoFinishEnabled;
+    },
+    async saveAutoFinishEnabled(enabled) {
+      autoFinishEnabled = enabled !== false;
     },
     async getLogShippingEnabled() {
       return logShippingEnabled;

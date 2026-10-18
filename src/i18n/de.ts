@@ -37,6 +37,13 @@ const de: Record<string, string> = {
   "notification.overflow.body.other": "Deine Bäckerei quillt über! {count} Leckerlis warten auf dich.",
   "notification.channel.walkReminder": "Gassi-Erinnerung",
   "notification.channel.den": "Leckerlis im Hof",
+  "notification.channel.walkEnded": "Runde beendet",
+  "notification.walkEnded.title": "Runde beendet",
+  "notification.walkEnded.body": "{dog} ist wieder zuhause. Die Heimkehr wartet im Hof.",
+  "autoFinish.hint": "Endet von selbst, wenn ihr wieder zuhause seid",
+  "autoFinish.countdown": "Zuhause? Noch {n} Min…",
+  "autoFinish.setting": "Runde automatisch beenden",
+  "autoFinish.settingHint": "Wenn ihr wieder am Startpunkt seid und das Beenden vergessen habt, endet die Runde von selbst.",
 
   // ---- phrases / names
   "phrase.dayAndTime.night": "{weekday}nacht",
@@ -462,6 +469,10 @@ const de: Record<string, string> = {
   "weird.upgrade.bakery": "Die Bäckerei ist jetzt kosmisch. Die Knochen kreisen ganz friedlich.",
 
   // ---- household (multiplayer-sync). Wording pass by game-master still owed.
+  "logShipping.switch": "Protokoll an den Server senden",
+  "logShipping.hint": "Hilft beim Fehlersuchen. Ohne Standort, ohne Codes, nur an euren Haushalts-Server.",
+  "logShipping.lastSent": "Zuletzt gesendet: {time}",
+  "logShipping.never": "Noch nichts gesendet seit dem App-Start.",
   "household.title": "Haushalt",
   "household.subtitle": "Teilt euch einen Hund, ein Revier und einen Bau mit den Menschen, mit denen du spazieren gehst. Frag nach einem Einladungscode.",
   "household.serverUrl": "Serveradresse",

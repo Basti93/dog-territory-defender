@@ -208,6 +208,31 @@ export const bannedIps = pgTable('banned_ips', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Device diagnostics shipped by the app (log shipping). Read only through the operator CLI (`cli logs`).
+ * Retention: rows older than 14 days (received_at) are deleted by the hourly retention job.
+ * `device_seq` numbers entries per device; the unique index makes resending a batch idempotent.
+ */
+export const deviceLogs = pgTable(
+  'device_logs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
+    deviceId: uuid('device_id').notNull().references(() => devices.id, { onDelete: 'cascade' }),
+    deviceSeq: ms('device_seq').notNull(),
+    t: ms('t').notNull(),
+    event: text('event').notNull(),
+    payload: jsonb('payload').notNull(),
+    appState: text('app_state').notNull(),
+    receivedAt: ms('received_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('device_logs_device_seq_uq').on(t.deviceId, t.deviceSeq),
+    index('device_logs_household_t_idx').on(t.householdId, t.t),
+    index('device_logs_received_idx').on(t.receivedAt),
+  ]
+);
+
 // ------------------------------------------------------------------ Track B: Nachbarhunde
 
 /** One row per bot household (design Decision 17). `household_id` is the BOT household; the human one is `host_household_id`. */

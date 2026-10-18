@@ -8,6 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { NotificationRepository } from '../storage/NotificationRepository';
 import { material, PaperHeader, PaperSheet, radii, Screen, spacing, TextLink, textStyle } from '../ui';
 import { formatDate, t } from '../i18n';
+import { LogShippingLastSent } from './LogShippingSwitch';
 
 interface DebugLogScreenProps {
   onClose: () => void;
@@ -129,6 +130,7 @@ export function DebugLogScreen({ onClose, notificationRepository }: DebugLogScre
       )}
 
       <Text style={[textStyle('small'), styles.count]}>{count === null ? t('common.loading') : t('debug.entries', { count })}</Text>
+      <LogShippingLastSent />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <Text style={[textStyle('small'), styles.ink, styles.logText]}>{preview || t('debug.noEntries')}</Text>

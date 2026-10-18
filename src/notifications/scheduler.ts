@@ -5,6 +5,7 @@ import { log } from '../utils/log';
 import { TimeOfDayBucket } from './notificationDecision';
 import { PlannedReminder, reminderDayLabel, reminderIdentifier, walkReminderBody, walkReminderTitle } from './walkReminderDecision';
 import { t } from '../i18n';
+import { dogDisplayName } from '../economy/denEconomy';
 
 // The actual expo-notifications wiring — permission request + scheduling.
 // Deliberately kept separate from notificationDecision.ts's pure logic so
@@ -21,7 +22,7 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => ({
     shouldShowBanner: true,
     shouldShowList: true,
-    shouldPlaySound: ['walk-reminder', 'walk-reminder-test'].includes(String(notification.request.content.data?.type)),
+    shouldPlaySound: ['walk-reminder', 'walk-reminder-test', 'walk-ended'].includes(String(notification.request.content.data?.type)),
     shouldSetBadge: false,
   }),
 });
@@ -38,6 +39,8 @@ const BUCKET_HOUR: Record<TimeOfDayBucket, number> = {
 export const DEN_OVERFLOW_NOTIFICATION_DATA = { type: 'den-overflow' } as const;
 export const WALK_REMINDER_NOTIFICATION_DATA = { type: 'walk-reminder', kind: 'walk-reminder' } as const;
 
+export const WALK_ENDED_NOTIFICATION_DATA = { type: 'walk-ended' } as const;
+export const WALK_ENDED_CHANNEL_ID = 'walk-ended';
 export const WALK_REMINDER_CHANNEL_ID = 'walk-reminder';
 export const DEN_OVERFLOW_CHANNEL_ID = 'den-overflow';
 const WALK_REMINDER_ID_PREFIX = 'walk-reminder-';
@@ -52,6 +55,11 @@ export async function ensureAndroidChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(WALK_REMINDER_CHANNEL_ID, {
     name: t('notification.channel.walkReminder'),
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: 'default',
+  });
+  await Notifications.setNotificationChannelAsync(WALK_ENDED_CHANNEL_ID, {
+    name: t('notification.channel.walkEnded'),
     importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
   });
@@ -197,4 +205,25 @@ export async function cancelScheduledWalkReminder(): Promise<void> {
       n.identifier.startsWith(WALK_REMINDER_ID_PREFIX)
   );
   await Promise.all(ours.map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)));
+}
+
+/**
+ * Immediate notification "Runde beendet" after an auto-finished walk. Never asks
+ * for permission (nobody is looking at the phone): returns false when it is not
+ * already granted.
+ */
+export async function scheduleWalkEndedNotification(dogName: string | null): Promise<boolean> {
+  await ensureAndroidChannels();
+  const perm = await Notifications.getPermissionsAsync();
+  if (!perm.granted) return false;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: t('notification.walkEnded.title'),
+      body: t('notification.walkEnded.body', { dog: dogDisplayName(dogName) }),
+      data: WALK_ENDED_NOTIFICATION_DATA,
+    },
+    trigger: { channelId: WALK_ENDED_CHANNEL_ID },
+  });
+  log('WALK_ENDED_NOTIFICATION_SENT');
+  return true;
 }

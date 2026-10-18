@@ -97,3 +97,37 @@ describe('useWalkSession GPS fixes', () => {
     expect(result.current.walk?.locations.length).toBe(2);
   });
 });
+
+describe('useWalkSession auto-finish', () => {
+  it('finishes with endedBy auto-home when the home dwell elapses on a timer tick', async () => {
+    jest.useFakeTimers();
+    try {
+      let emit: (l: Location) => void = () => undefined;
+      mocked.startWatchingLocation.mockImplementation(async (cb) => {
+        emit = cb;
+        return true;
+      });
+      mocked.getInitialLocation.mockResolvedValue({ latitude: 52, longitude: 13, timestamp: 1, accuracy: 5 });
+      const { result } = await setup();
+      await act(async () => {
+        await result.current.startWalk();
+      });
+      const far = (t: number): Location => ({ latitude: 52.004, longitude: 13, timestamp: t, accuracy: 5 });
+      const home = (t: number): Location => ({ latitude: 52.00005, longitude: 13, timestamp: t, accuracy: 5 });
+      await act(async () => {
+        jest.advanceTimersByTime(5 * 60 * 1000);
+        emit(far(2));
+        jest.advanceTimersByTime(6 * 60 * 1000);
+        emit(home(3));
+        jest.advanceTimersByTime(4 * 60 * 1000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(finishTrackedWalk).toHaveBeenCalledTimes(1);
+      expect((finishTrackedWalk as jest.Mock).mock.calls[0][0].endedBy).toBe('auto-home');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

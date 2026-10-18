@@ -16,6 +16,10 @@ interface MapScreenProps {
   walk: Walk | null;
   isTracking: boolean;
   error: string | null;
+  /** Auto-finish is on for this walk: shows the hint sign. */
+  autoFinishEnabled: boolean;
+  /** Minutes left in the back-home countdown; null until the home dwell has begun. */
+  homeCountdownMin: number | null;
   dogName: string | null;
   treats: number | null;
   level: number | null;
@@ -82,6 +86,12 @@ export function MapScreen(p: MapScreenProps) {
           <Text style={textStyle('body')}>{p.level !== null ? t('den.dogLevel', { dog: dogDisplayName(p.dogName), level: p.level }) : '…'}</Text>
         </View>
 
+        {isTracking && p.autoFinishEnabled && (
+          <Text style={[textStyle('hand'), styles.autoHint]}>
+            {p.homeCountdownMin !== null ? t('autoFinish.countdown', { n: p.homeCountdownMin }) : t('autoFinish.hint')}
+          </Text>
+        )}
+
         <View style={styles.buttons}>
           {!isTracking ? (
             // Start Walk lives on the Doorstep (home-dashboard design.md
@@ -125,6 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   statLabel: { color: palette.muted },
+  autoHint: { color: palette.muted, textAlign: 'center', marginBottom: spacing.sm },
   buttons: { gap: spacing.sm },
   error: { color: tokens.warm, marginTop: spacing.sm },
 });

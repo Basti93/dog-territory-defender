@@ -324,6 +324,7 @@ export default function App() {
           <SettingsScreen
             notificationRepository={repos.notificationRepository}
             walkRepository={repos.walkRepository}
+            settingsRepository={repos.settingsRepository}
             dogName={dogName}
             buddyAppearance={buddyAppearance}
             walkActive={walkSession.isTracking}
@@ -367,6 +368,8 @@ export default function App() {
           walk={walkSession.walk}
           isTracking={walkSession.isTracking}
           error={walkSession.error}
+          autoFinishEnabled={walkSession.autoFinishEnabled}
+          homeCountdownMin={walkSession.homeCountdownMin}
           dogName={dogName}
           treats={treats}
           level={level}

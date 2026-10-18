@@ -33,6 +33,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'logShipping')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN logShipping INTEGER NOT NULL DEFAULT 1');
     }
+    if (!columns.some((c) => c.name === 'autoFinish')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN autoFinish INTEGER NOT NULL DEFAULT 1');
+    }
     return db;
   });
 
@@ -121,6 +124,22 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET wildExtrasLastShown = excluded.wildExtrasLastShown`,
         SINGLETON_ID,
         JSON.stringify(normalizeLastShown(lastShown))
+      );
+    },
+
+    async getAutoFinishEnabled(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ autoFinish: number }>('SELECT autoFinish FROM app_settings WHERE id = ?', SINGLETON_ID);
+      return row ? row.autoFinish !== 0 : true;
+    },
+
+    async saveAutoFinishEnabled(enabled: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, autoFinish) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET autoFinish = excluded.autoFinish`,
+        SINGLETON_ID,
+        enabled ? 1 : 0
       );
     },
 

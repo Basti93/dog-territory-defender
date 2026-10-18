@@ -29,6 +29,13 @@
       "when": 1792335214155,
       "tag": "0003_neighbours",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792341997328,
+      "tag": "0004_device_logs",
+      "breakpoints": true
     }
   ]
 }

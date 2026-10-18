@@ -40,6 +40,7 @@ docker compose exec api node dist/ops/cli.js create-household --name "Muster" [-
 docker compose exec api node dist/ops/cli.js create-invite --household "Muster"   # or the household id
 docker compose exec api node dist/ops/cli.js list
 docker compose exec api node dist/ops/cli.js revoke-device --device <id>
+docker compose exec api node dist/ops/cli.js logs --household Zuhause [--device <label>] [--since 2h] [--event WALK_%] [--limit 200]   # device logs, one line per entry; on the server: make device-logs ARGS="--household Zuhause --since 2h"
 ```
 
 Invite codes are shown once (only a hash is stored), single-use, valid 24 h.
@@ -48,13 +49,17 @@ Invite codes are shown once (only a hash is stored), single-use, valid 24 h.
 
 Public: `GET /healthz`, `POST /v1/join`. Everything else needs `Authorization: Bearer <token>`; anything else, including unknown paths, answers the identical `401 {"error":"unauthorized"}`.
 
-`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once).
+`GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs` (device log shipping, below).
 
 ## Behaviour worth knowing
 
 - Walks are append-only and idempotent by client id; the server recomputes cells, territories and reward from the route. Cell timestamps come from the walk, never receive time, so merging is order-independent; `visits` = baseline + distinct household-days (`cell_days`).
 - Den state is server-authoritative, changed only by walks and commands (`den.upgrade`, `den.claim`, `dog.update`, `walk.delete`, `player.rename`, `gift.open`); commands are idempotent by `clientId`. Passive accrual is applied lazily.
 - Hardening: strict schemas (unknown properties rejected), 64 KiB body (1 MiB walks, 5 MiB import), helmet headers, no CORS, per-IP and per-device rate limits, IP bans in `banned_ips`, per-household daily write caps, redacted structured access log. Residual risk: design Decision 16.
+
+## Device log shipping
+
+The app copies its `log()` lines (redacted: no tokens, invite codes, backup data or raw lat/lon) to `POST /v1/logs` while joined and the Settings switch "Protokoll an den Server senden" is on. Batches are at most 64 KiB; `deviceSeq` numbers the first entry and the unique `(device_id, device_seq)` index makes resends idempotent. Limits: 30 requests / 10 min per device, 2000 rows / 24 h per device (429 `daily_cap`), entries over 2 KB skipped. Rows are deleted 14 days after receipt by an hourly in-process job (`services/logRetention.ts`, independent of `NEIGHBOURS_ENABLED`). There is no read endpoint: use the `logs` CLI command above. Redaction lives in the app (`src/utils/logShipper.ts`); the server stores what it gets.
 
 ## Nachbarhunde (Track B, behind `NEIGHBOURS_ENABLED`)
 
