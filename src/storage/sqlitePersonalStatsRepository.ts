@@ -123,6 +123,20 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
       });
     },
 
+    async mergeUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
+      if (list.length === 0) return;
+      const db = await dbPromise;
+      await db.withTransactionAsync(async () => {
+        for (const a of list) {
+          await db.runAsync(
+            'INSERT INTO achievements (id, unlockedAt) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET unlockedAt = MIN(unlockedAt, excluded.unlockedAt)',
+            a.id,
+            a.unlockedAt
+          );
+        }
+      });
+    },
+
     async unlockAchievements(ids: AchievementId[], unlockedAt: number): Promise<void> {
       if (ids.length === 0) {
         return;

@@ -52,4 +52,22 @@ describe('PersonalStatsRepository contract', () => {
     expect(unlocked).toHaveLength(1);
     expect(unlocked[0].unlockedAt).toBe(100);
   });
+
+  it('merges synced achievements: adds missing ones, keeps the earlier date, never removes', async () => {
+    const repo = createInMemoryPersonalStatsRepository();
+    await repo.unlockAchievements(['first-steps'], 100);
+    await repo.unlockAchievements(['moving-in'], 300);
+
+    await repo.mergeUnlockedAchievements([
+      { id: 'first-steps', unlockedAt: 200 }, // later than ours: ignored
+      { id: 'moving-in', unlockedAt: 250 }, // earlier than ours: wins
+      { id: 'cozy-den', unlockedAt: 400 }, // new
+    ]);
+
+    expect(await repo.getUnlockedAchievements()).toEqual([
+      { id: 'first-steps', unlockedAt: 100 },
+      { id: 'moving-in', unlockedAt: 250 },
+      { id: 'cozy-den', unlockedAt: 400 },
+    ]);
+  });
 });

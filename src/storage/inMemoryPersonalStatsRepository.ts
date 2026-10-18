@@ -26,6 +26,13 @@ export function createInMemoryPersonalStatsRepository(): PersonalStatsRepository
       for (const a of list) unlocked.set(a.id, { ...a });
     },
 
+    async mergeUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
+      for (const a of list) {
+        const known = unlocked.get(a.id);
+        if (!known || a.unlockedAt < known.unlockedAt) unlocked.set(a.id, { ...a });
+      }
+    },
+
     async unlockAchievements(ids: AchievementId[], unlockedAt: number): Promise<void> {
       for (const id of ids) {
         if (!unlocked.has(id)) {

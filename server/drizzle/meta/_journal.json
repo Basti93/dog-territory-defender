@@ -50,6 +50,13 @@
       "when": 1792358620437,
       "tag": "0006_corners",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792361306379,
+      "tag": "0007_player_stats",
+      "breakpoints": true
     }
   ]
 }

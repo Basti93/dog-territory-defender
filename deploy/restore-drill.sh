@@ -39,7 +39,10 @@ counts="$(docker exec "$name" psql -U postgres -d dtd -At -F ' ' -c "
   union all select 'walks', count(*) from walks
   union all select 'cells', count(*) from cells
   union all select 'den_state', count(*) from den_state
-  union all select 'events', count(*) from events")"
+  union all select 'events', count(*) from events
+  union all select 'player_stats', case when to_regclass('public.player_stats') is null then -1
+    else (xpath('/row/c/text()', query_to_xml('select count(*) as c from public.player_stats', false, true, '')))[1]::text::int end")"
+# -1 = the dump predates migration 0007 (no player_stats table yet)
 echo "Zeilen im wiederhergestellten Dump:"
 echo "$counts" | awk '{ printf "  %-12s %s\n", $1, $2 }'
 

@@ -4,6 +4,7 @@ import Fastify, { LogController, type FastifyInstance, type FastifyRequest } fro
 import { sql } from 'drizzle-orm';
 import type {
   ApiError,
+  ApiMyStats,
   CommandRequest,
   HealthzResponse,
   ImportRequest,
@@ -32,10 +33,11 @@ import { buildSnapshot, joinHousehold } from '../services/households';
 import { ingestLogs } from '../services/deviceLogs';
 import { importHousehold } from '../services/importSeed';
 import { pullPresenceLongPoll, recordPresence } from '../services/presence';
+import { putMyStats } from '../services/stats';
 import { getWalk, ingestWalk, type AuthCtx } from '../services/walks';
 import { DeviceTokenAuthenticator, type Authenticator } from './auth';
 import { IpBanList } from './ipBan';
-import { normalizeImport, normalizeLogUpload, normalizePresence, normalizeWalkUpload } from './clientTimes';
+import { normalizeImport, normalizeLogUpload, normalizeMyStats, normalizePresence, normalizeWalkUpload } from './clientTimes';
 import {
   CommandSchema,
   GiftOpenBodySchema,
@@ -44,6 +46,7 @@ import {
   EventsQuerySchema,
   JoinSchema,
   LogUploadSchema,
+  MyStatsSchema,
   NearbyQuerySchema,
   PresenceQuerySchema,
   PresenceSchema,
@@ -280,6 +283,13 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     const result = await ingestLogs(db, req.auth!, normalizeLogUpload(req.body as LogUploadRequest), t);
     if (result.kind === 'capped') return reply.code(429).send({ error: 'daily_cap' } satisfies ApiError);
     return { stored: result.stored };
+  });
+
+  // Personal stats of the caller: merged monotonically, scoped to req.auth.playerId, no events row, no command log.
+  app.put(API_PATHS.meStats, { schema: { body: MyStatsSchema } }, async (req, reply): Promise<ApiMyStats> => {
+    const result = await putMyStats(db, req.auth!, normalizeMyStats(req.body as ApiMyStats), now());
+    if (result.kind === 'too-many') return reply.code(400).send({ error: 'bad_request' } satisfies ApiError) as never;
+    return result.stats;
   });
 
   // Live presence (M4): ephemeral, household-private, not counted against the daily command cap.

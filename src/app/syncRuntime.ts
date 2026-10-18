@@ -22,6 +22,7 @@ export const syncEngine = createSyncEngine({
   denEconomy: repos.denEconomyRepository,
   buddyAppearance: repos.buddyAppearanceRepository,
   corners: repos.cornerRepository,
+  stats: repos.personalStatsRepository,
   // The household's walks may complete a corner on this phone too (same ids as on the other one); the street lookup waits only briefly.
   afterWalksAdded: async () => {
     await updateCorners({ walkRepository: repos.walkRepository, cornerRepository: repos.cornerRepository, lookupWaitMs: 1500 });
@@ -78,7 +79,7 @@ export async function syncOnLaunch(): Promise<void> {
     timer = setTimeout(resolve, LAUNCH_SYNC_BUDGET_MS);
   });
   try {
-    await Promise.race([syncEngine.syncNow(), budget]);
+    await Promise.race([syncEngine.syncNow({ foreground: true }), budget]);
   } finally {
     if (timer) clearTimeout(timer);
   }

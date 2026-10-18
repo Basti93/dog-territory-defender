@@ -32,7 +32,7 @@ export function useSync(engine: SyncEngine, callbacks: SyncCallbacks) {
       const t = Date.now();
       if (t - lastRun < MIN_RESUME_INTERVAL_MS) return;
       lastRun = t;
-      void engine.syncNow();
+      void engine.syncNow({ foreground: true });
     });
     return () => subscription.remove();
   }, [engine]);

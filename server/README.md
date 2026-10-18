@@ -9,7 +9,7 @@ Stack: Node 22, TypeScript, Fastify 5, Postgres 16, Drizzle ORM (SQL migrations 
 
 ## Shared code (no copies)
 - Contract `../src/sync/apiContract.ts` (pure TS types, the app imports it too); request schemas in `src/http/schemas.ts` are compile-time checked against it.
-- Pure game code via the `@game/*` alias (= `../src/*`): `economy/formulas`, `balanceConfig`, `territoryEconomy`, `neighbourConfig`, `utils/grid`, `geometry`, `territoryCluster`, `storage/TerritoryRepository` and `HomeRangeRepository` (types and id helpers only), `types`.
+- Pure game code via the `@game/*` alias (= `../src/*`): `economy/formulas`, `balanceConfig`, `territoryEconomy`, `neighbourConfig`, `sync/statsMerge`, `utils/grid`, `geometry`, `territoryCluster`, `storage/TerritoryRepository` and `HomeRangeRepository` (types and id helpers only), `types`.
 - NOT importable (pull in i18n/storage): `denEconomy.ts`, `walkRewards.ts`, `milestones.ts`, `manualWalkLog.ts`. `src/economy/denTransitions.ts` re-expresses them; `test/parity.test.ts` pins it against the app's functions.
 
 ## Run
@@ -19,6 +19,7 @@ Stack: Node 22, TypeScript, Fastify 5, Postgres 16, Drizzle ORM (SQL migrations 
 ```
 docker compose exec api node dist/ops/cli.js create-household --name "Muster" [--timezone Europe/Berlin] [--allow-import]   # import closed unless --allow-import
 docker compose exec api node dist/ops/cli.js create-invite --household "Muster"   # or household id
+docker compose exec api node dist/ops/cli.js create-invite --for-player <player-id>   # restore invite: attaches a new device to an existing player (reinstall); revoke the old device afterwards
 docker compose exec api node dist/ops/cli.js list
 docker compose exec api node dist/ops/cli.js revoke-device --device <id>
 docker compose exec api node dist/ops/cli.js logs --household Zuhause [--device <label>] [--since 2h] [--event WALK_%] [--limit 200]   # on the server: make device-logs ARGS="--household Zuhause --since 2h"
@@ -28,7 +29,7 @@ Invite codes are shown once (only a hash is stored), single-use, valid 24 h.
 ## API v1 (JSON; details in the contract file)
 - Public: `GET /healthz` (`{ok, apiLevel}`), `POST /v1/join`. Everything else needs `Authorization: Bearer <token>`; anything else, unknown paths included, answers the identical `401 {"error":"unauthorized"}`.
 - **API level** (`API_LEVEL` in `src/sync/apiContract.ts`, now 2): every response carries `X-Api-Level`; the app sends `X-Client-Api-Level` (missing/invalid = 1). Non-GET/HEAD/OPTIONS requests (join excepted, auth first) from a client below `MIN_CLIENT_API_LEVEL` get `426 {"error":"upgrade_required"}`; reads always work. Additive fields only inside a level, server before app, breaking changes to `/v2`, raise the minimum only once every phone has the new app.
-- Endpoints: `GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (these last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs`, `POST /v1/presence`, `GET /v1/presence?after=&wait=`.
+- Endpoints: `GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (these last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs`, `POST /v1/presence`, `GET /v1/presence?after=&wait=`, `PUT /v1/me/stats` (the caller's own personal stats, merged monotonically; no event, never visible to others; `SnapshotResponse.myStats`).
 
 ## Behaviour worth knowing
 - Walks are append-only and idempotent by client id; the server recomputes cells, territories and reward from the route. Cell timestamps come from the walk, never receive time, so merging is order-independent; `visits` = baseline + distinct household-days (`cell_days`).

@@ -23,7 +23,7 @@ Lifetime stat tracking and one-off personal achievements give a solo player a hi
 
 ## The fence (free display)
 
-- Every unlocked achievement hangs on the yard fence as a clay rosette (colour per family: walks, distance, treats, den). It is the free, personal display: this device only, never synced, no bonus; Trophy Hall (backlog, below) stays the only place a badge bonus may live.
+- Every unlocked achievement hangs on the yard fence as a clay rosette (colour per family: walks, distance, treats, den). It is the free, personal display: the badges are stored per player on the server so a reinstall brings them back, but they are never shown to partners or anyone else and never compared; no bonus; Trophy Hall (backlog, below) stays the only place a badge bonus may live.
 - Off the fence: `ground-claimed`, `big-backyard`, `whole-city-block` (any qualifying walk, 25+ cells = 10,000 m², already clears them; thresholds unchanged). Beat 3 of a homecoming reveals new badges, max 2, never for a manual log or a partner's return.
 - One empty hook shows the not-yet-earned threshold badge closest to its goal from 80% progress: no numbers, never a den badge.
 

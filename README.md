@@ -40,4 +40,4 @@ Core loop feature-complete; the owner validates on Android (iOS via free-team bu
 - Economy: treats, Den XP/levels (Buddy's level sets the payout), milestones, anti-snowball mechanisms.
 - Household sync (two phones, one dog and Range), opt-in live sharing of walks, neighbour dogs behind a server flag.
 - Opt-in walk reminders (3 slots), onboarding, Backup/Restore, i18n de/en.
-- Open: shared postcards (M5), see `docs/decisions/multiplayer-sync.md`. "Unsere Ecken" (named corners) is built; its server part (migration 0006) needs a deploy before the app update.
+- Open: shared postcards (M5), see `docs/decisions/multiplayer-sync.md`. "Unsere Ecken" (named corners) and personal stats on the server (restore after a reinstall) are built; their server part (migrations 0006 + 0007) needs a deploy before the app update.

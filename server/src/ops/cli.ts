@@ -2,6 +2,7 @@
 // equals shell access to the container:
 //   docker compose exec api node dist/ops/cli.js create-household --name "Muster" [--allow-import]
 //   docker compose exec api node dist/ops/cli.js create-invite --household "Muster"
+//   docker compose exec api node dist/ops/cli.js create-invite --for-player <player-id>   # restore invite: new device for an existing player
 //   docker compose exec api node dist/ops/cli.js list
 //   docker compose exec api node dist/ops/cli.js revoke-device --device <device-id>
 //   docker compose exec api node dist/ops/cli.js logs --household Zuhause [--device <label>] [--since 2h] [--event WALK_%] [--limit 200]
@@ -10,11 +11,12 @@ import { loadConfig } from '../config';
 import { connectPostgres } from '../db/client';
 import { queryDeviceLogs } from '../services/deviceLogs';
 import { formatLogLine, parseSince } from './logFormat';
-import { createHousehold, createInvite, findHousehold, listHouseholds, revokeDevice } from '../services/households';
+import { createHousehold, createInvite, findHousehold, findPlayer, listHouseholds, revokeDevice } from '../services/households';
 
 const USAGE = `usage:
   cli create-household --name <name> [--timezone Europe/Berlin] [--allow-import]
   cli create-invite --household <id|name>      (alias: invite)
+  cli create-invite --for-player <player-id|name> [--household <id|name>]   restore invite: attaches a device to that player
   cli list
   cli revoke-device --device <device-id>
   cli logs --household <id|name> [--device <label|id>] [--since 2h] [--event WALK_%] [--limit 200]`;
@@ -28,6 +30,7 @@ async function main() {
       timezone: { type: 'string' },
       'allow-import': { type: 'boolean' },
       household: { type: 'string' },
+      'for-player': { type: 'string' },
       device: { type: 'string' },
       since: { type: 'string' },
       event: { type: 'string' },
@@ -48,6 +51,14 @@ async function main() {
       }
       case 'create-invite':
       case 'invite': {
+        if (values['for-player']) {
+          const household = values.household ? await findHousehold(conn.db, values.household) : undefined;
+          const player = await findPlayer(conn.db, values['for-player'], household?.id);
+          const invite = await createInvite(conn.db, player.householdId, config.inviteTtlMs, Date.now(), player.id);
+          console.log(`restore invite for player ${player.displayName} ${player.id} (shown once, single-use, valid until ${invite.expiresAt.toISOString()}): ${invite.code}`);
+          console.log('after the new phone has joined, revoke the old one: revoke-device --device <id> (see `list`)');
+          break;
+        }
         if (!values.household) throw new Error('--household is required');
         const h = await findHousehold(conn.db, values.household);
         const invite = await createInvite(conn.db, h.id, config.inviteTtlMs);

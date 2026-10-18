@@ -4,6 +4,7 @@ import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { cells, corners, denState, devices, dogs, households, inviteCodes, players, territories, walks } from '../db/schema';
 import { initialDenState, applyPassiveAccrual } from '../economy/denTransitions';
+import { getMyStats } from './stats';
 import { hashInviteCode, newDeviceToken, newInviteCode, sha256Hex } from '../lib/crypto';
 import { isValidTimeZone } from '../lib/time';
 import { appendEvent, currentSeq, type EventBus } from './events';
@@ -36,12 +37,48 @@ export async function findHousehold(db: Db, idOrName: string) {
   return rows[0];
 }
 
-/** Returns the plaintext code ONCE; only its hash is stored. */
-export async function createInvite(db: Db, householdId: string, ttlMs: number, now = Date.now()) {
+/**
+ * Returns the plaintext code ONCE; only its hash is stored. With `forPlayerId` it is a restore invite: joining attaches a
+ * device to that existing player (new phone or reinstall) instead of creating one. Operator-only, single-use, same TTL.
+ */
+export async function createInvite(db: Db, householdId: string, ttlMs: number, now = Date.now(), forPlayerId: string | null = null) {
   const code = newInviteCode();
   const expiresAt = new Date(now + ttlMs);
-  await db.insert(inviteCodes).values({ codeHash: hashInviteCode(code), householdId, expiresAt });
+  await db.insert(inviteCodes).values({ codeHash: hashInviteCode(code), householdId, expiresAt, playerId: forPlayerId });
   return { code, expiresAt };
+}
+
+/** Resolves an active (not left) player by id, or by exact display name inside `householdId` when given. */
+export async function findPlayer(db: Db, idOrName: string, householdId?: string) {
+  const isUuid = /^[0-9a-f-]{36}$/i.test(idOrName);
+  // An id plus --household must agree: a restore invite must never be minted for a player of another household.
+  const where = isUuid
+    ? householdId
+      ? and(eq(players.id, idOrName), eq(players.householdId, householdId))
+      : eq(players.id, idOrName)
+    : householdId
+      ? and(eq(players.displayName, idOrName), eq(players.householdId, householdId))
+      : undefined;
+  if (!where) throw new Error(`player "${idOrName}" needs --household (or pass the player id)`);
+  const rows = (await db.select().from(players).where(where)).filter((p) => p.leftAt === null);
+  if (rows.length === 0) throw new Error(`no active player "${idOrName}"`);
+  if (rows.length > 1) throw new Error(`name "${idOrName}" is ambiguous, use the player id`);
+  return rows[0];
+}
+
+/**
+ * A new device (token) for an EXISTING player: restore after a reinstall, a new phone, and later sign-in on a fresh
+ * install. No `member.joined`, no capacity check, consent was stored when the player first joined.
+ */
+export async function attachDevice(db: Db, playerId: string, label: string) {
+  const [player] = await db.select().from(players).where(eq(players.id, playerId));
+  if (!player || player.leftAt) throw new RefusedJoin();
+  const token = newDeviceToken();
+  const [device] = await db
+    .insert(devices)
+    .values({ householdId: player.householdId, playerId: player.id, label, tokenHash: sha256Hex(token) })
+    .returning();
+  return { token, device, player };
 }
 
 export async function revokeDevice(db: Db, deviceId: string): Promise<boolean> {
@@ -97,6 +134,30 @@ export async function joinHousehold(
     if (claimed.length === 0) return { kind: 'refused' };
     const invite = claimed[0];
 
+    if (invite.playerId) {
+      // Restore invite: a device for the existing player; nothing joins, nothing is counted, the player keeps their name.
+      const { token: restoredToken, device, player } = await attachDevice(dbx, invite.playerId, req.deviceLabel);
+      // Bound to the invite's household: a row that ever disagrees (manual SQL) is refused and rolled back, code not burned.
+      if (player.householdId !== invite.householdId) throw new RefusedJoin();
+      await dbx.update(inviteCodes).set({ usedByPlayerId: player.id }).where(eq(inviteCodes.codeHash, codeHash));
+      const [h] = await dbx.select().from(households).where(eq(households.id, player.householdId));
+      return {
+        kind: 'ok',
+        householdId: h.id,
+        response: {
+          token: restoredToken,
+          householdId: h.id,
+          householdName: h.name,
+          playerId: player.id,
+          deviceId: device.id,
+          serverTime: now,
+          seq: await currentSeq(dbx, h.id),
+          restored: true,
+          playerName: player.displayName,
+        },
+      };
+    }
+
     // Same den lock as walks/commands/import: keeps events.seq monotonic per household
     // (bigserial values are handed out at insert, commit order could otherwise differ).
     await lockDen(dbx, invite.householdId);
@@ -142,7 +203,7 @@ export async function joinHousehold(
     if (err instanceof RefusedJoin) return { kind: 'refused' };
     throw err;
   }
-  if (result.kind === 'ok') bus.notify(result.householdId!);
+  if (result.kind === 'ok' && !result.response.restored) bus.notify(result.householdId!);
   return result.kind === 'ok' ? { kind: 'ok', response: result.response } : { kind: 'refused' };
 }
 
@@ -178,6 +239,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
     .where(and(eq(walks.householdId, hid), eq(walks.generated, false)))
     .orderBy(walks.startTime);
 
+  const myStats = await getMyStats(db, auth.playerId);
   const den = denFromRow(denRow);
   const { rev, ...state } = den;
   const projected = applyPassiveAccrual(state, now, await worldMass(db, hid));
@@ -194,6 +256,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
     territories: territoryRows.map(territoryFromRow),
     walks: walkRows.map(walkMetaFromRow),
     corners: cornerRows.map(cornerFromRow),
+    ...(myStats ? { myStats } : {}),
   };
 }
 

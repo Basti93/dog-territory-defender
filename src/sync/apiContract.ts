@@ -19,7 +19,8 @@ export const API_PREFIX = '/v1';
  * `/v2` paths. The server may raise MIN_CLIENT_API_LEVEL (env) to refuse mutating requests from older apps with
  * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
  * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
- * Additive inside level 2 (no bump): live presence (M4) and named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`).
+ * Additive inside level 2 (no bump): live presence (M4), named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`)
+ * and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`).
  */
 export const API_LEVEL = 2;
 
@@ -48,6 +49,7 @@ export const API_PATHS = {
   coopWeek: '/v1/coop/week',
   import: '/v1/households/import',
   logs: '/v1/logs', // POST only: device diagnostics; read via the operator CLI, never over HTTP
+  meStats: '/v1/me/stats', // PUT: the caller's personal stats + achievements (monotonic merge); never shown to other members
   presence: '/v1/presence', // POST heartbeat of a walk in progress; GET the other household members' walks in progress (long-poll)
 } as const;
 
@@ -82,6 +84,11 @@ export const API_LIMITS = {
   maxPresencePoints: 400,
   maxPresencePointsPerBeat: 400,
   presenceMinIntervalMs: 10_000,
+  /** Personal stats: achievements in one PUT, and the most the server keeps per player (unknown ids from newer apps included). */
+  maxAchievementsPerPut: 100,
+  maxAchievementsStored: 200,
+  /** Personal stats: how often the app uploads at most (also on foreground). */
+  statsUploadMinIntervalMs: 60_000,
 } as const;
 
 // ------------------------------------------------------------------ errors
@@ -139,6 +146,12 @@ export interface JoinResponse {
   serverTime: number;
   /** Event cursor to start from after loading GET /v1/snapshot. */
   seq: number;
+  /**
+   * Present when the code was a restore invite (operator `create-invite --for-player`): this device was attached to an
+   * EXISTING player, no member joined, nothing is renamed. `playerName` is then that player's stored name.
+   */
+  restored?: true;
+  playerName?: string;
 }
 
 // -------------------------------------------------------------- shared shapes
@@ -237,7 +250,52 @@ export interface SnapshotResponse {
   walks: ApiWalkMeta[];
   /** Named corners. Absent from servers that predate "Unsere Ecken"; treat as empty. */
   corners?: ApiCorner[];
+  /** The CALLER's own stats (never a partner's). Absent before the first upload and from servers that predate personal stats. */
+  myStats?: ApiMyStats;
 }
+
+// ----------------------------------------------------------- personal stats
+
+/** Mirrors the app's PersonalStatsState (src/economy/personalStats.ts). Counters only grow; `firstWalkAt` only moves earlier. */
+export interface ApiPersonalStats {
+  totalWalksClosed: number;
+  lifetimeDistanceMeters: number;
+  lifetimeTerritoryAreaM2: number;
+  biggestTerritoryAreaM2: number;
+  longestWalkDistanceM: number;
+  totalTreatsEarnedLifetime: number;
+  firstWalkAt: number | null;
+}
+
+export interface ApiAchievement {
+  /** Kept even when this server/app does not know it (a newer app's badge survives). */
+  id: string;
+  unlockedAt: number;
+}
+
+/**
+ * `PUT /v1/me/stats` body and response, and `SnapshotResponse.myStats`. The app sends its FULL state; the server merges
+ * (max per number, earliest `firstWalkAt` and achievement date, union of ids; `src/sync/statsMerge.ts`) and answers with
+ * the merged result. Commutative and idempotent: retries, two phones and out-of-order requests are safe.
+ */
+export interface ApiMyStats {
+  stats: ApiPersonalStats;
+  achievements: ApiAchievement[];
+}
+
+/** Upper bounds the server accepts per stat (sanity, not game design). */
+export const STATS_CAPS: Record<Exclude<keyof ApiPersonalStats, 'firstWalkAt'>, number> = {
+  totalWalksClosed: 1e7,
+  lifetimeDistanceMeters: 1e10,
+  lifetimeTerritoryAreaM2: 1e13,
+  biggestTerritoryAreaM2: 1e13,
+  longestWalkDistanceM: 1e8,
+  totalTreatsEarnedLifetime: 1e13,
+};
+/** Latest accepted ms timestamp (year ~2286). */
+export const MAX_STATS_TIME_MS = 1e13;
+/** Achievement ids: lower-case slugs, e.g. `first-steps`. */
+export const ACHIEVEMENT_ID_PATTERN = '^[a-z0-9-]{1,40}$';
 
 // ------------------------------------------------------------------ walks
 

@@ -11,6 +11,7 @@
 import type { DenEconomyState } from '../economy/denEconomy';
 import type { CornerRepository } from '../storage/CornerRepository';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
+import type { PersonalStatsRepository } from '../storage/PersonalStatsRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import type { SettingsRepository, SyncIdentity } from '../storage/SettingsRepository';
 import type { SyncRepository } from '../storage/SyncRepository';
@@ -28,6 +29,7 @@ import { INVITE_CODE_LENGTH } from './syncConfig';
 import { applyNearby, applyEvents, ApplyContext, ApplyRepos, applyServerDenState, applySnapshot, ApplyResult, PartnerWalkAdded } from './apply';
 import type { NeighbourhoodActions } from './neighbourhood';
 import { pickPartnerName } from './partnerName';
+import { createStatsSync } from './statsSync';
 import { getNeighbourhood, resetNeighbourhood, setNeighbourhood, setNeighbourLines } from './neighbourhoodStore';
 import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
@@ -43,6 +45,8 @@ export interface SyncEngineDeps {
   buddyAppearance?: BuddyAppearanceRepository;
   /** "Unsere Ecken": the corner store. Omitted = corner names are neither applied nor sent. */
   corners?: CornerRepository;
+  /** Personal stats and achievements: merged with the server's copy and uploaded when changed. Omitted = not synced. */
+  stats?: PersonalStatsRepository;
   /** Called after walks of other members arrived (and were stored): the app looks for corners they completed. Errors are swallowed. */
   afterWalksAdded?: () => Promise<void>;
   /** Injected in tests. */
@@ -83,7 +87,8 @@ export interface SyncCallbacks {
 }
 
 export type JoinResult =
-  | { ok: true }
+  /** `restored`: the code was a restore invite, this phone is now another device of the EXISTING player (name, dog and stats come from the server). */
+  | { ok: true; restored?: boolean }
   | { ok: false; reason: 'invalid-input' | 'invalid-code' | 'network' | 'server' };
 
 export interface JoinInput {
@@ -118,8 +123,11 @@ export interface SyncEngine extends NeighbourhoodActions {
   cornerNamedBy(playerId: string | null): Promise<string | null>;
   /** Queues `walk.delete` for a walk deleted from History (no-op when not joined). The server keeps the walk's cells. */
   enqueueWalkDelete(walkId: string): Promise<void>;
-  /** Push then pull. Coalesces overlapping calls; never throws. `force` ignores retry backoff. */
-  syncNow(options?: { force?: boolean }): Promise<void>;
+  /**
+   * Push then pull. Coalesces overlapping calls; never throws. `force` ignores retry backoff.
+   * `foreground`: the app just came to the front, so a changed stats copy goes up now instead of waiting out its 60 s spacing.
+   */
+  syncNow(options?: { force?: boolean; foreground?: boolean }): Promise<void>;
 }
 
 /** Safety cap on pages per run; the rest arrives on the next sync. */
@@ -154,6 +162,8 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
   let runAgain = false;
   let busy = false;
   let unauthorized = false;
+  let foregroundRequested = false;
+  const statsSync = deps.stats ? createStatsSync({ stats: deps.stats, now }) : null;
 
   const notify = () => listeners.forEach((l) => l());
 
@@ -387,8 +397,28 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     reportApplied(appliedSnapshot);
     await afterWalks(appliedSnapshot);
     await sendLocalCornerNames(snapshot.corners ?? []);
+    await mergeServerStats(snapshot.myStats);
     await refreshNeighbourhood(client);
     await publishLines();
+  }
+
+  /** The server's copy of this player's stats goes into the local ones silently (no badge arrival, no homecoming). Never breaks the sync. */
+  async function mergeServerStats(remote: SnapshotResponse['myStats']) {
+    try {
+      await statsSync?.applyRemote(remote);
+    } catch (err) {
+      log('STATS_MERGE_ERROR', { error: String(err) });
+    }
+  }
+
+  /** Runs only after a successful pull, so after a join nothing goes up before the first snapshot has been merged. */
+  async function uploadStats(client: ApiClient, foreground: boolean) {
+    try {
+      await statsSync?.upload(client, { foreground });
+    } catch (err) {
+      if (err instanceof ApiError && err.kind === 'unauthorized') unauthorized = true;
+      else log('STATS_UPLOAD_ERROR', { error: String(err) });
+    }
   }
 
   /** Another phone of the same player may have renamed them: keep this phone's identity name in step with sync state. */
@@ -415,13 +445,17 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       await pull(client, identity);
       await adoptServerName(identity);
       await deps.sync.saveState({ lastSyncAt: now() });
+      const foreground = force || foregroundRequested;
+      foregroundRequested = false;
+      await uploadStats(client, foreground);
     } catch (err) {
       if (err instanceof ApiError && err.kind === 'unauthorized') unauthorized = true;
       log('SYNC_RUN_FAILED', { error: String(err) });
     }
   }
 
-  async function syncNow(options?: { force?: boolean }): Promise<void> {
+  async function syncNow(options?: { force?: boolean; foreground?: boolean }): Promise<void> {
+    if (options?.foreground) foregroundRequested = true;
     if (inFlight) {
       runAgain = true;
       return inFlight;
@@ -481,6 +515,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       if (code.length !== INVITE_CODE_LENGTH || playerName.length === 0 || !/^https?:\/\//i.test(serverUrl)) {
         return { ok: false, reason: 'invalid-input' };
       }
+      let restored = false;
       try {
         const response = await makeClient(serverUrl, null).join({
           code,
@@ -491,15 +526,20 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           timezone: deviceTimezone(),
         });
         await deps.sync.clear();
+        statsSync?.reset();
+        restored = response.restored === true;
         await deps.settings.saveSyncIdentity({
           serverUrl,
           token: response.token,
           householdId: response.householdId,
           playerId: response.playerId,
           deviceId: response.deviceId,
-          playerName,
+          // A restore invite attaches this phone to an existing player: their stored name wins over whatever was typed here.
+          playerName: restored ? response.playerName?.trim() || playerName : playerName,
           householdName: response.householdName,
         });
+        // The player already exists with a dog, so none of the first-launch steps (name the dog, ...) may run over it.
+        if (restored) await deps.settings.saveOnboardingDone(true);
         unauthorized = false;
         notify();
       } catch (err) {
@@ -510,12 +550,13 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       }
       // Initial snapshot (also retried by the next syncNow if this one fails).
       await syncNow({ force: true });
-      return { ok: true };
+      return restored ? { ok: true, restored } : { ok: true };
     },
 
     async leave() {
       await deps.settings.saveSyncIdentity(null);
       await deps.sync.clear();
+      statsSync?.reset();
       resetNeighbourhood(); // the neighbours belong to the household we just left
       nearbyLoaded = false;
       unauthorized = false;

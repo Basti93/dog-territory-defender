@@ -3,8 +3,8 @@
 // compile time against the shared contract in src/sync/apiContract.ts: if they drift, tsc fails.
 import { Type, type Static } from '@sinclair/typebox';
 import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
-import { API_LIMITS, CORNER_ID_PATTERN } from '@game/sync/apiContract';
-import type { CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
+import { ACHIEVEMENT_ID_PATTERN, API_LIMITS, CORNER_ID_PATTERN, MAX_STATS_TIME_MS, STATS_CAPS } from '@game/sync/apiContract';
+import type { ApiMyStats, CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
 const Id = Type.String({ minLength: 8, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' });
@@ -216,6 +216,33 @@ export const LogUploadSchema = Type.Object(
   { additionalProperties: false }
 );
 
+const StatNumber = (max: number) => Type.Number({ minimum: 0, maximum: max });
+const StatTime = Type.Number({ minimum: 0, maximum: MAX_STATS_TIME_MS });
+
+/** PUT /v1/me/stats: the full state. Unknown stat keys are a 400 (a new stat is a server change first); unknown achievement ids are fine. */
+export const MyStatsSchema = Type.Object(
+  {
+    stats: Type.Object(
+      {
+        totalWalksClosed: StatNumber(STATS_CAPS.totalWalksClosed),
+        lifetimeDistanceMeters: StatNumber(STATS_CAPS.lifetimeDistanceMeters),
+        lifetimeTerritoryAreaM2: StatNumber(STATS_CAPS.lifetimeTerritoryAreaM2),
+        biggestTerritoryAreaM2: StatNumber(STATS_CAPS.biggestTerritoryAreaM2),
+        longestWalkDistanceM: StatNumber(STATS_CAPS.longestWalkDistanceM),
+        totalTreatsEarnedLifetime: StatNumber(STATS_CAPS.totalTreatsEarnedLifetime),
+        // Null first: with ajv coerceTypes a null would be coerced to 0 by the number branch.
+        firstWalkAt: Type.Union([Type.Null(), StatTime]),
+      },
+      { additionalProperties: false }
+    ),
+    achievements: Type.Array(
+      Type.Object({ id: Type.String({ pattern: ACHIEVEMENT_ID_PATTERN }), unlockedAt: StatTime }, { additionalProperties: false }),
+      { maxItems: API_LIMITS.maxAchievementsPerPut }
+    ),
+  },
+  { additionalProperties: false }
+);
+
 // ---- compile-time drift checks (assignable both ways)
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _join: Same<Static<typeof JoinSchema>, JoinRequest> = true;
@@ -224,4 +251,5 @@ const _cmd: Same<Static<typeof CommandSchema>, CommandRequest> = true;
 const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
 const _logs: Same<Static<typeof LogUploadSchema>, LogUploadRequest> = true;
 const _presence: Same<Static<typeof PresenceSchema>, PresenceUpdateRequest> = true;
-void [_join, _walk, _cmd, _import, _logs, _presence];
+const _myStats: Same<Static<typeof MyStatsSchema>, ApiMyStats> = true;
+void [_join, _walk, _cmd, _import, _logs, _presence, _myStats];

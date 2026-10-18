@@ -8,6 +8,7 @@ import {
   API_LEVEL,
   API_PATHS,
   ApiError as ApiErrorBody,
+  ApiMyStats,
   ApiWalkFull,
   CommandRequest,
   CommandResponse,
@@ -77,6 +78,8 @@ export interface ApiClient {
   gifts(): Promise<GiftsResponse>;
   openGift(giftId: string, clientId: string): Promise<CommandResponse>;
   coopWeek(): Promise<CoopWeekResponse>;
+  /** Uploads the FULL personal stats; the answer is the server's merged state. A 404 (`client` error) means the server predates this. */
+  putMyStats(request: ApiMyStats): Promise<ApiMyStats>;
   /** Device diagnostics batch (log shipping). */
   uploadLogs(request: LogUploadRequest): Promise<LogUploadResponse>;
   /** Live-walk heartbeat (M4). Ephemeral: callers never queue or retry it. */
@@ -100,7 +103,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const doFetch = options.fetchImpl ?? fetch;
 
-  async function request<T>(method: 'GET' | 'POST', path: string, body?: unknown, extra: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, extra: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<T> {
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -167,6 +170,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     gifts: () => request<GiftsResponse>('GET', API_PATHS.gifts),
     openGift: (giftId, clientId) => request<CommandResponse>('POST', giftOpenPath(giftId), { clientId }),
     coopWeek: () => request<CoopWeekResponse>('GET', API_PATHS.coopWeek),
+    putMyStats: (req) => request<ApiMyStats>('PUT', API_PATHS.meStats, req),
     uploadLogs: (req) => request<LogUploadResponse>('POST', API_PATHS.logs, req),
     sendPresence: (req) => request<PresenceUpdateResponse>('POST', API_PATHS.presence, req),
     presence: ({ after, waitSeconds = 0, signal } = {}) => {

@@ -2,6 +2,7 @@ import { defaultDenEconomyState } from '../economy/denEconomy';
 import { createInMemoryCornerRepository } from '../storage/inMemoryCornerRepository';
 import { createInMemoryDenEconomyRepository } from '../storage/inMemoryDenEconomyRepository';
 import { createInMemoryHomeRangeRepository } from '../storage/inMemoryHomeRangeRepository';
+import { createInMemoryPersonalStatsRepository } from '../storage/inMemoryPersonalStatsRepository';
 import { createInMemorySettingsRepository } from '../storage/inMemorySettingsRepository';
 import { createInMemorySyncRepository } from '../storage/inMemorySyncRepository';
 import { createInMemoryTerritoryRepository } from '../storage/inMemoryTerritoryRepository';
@@ -19,6 +20,7 @@ export function makeRepos() {
     territories: createInMemoryTerritoryRepository(),
     denEconomy: createInMemoryDenEconomyRepository(),
     corners: createInMemoryCornerRepository(),
+    stats: createInMemoryPersonalStatsRepository(),
   };
 }
 

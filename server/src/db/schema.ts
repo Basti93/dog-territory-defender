@@ -74,6 +74,8 @@ export const inviteCodes = pgTable(
     householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedByPlayerId: uuid('used_by_player_id'),
+    /** Restore invite (operator `create-invite --for-player`): joining attaches a device to THIS player instead of creating one. */
+    playerId: uuid('player_id').references(() => players.id, { onDelete: 'cascade' }),
     usedAt: timestamp('used_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -274,6 +276,29 @@ export const corners = pgTable(
     updatedAt: ms('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.householdId, t.cornerId] })]
+);
+
+/**
+ * Personal stats per PLAYER (never household or device; the later account profile is a merge over a person's players).
+ * `state` is the merged ApiPersonalStats (jsonb: the stat list grows, the merge is generic over keys). Monotonic merge
+ * (src/sync/statsMerge.ts), written only by `PUT /v1/me/stats`, never an economy command or an `events` row, never read
+ * by anyone but the owner. Gone with the player (cascade).
+ */
+export const playerStats = pgTable('player_stats', {
+  playerId: uuid('player_id').primaryKey().references(() => players.id, { onDelete: 'cascade' }),
+  state: jsonb('state').notNull(),
+  updatedAt: ms('updated_at').notNull(),
+});
+
+/** Unlocked achievements per player. Unknown ids (a newer app's badges) are kept on purpose. */
+export const playerAchievements = pgTable(
+  'player_achievements',
+  {
+    playerId: uuid('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
+    achievementId: text('achievement_id').notNull(),
+    unlockedAt: ms('unlocked_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.playerId, t.achievementId] })]
 );
 
 // ------------------------------------------------------------------ Track B: Nachbarhunde
