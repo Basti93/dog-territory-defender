@@ -341,7 +341,7 @@ const de: Record<string, string> = {
   "settings.sound.title": "Sound",
   "settings.sound.subtitle": "Kleine fröhliche Geräusche für Tipper, Leckerli und Buddy. Der Stumm-Schalter deines Handys hat immer Vorrang.",
   "settings.music.title": "Musik",
-  "settings.music.subtitle": "Eine leise Spieluhr-Melodie an der Haustür und in der Höhle. Nie während eines Spaziergangs.",
+  "settings.music.subtitle": "Eine leise Spieluhr-Melodie an der Haustür und im Hof. Nie während einer Gassirunde.",
   "settings.soundTest.title": "Sound-Test",
   "settings.soundTest.subtitle": "Tippe einen Namen, um ihn zu hören. Spieluhr und Effekte teilen sich den Sound-Schalter.",
   "settings.soundTest.off": "Sound ist oben ausgeschaltet, deshalb bleibt es still.",
