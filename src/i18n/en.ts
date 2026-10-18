@@ -598,6 +598,17 @@ const en: Record<string, string> = {
   "liveShare.prompt.body": "You can change this any time in the Mailbox.",
   "liveShare.prompt.yes": "Yes, please",
   "liveShare.prompt.no": "Rather not",
+  "walk.gateBack": "To the walk",
+  "walk.gateBackLabel": "Gate: back to the live map",
+  "walk.cancelLink": "cancel",
+  "walk.cancelLinkLabel": "Cancel walk",
+  "walk.cancelWalk": "Cancel walk",
+  "walk.discard.title": "Discard this walk?",
+  "walk.discard.body": "This walk will not be saved.",
+  "walk.discard.confirm": "Discard",
+  "walk.discard.keep": "Keep walking",
+  "walk.cancelled.line": "Maybe later, then!",
+  "walk.noRoute.line": "No route yet, nothing to save.",
 };
 
 export default en;

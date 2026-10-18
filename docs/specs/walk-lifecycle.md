@@ -2,30 +2,63 @@
 
 ## Purpose
 
-Defines how a walk starts and how it can end — finished (always preserving and painting the trail into the Home Range, regardless of shape) or discarded via Cancel — and the ground-covered floor that gates whether a finished walk earns a reward.
+Defines how a walk starts and how it can end — finished (preserving and painting the trail into the Home Range, regardless of shape, as long as the walk went anywhere) or discarded via Cancel — the no-movement rule (a walk that went nowhere leaves no record), and the ground-covered floor that gates whether a finished walk earns a reward.
 
 ## Requirements
 
 ### Requirement: Every Tracked Walk Extends the Home Range
-The system SHALL paint the Home Range grid (see `den-economy`'s Home Range requirements) from every live-GPS-tracked walk's recorded trail, regardless of whether the walk's start and end points are near each other.
+The system SHALL paint the Home Range grid (see `den-economy`'s Home Range requirements) from every live-GPS-tracked walk's recorded trail that has movement (see `A Walk That Went Nowhere Leaves No Record`), regardless of whether the walk's start and end points are near each other.
 
 #### Scenario: A walk that never returns near its start still paints the Range
 - **WHEN** a live-tracked walk is finished and its start and end points are far apart
 - **THEN** the cells along its recorded trail SHALL be painted into the Home Range exactly as they would be for a walk that returns to its start
 
 ### Requirement: Finish Walk Replaces Close Territory and End Walk
-The system SHALL offer exactly two terminal actions while a walk is in progress: Finish Walk, which always preserves the recorded trail, always paints it into the Home Range, and evaluates reward eligibility (see `Reward Eligibility Is Ground Covered, Not Loop Closure`); and Cancel, which discards the walk entirely with no retained trail and no Home Range effect.
+The system SHALL offer exactly two terminal actions while a walk is in progress: Finish Walk, which preserves the recorded trail, paints it into the Home Range and evaluates reward eligibility (see `Reward Eligibility Is Ground Covered, Not Loop Closure`) — unless the walk has no movement (see `A Walk That Went Nowhere Leaves No Record`); and Cancel, which discards the walk entirely with no retained trail and no Home Range effect.
 
-#### Scenario: Finishing a walk always preserves and paints the trail
-- **WHEN** the user finishes an in-progress walk
+Cancel SHALL be reachable from both places a walk is visible: a calm "Runde abbrechen" link under the Finish button on the live map, and a small "abbrechen" link under the scene's gate sign. Cancelling a walk that has moved asks once ("Runde verwerfen? Diese Runde wird nicht gespeichert." with "Verwerfen" and "Weiterlaufen"); a walk without movement is cancelled without the question. Cancel stops GPS and the foreground service, clears the stored active walk, closes the live presence (`ended: true`), and leaves rewards, stats and the walk count untouched. Afterwards the player is back on the scene and Buddy may say one friendly line ("Dann eben später!"); no wording blames the player.
+
+While a walk runs, the scene's gate sign reads "Zur Runde" and opens the live map; it SHALL NOT start a second walk. Only the gate and its sign start a walk; tapping Buddy never does (it only barks).
+
+#### Scenario: Finishing a walk preserves and paints the trail
+- **WHEN** the user finishes an in-progress walk that has movement
 - **THEN** tracking stops, the recorded trail is retained and saved, and its cells are painted into the Home Range, regardless of the walk's shape
 
 #### Scenario: Cancel discards everything
-- **WHEN** the user cancels the walk while tracking
-- **THEN** the walk record is cleared, no trail is shown, and the Home Range is unaffected
+- **WHEN** the user cancels the walk while tracking (after confirming "Verwerfen" if the walk has moved)
+- **THEN** the walk record is cleared, no trail is shown, the stored active walk is removed, and the Home Range, rewards, stats and walk count are unaffected
+
+#### Scenario: Cancel asks once, and "Weiterlaufen" changes nothing
+- **WHEN** the user taps a cancel link on a walk that has moved, then "Weiterlaufen"
+- **THEN** the walk keeps running untouched
+
+#### Scenario: The gate sign during a walk goes back to the walk
+- **WHEN** a walk is running and the user taps the gate sign (or the gate)
+- **THEN** the live map opens and no new walk is started
+
+### Requirement: A Walk That Went Nowhere Leaves No Record
+The system SHALL treat a tracked walk as having no movement when either (a) every fix lies within 40 m of the walk's first fix (the largest haversine distance from the start is under 40 m, however far the fixes sum up: GPS jitter around a phone left standing), or (b) its walked distance (`walkDistanceMeters`) is under 50 m AND it paints fewer than 13 Home Range cells; the pure rule is `walkHasMovement` in `src/utils/geometry.ts` and the thresholds are the named constants `NO_MOVEMENT_RADIUS_M`, `NO_MOVEMENT_MAX_DISTANCE_M` and `NO_MOVEMENT_CELLS_BELOW` next to the other walk constants in `src/utils/grid.ts`. A tracked walk without movement SHALL NOT be saved: no walk record, no route, no Home Range cells, no stats, no reward, no `walk.upload`, no homecoming. This holds for every way a tracked walk ends: Finish Walk (the walk is closed like a cancel, the player lands on the scene and Buddy says "Noch keine Strecke, nichts zu speichern."), auto-finish (still for 20 minutes or back home: discarded quietly) and the cold-start restore (discarded quietly). The rule applies to tracked walks only; a manually logged walk has no fixes by design and is never judged by it.
+
+Why: a walk started by mistake (or a phone left standing) used to leave an empty record that counted as a walk and cluttered the history. The cell half is calibrated to the paint footprint: a walk that never leaves one spot already paints about 5 cells (25 m paint radius on 20 m cells) and 50 m of walking about 12, so a floor of 2 could never hold; 13 means "less ground than 50 m of walking paints" and only backs up the distance test.
+
+#### Scenario: Finish on a walk that never moved
+- **WHEN** the user taps Finish on a walk with under 50 m walked and fewer than 13 painted cells, or whose fixes all stay within 40 m of the start
+- **THEN** nothing is saved or uploaded, no homecoming plays, the walk is closed like a cancel, and Buddy says there is no route to save yet
+
+#### Scenario: Standing still with GPS jitter is no walk
+- **WHEN** 20 minutes of +-15 m GPS noise around one spot sum to hundreds of metres of walked distance
+- **THEN** the walk still has no movement (every fix is within 40 m of the first) and is discarded
+
+#### Scenario: Auto-finish and restore discard such a walk
+- **WHEN** auto-finish (20 minutes still, or home) or the cold-start restore would end a walk that has no movement
+- **THEN** the walk is discarded without a note and nothing is saved
+
+#### Scenario: A manual log is unaffected
+- **WHEN** the player logs a missed walk
+- **THEN** it is saved and rewarded as before, with no fixes
 
 ### Requirement: Reward Eligibility Is Ground Covered, Not Loop Closure
-The system SHALL grant treats, XP, and any territory-derived bonus for a live-tracked walk only when that walk paints at least 25 Home Range cells (~200m of real ground covered), replacing the previous loop-closure gate (≥10 points AND start↔end distance under a closure radius). A walk that paints fewer than 25 cells SHALL still be saved and SHALL still paint whatever cells it touched, but SHALL receive no reward.
+The system SHALL grant treats, XP, and any territory-derived bonus for a live-tracked walk only when that walk paints at least 25 Home Range cells (~200m of real ground covered), replacing the previous loop-closure gate (≥10 points AND start↔end distance under a closure radius). A walk that has movement but paints fewer than 25 cells SHALL still be saved and SHALL still paint whatever cells it touched, but SHALL receive no reward.
 
 #### Scenario: A short walk paints but earns nothing
 - **WHEN** a finished walk paints fewer than 25 Home Range cells

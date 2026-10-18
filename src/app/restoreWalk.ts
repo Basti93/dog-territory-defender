@@ -1,4 +1,5 @@
 import type { Walk } from '../types';
+import { walkHasMovement } from '../utils/geometry';
 import type { ActiveWalkSnapshot } from '../storage/ActiveWalkRepository';
 import { AutoFinishDecision, AutoFinishState, evaluateAutoFinish, startAutoFinish, WalkEndedBy } from './autoFinish';
 
@@ -14,7 +15,7 @@ export type RestoreDecision =
   | { kind: 'resume'; autoFinish: AutoFinishState }
   /** Finish through the normal path. `endedBy` is what the walk record and the homecoming say. */
   | { kind: 'finish'; endedBy: WalkEndedBy; reason: 'stale' | AutoFinishDecision }
-  /** Nothing worth keeping (too little data and too old). */
+  /** Nothing worth keeping: too little data and too old, or no movement (walkHasMovement). Dropped without a word. */
   | { kind: 'discard' };
 
 export function walkFromSnapshot(snapshot: ActiveWalkSnapshot): Walk {
@@ -52,13 +53,15 @@ export function decideWalkRestore(walk: Walk, now: number, autoFinishEnabled: bo
   const ageMs = Math.max(0, now - lastFixAt);
 
   if (ageMs >= RESTORE_MAX_AGE_MS) {
-    // Too little to be a walk (the start point alone, or one more): drop it without a word.
-    if (walk.locations.length < 2) return { kind: 'discard' };
+    // Too little to be a walk (the start point alone, or one more) or it never went anywhere: drop it without a word.
+    if (walk.locations.length < 2 || !walkHasMovement(walk)) return { kind: 'discard' };
     return { kind: 'finish', endedBy: 'auto-still', reason: 'stale' };
   }
 
   const replay = replayAutoFinish(walk, autoFinishEnabled, now);
   if (replay.decision) {
+    // The walk would have ended while the app was away; with no movement that means "never was a walk".
+    if (!walkHasMovement(walk)) return { kind: 'discard' };
     return { kind: 'finish', endedBy: replay.decision === 'home' ? 'auto-home' : 'auto-still', reason: replay.decision };
   }
   return { kind: 'resume', autoFinish: replay.state };

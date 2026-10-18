@@ -20,7 +20,8 @@ jest.mock('../../feedback/sounds', () => ({ play: jest.fn() }));
 jest.mock('../../notifications/walkReminder', () => ({ checkAndScheduleWalkReminder: jest.fn().mockResolvedValue(undefined) }));
 
 const mocked = gps as jest.Mocked<typeof gps>;
-const fix = (i: number): Location => ({ latitude: 52 + i * 0.0001, longitude: 13, timestamp: 1000 * i, accuracy: 5 });
+// 33 m and 10 s apart (3.3 m/s): a real walking trail, so three fixes pass walkHasMovement.
+const fix = (i: number): Location => ({ latitude: 52 + i * 0.0003, longitude: 13, timestamp: 10_000 * i, accuracy: 5 });
 
 const repos = {
   homeRangeRepository: { getCells: jest.fn().mockResolvedValue([]) },
@@ -117,6 +118,8 @@ describe('useWalkSession auto-finish', () => {
       const home = (t: number): Location => ({ latitude: 52.00005, longitude: 13, timestamp: t, accuracy: 5 });
       await act(async () => {
         jest.advanceTimersByTime(5 * 60 * 1000);
+        // A real outbound trail (33 m every 10 s), or the walk would count as "no movement" and be discarded.
+        for (let i = 1; i <= 8; i++) emit({ latitude: 52 + i * 0.0003, longitude: 13, timestamp: 1 + i * 10_000, accuracy: 5 });
         emit(far(2));
         jest.advanceTimersByTime(6 * 60 * 1000);
         emit(home(3));

@@ -65,6 +65,25 @@ export const NEW_GROUND_MIN_CELLS = 12;
 export const MIN_CELLS_FOR_REWARD = 25;
 
 /**
+ * "No movement" for a tracked walk (see walkHasMovement in geometry.ts): every fix within NO_MOVEMENT_RADIUS_M of the
+ * first one, OR under this walked distance (metres) AND under NO_MOVEMENT_CELLS_BELOW painted cells. Such a walk is discarded instead of saved (docs/specs/walk-lifecycle.md).
+ */
+export const NO_MOVEMENT_MAX_DISTANCE_M = 50;
+
+/**
+ * The jitter half of the no-movement rule: a walk whose every fix lies within this many metres of its FIRST fix never
+ * went anywhere, even if GPS noise summed up to more than NO_MOVEMENT_MAX_DISTANCE_M of "distance" (a phone left standing).
+ */
+export const NO_MOVEMENT_RADIUS_M = 40;
+
+/**
+ * The cell half of the no-movement rule. Measured with PAINT_RADIUS_M 25 and CELL_M 20: a walk that never leaves one
+ * spot already paints about 5 cells (the start point's footprint) and 50 m of walking about 12, so a floor of 2 could
+ * never hold; 13 is "less ground than 50 m of walking paints". It only backs up the distance test.
+ */
+export const NO_MOVEMENT_CELLS_BELOW = 13;
+
+/**
  * Divisor used to turn a raw Range cell count into the "Buddy knows N
  * streets" headline stat. Also reused by docs/decisions/somewhere-wild's
  * `src/utils/wildSpot.ts` as its minimum wild-cluster size (a cluster

@@ -6,6 +6,7 @@ import { createWalkCueTracker } from '../feedback/walkCues';
 import { AppState, Location as WalkLocation, Walk } from '../types';
 import { getInitialLocation, requestLocationPermission, startWatchingLocation, stopWatchingLocation } from '../utils/gps';
 import { cellKey, MIN_CELLS_FOR_REWARD } from '../utils/grid';
+import { walkHasMovement } from '../utils/geometry';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { log } from '../utils/log';
 import { newClientId } from '../sync/ids';
@@ -26,6 +27,9 @@ import { notifyAutoFinishedIfBackgrounded } from './autoFinishNotify';
 import { applyLocationToCues, createWalkCueState, resumeWalkCueState, startWalkCueState } from './walkSessionHelpers';
 import type { ActiveWalkRecorder } from './activeWalkRecorder';
 import { mergeNewerFixes } from './restoreWalk';
+
+/** What `finishWalk` did: `saved` (the normal path), `discarded` (no movement: nothing stored, like a cancel), `ignored` (already finishing). */
+export type FinishOutcome = 'saved' | 'discarded' | 'ignored';
 
 export interface UseWalkSessionDeps {
   repos: AppRepositories;
@@ -61,7 +65,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   // render's finish so the GPS callback and the timer never use a stale dogName/repos.
   const autoFinishRef = useRef<AutoFinishState | null>(null);
   const finishingRef = useRef(false);
-  const finishRef = useRef<(endedBy?: WalkEndedBy) => Promise<void>>(async () => undefined);
+  // True only while a finish is actually running (finishingRef also stays true after a finished walk until the next reset).
+  // Cancel is refused then: a finish that already started saves the walk, so a late "Verwerfen" must not claim otherwise.
+  const finishInFlightRef = useRef(false);
+  const finishRef = useRef<(endedBy?: WalkEndedBy) => Promise<FinishOutcome>>(async () => 'ignored');
   const [autoFinishEnabled, setAutoFinishEnabled] = useState(false);
   const [homeCountdownMin, setHomeCountdownMin] = useState<number | null>(null);
 
@@ -219,8 +226,17 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     }
   };
 
-  const runFinish = async (endedBy?: WalkEndedBy) => {
-    if (finishingRef.current) return;
+  const runFinish = async (endedBy?: WalkEndedBy): Promise<FinishOutcome> => {
+    if (finishingRef.current) return 'ignored';
+    finishInFlightRef.current = true;
+    try {
+      return await runFinishSteps(endedBy);
+    } finally {
+      finishInFlightRef.current = false;
+    }
+  };
+
+  const runFinishSteps = async (endedBy?: WalkEndedBy): Promise<FinishOutcome> => {
     finishingRef.current = true;
     autoFinishRef.current = null;
     setHomeCountdownMin(null);
@@ -230,7 +246,20 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     if (!walkToFinish) {
       setAppState((prev) => ({ ...prev, isTracking: false }));
       void activeWalk?.end();
-      return;
+      return 'saved';
+    }
+    // No movement (walkHasMovement): nothing is saved, rewarded or uploaded. Closed like a cancel, for the Finish button
+    // as well as auto-finish and restore, so a walk that went nowhere never leaves a record.
+    if (!walkHasMovement(walkToFinish)) {
+      log('WALK_DISCARDED_NO_MOVEMENT', { id: walkToFinish.id, points: walkToFinish.locations.length, endedBy: endedBy ?? 'button' });
+      walkCueState.active = false;
+      cueTracker.reset();
+      finishingRef.current = false;
+      walkRef.current = null;
+      void presence?.end(walkToFinish);
+      void activeWalk?.end();
+      setAppState({ walk: null, isTracking: false, error: null });
+      return 'discarded';
     }
     log('WALK_FINISH', { id: walkToFinish.id, points: walkToFinish.locations.length });
 
@@ -260,6 +289,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     // Auto-finished while the app is not in front: say so (the celebration state is
     // already set, so the Homecoming plays on the next foreground).
     if (endedBy) void notifyAutoFinishedIfBackgrounded(dogName);
+    return 'saved';
   };
   finishRef.current = runFinish;
   // Button handler: takes no arguments (onPress would pass the press event).
@@ -359,6 +389,10 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     finishRestoredWalk,
     /** True while a walk is running, starting, or finishing: restore must not touch the session then. */
     isBusy: () => !!walkRef.current || startingRef.current,
+    /** A finish (button, auto-finish or restore) is running right now: a cancel must not race it. */
+    isFinishing: () => finishInFlightRef.current,
+    /** Has the walk in flight gone anywhere (walkHasMovement)? Read from the live ref, so a Cancel tap never judges a stale render. False without a walk. */
+    currentWalkHasMovement: () => !!walkRef.current && walkHasMovement(walkRef.current),
     /** Clear a finished walk for the next one (same reset as cancel). */
     newWalk: cancelWalk,
   };

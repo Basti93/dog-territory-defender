@@ -612,6 +612,17 @@ const de: Record<string, string> = {
   "liveShare.prompt.body": "Du kannst das jederzeit im Briefkasten ändern.",
   "liveShare.prompt.yes": "Ja, gern",
   "liveShare.prompt.no": "Lieber nicht",
+  "walk.gateBack": "Zur Runde",
+  "walk.gateBackLabel": "Tor: zur Runde",
+  "walk.cancelLink": "abbrechen",
+  "walk.cancelLinkLabel": "Runde abbrechen",
+  "walk.cancelWalk": "Runde abbrechen",
+  "walk.discard.title": "Runde verwerfen?",
+  "walk.discard.body": "Diese Runde wird nicht gespeichert.",
+  "walk.discard.confirm": "Verwerfen",
+  "walk.discard.keep": "Weiterlaufen",
+  "walk.cancelled.line": "Dann eben später!",
+  "walk.noRoute.line": "Noch keine Strecke, nichts zu speichern.",
 };
 
 export default de;

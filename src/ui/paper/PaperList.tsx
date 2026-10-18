@@ -108,15 +108,18 @@ export function TextLink({
   disabled,
   style,
   textStyleOverride,
+  accessibilityLabel,
 }: {
   label: string;
+  /** Spoken label when the visible text is shorter than what it does (default: the label). */
+  accessibilityLabel?: string;
   onPress?: () => void;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
   textStyleOverride?: StyleProp<TextStyle>;
 }) {
   return (
-    <PressableScale onPress={onPress} disabled={disabled} accessibilityLabel={label} style={[styles.link, style]}>
+    <PressableScale onPress={onPress} disabled={disabled} accessibilityLabel={accessibilityLabel ?? label} style={[styles.link, style]}>
       <Text style={[textStyle('body'), styles.linkText, disabled && styles.muted, textStyleOverride]}>{label}</Text>
     </PressableScale>
   );

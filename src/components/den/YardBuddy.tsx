@@ -57,7 +57,7 @@ interface YardBuddyProps {
   /** Bumps on every building tap. */
   tap: { building: BuildingSpot; n: number } | null;
   rng?: () => number;
-  /** Called after Buddy's own tap reaction (the world scene starts the walk from here). */
+  /** Called after Buddy's own tap reaction. The world scene passes nothing: tapping Buddy never starts a walk. */
   onPress?: () => void;
 }
 

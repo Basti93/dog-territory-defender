@@ -24,7 +24,7 @@ import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
 import type { TerritoryRepository } from '../../storage/TerritoryRepository';
 import type { WalkRepository } from '../../storage/WalkRepository';
-import { ArtImage, DecorImage, PaperNote, SpeechBubble, WoodSign, material, mix, spacing, stitch, textStyle, tokens } from '../../ui';
+import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
 import type { AwayStripLine, DoorstepSession } from '../DoorstepScreen';
@@ -100,7 +100,12 @@ export interface WorldSceneProps {
   onUpgraded?: (building: BuildingKey) => void;
   onStartWalk: () => void;
   updateCard?: { onApply: () => void; onLater: () => void };
+  /** A walk is running: the gate reads "Zur Runde" and opens the live map instead of starting a second walk. */
   walkActive?: boolean;
+  /** The small "abbrechen" link under the gate sign while a walk runs (App asks once if the walk has moved). Omitted = no link. */
+  onCancelWalk?: () => void;
+  /** A one-off Buddy line after a walk was cancelled or discarded; `key` makes every new one show even if the text repeats. */
+  flashNote?: { key: number; text: string } | null;
   onOpenMap: () => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
@@ -143,9 +148,12 @@ export function pickSceneNotes(
   hasUpdateCard: boolean,
   dismissed: ReadonlySet<string>,
   welcomeBack: string | null = null,
-  neighbour: NeighbourNote | null = null
+  neighbour: NeighbourNote | null = null,
+  flash: { key: number; text: string } | null = null
 ): Note[] {
   const all: Note[] = [];
+  // Buddy's line about a walk that just ended without a record: first in line for the speech bubble.
+  if (flash) all.push({ key: `flash-${flash.key}`, kind: 'line', text: flash.text });
   if (hasUpdateCard) all.push({ key: 'update', kind: 'update', text: t('update.ready') });
   // The welcome-back bubble tells the bakery's treats; the old away-strip treats line would say it twice.
   if (welcomeBack) all.push({ key: 'welcome-back', kind: 'line', text: welcomeBack });
@@ -194,6 +202,8 @@ export function WorldScene(props: WorldSceneProps) {
     onStartWalk,
     updateCard,
     walkActive = false,
+    onCancelWalk,
+    flashNote = null,
     onOpenMap,
     onOpenHistory,
     onOpenSettings,
@@ -375,6 +385,10 @@ export function WorldScene(props: WorldSceneProps) {
     });
   };
 
+  // The gate and its sign share one action: start a walk, or (walk already running) go back to its live map.
+  // Never start a second walk over the running one. Buddy is not part of it: tapping him only barks (BuddyAvatar).
+  const gateAction = walkActive ? onOpenMap : startWalk;
+
   // ---- Bowl: shows the treats sign larger for 2 s ----
   const bowlScale = useRef(new Animated.Value(1)).current;
   useEffect(() => () => bowlScale.stopAnimation(), [bowlScale]);
@@ -416,7 +430,7 @@ export function WorldScene(props: WorldSceneProps) {
   const welcomeText = welcome ? t('world.welcomeBack', { n: formatNumber(welcome.n) }) : null;
   const hood = useNeighbourhood(neighbourhood);
   const [cardBotId, setCardBotId] = useState<string | null>(null);
-  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note);
+  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note, flashNote);
   const bubbleNote = notes.find((n) => n.kind === 'line');
   const paperNote = notes.find((n) => n !== bubbleNote);
   const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
@@ -538,7 +552,6 @@ export function WorldScene(props: WorldSceneProps) {
                 geometry={geometry}
                 butterflies={gardenStage3}
                 tap={tap}
-                onPress={startWalk}
               />
             </View>
             {extraBehind && extraEl}
@@ -795,16 +808,28 @@ export function WorldScene(props: WorldSceneProps) {
           <Pressable
             accessible={false}
             importantForAccessibility="no"
-            onPress={startWalk}
+            onPress={gateAction}
             style={[styles.abs, { left: gateBoxLeft, top: gateHitTop, width: GATE_BOX, height: GATE_BOX * 0.6 }]}
           />
           <View pointerEvents="box-none" style={[styles.abs, { left: 0, right: 0, top: layout.gateSignTop, alignItems: 'center' }]}>
-            <WoodSign size="wide" onPress={startWalk} accessibilityLabel={t('world.gateLabel')}>
+            <WoodSign size="wide" onPress={gateAction} accessibilityLabel={walkActive ? t('walk.gateBackLabel') : t('world.gateLabel')}>
               <View style={styles.gateSignRow}>
                 <ArtImage art="icon-paw" size={26} />
-                <Text style={[textStyle('signBig'), styles.gateSignText]}>{t('world.gate')}</Text>
+                <Text style={[textStyle('signBig'), styles.gateSignText]}>{walkActive ? t('walk.gateBack') : t('world.gate')}</Text>
               </View>
             </WoodSign>
+            {walkActive && onCancelWalk && (
+              // Secondary and calm: a small link on a cream pill (legible over the fence), never a second sign.
+              <View style={styles.cancelLinkPill}>
+                <TextLink
+                  label={t('walk.cancelLink')}
+                  accessibilityLabel={t('walk.cancelLinkLabel')}
+                  onPress={onCancelWalk}
+                  style={styles.cancelLink}
+                  textStyleOverride={styles.cancelLinkText}
+                />
+              </View>
+            )}
           </View>
           <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 160, transform: [{ rotate: '3deg' }] }]}>
             {title ? (
@@ -962,6 +987,9 @@ const styles = StyleSheet.create({
   bottomRow: { position: 'absolute', left: 0, right: 0 },
   gateSignRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   gateSignText: { color: material.ink },
+  cancelLinkPill: { marginTop: 6, backgroundColor: palette.background + 'F5', borderRadius: radii.pill, paddingHorizontal: spacing.md },
+  cancelLink: { alignSelf: 'center' },
+  cancelLinkText: { fontSize: 14 },
   hint: {
     position: 'absolute',
     left: 0,

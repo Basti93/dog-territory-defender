@@ -5,6 +5,10 @@ import {
   DROPOUT_BRIDGE_MAX_SPEED_MS,
   MAX_SEGMENT_M,
   MAX_SEGMENT_SPEED_MS,
+  NO_MOVEMENT_CELLS_BELOW,
+  NO_MOVEMENT_MAX_DISTANCE_M,
+  NO_MOVEMENT_RADIUS_M,
+  paintedCells,
 } from './grid';
 
 export function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -77,6 +81,23 @@ export const DISTANCE_RULE_SINCE_MS = 1792352123000;
  */
 export function walkDistanceMeters(walk: { startTime: number; locations: Location[] }): number {
   return walk.startTime >= DISTANCE_RULE_SINCE_MS ? cumulativeDistance(walk.locations) : cumulativeDistanceLegacy(walk.locations);
+}
+
+/**
+ * Did this tracked walk go anywhere? False when every fix lies within NO_MOVEMENT_RADIUS_M of the first fix (GPS jitter
+ * around one spot adds up to "distance" but is not a walk; known trade-off: laps inside a ~40 m dog run count as no
+ * route either), or when it covered under NO_MOVEMENT_MAX_DISTANCE_M AND
+ * painted under NO_MOVEMENT_CELLS_BELOW cells. Such a walk is never saved, rewarded or uploaded. Tracked walks only; a
+ * manual log has no fixes by design and never asks this.
+ */
+export function walkHasMovement(walk: { startTime: number; locations: Location[] }): boolean {
+  const [first] = walk.locations;
+  if (!first) return false;
+  const stayedNearStart = walk.locations.every(
+    (fix) => getDistance(first.latitude, first.longitude, fix.latitude, fix.longitude) < NO_MOVEMENT_RADIUS_M
+  );
+  if (stayedNearStart) return false;
+  return walkDistanceMeters(walk) >= NO_MOVEMENT_MAX_DISTANCE_M || paintedCells(walk.locations).size >= NO_MOVEMENT_CELLS_BELOW;
 }
 
 /**

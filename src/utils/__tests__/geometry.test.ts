@@ -6,8 +6,10 @@ import {
   splitAtGaps,
   stepCountsAsDistance,
   walkDistanceMeters,
+  walkHasMovement,
 } from '../geometry';
 import { Location } from '../../types';
+import { NO_MOVEMENT_CELLS_BELOW, NO_MOVEMENT_MAX_DISTANCE_M, NO_MOVEMENT_RADIUS_M, paintedCells } from '../grid';
 
 function offsetLatitude(lat: number, meters: number): number {
   return lat + meters / 111320;
@@ -110,5 +112,64 @@ describe('splitAtGaps', () => {
     const d = fixAt(30, 20, c);
     const e = fixAt(150, 100, d); // dropout bridge: stays connected
     expect(splitAtGaps([a, b, c, d, e])).toEqual([[a, b], [c, d, e]]);
+  });
+});
+
+describe('walkHasMovement', () => {
+  const T = DISTANCE_RULE_SINCE_MS + 1_000_000;
+  /** Fixes `stepM` metres apart, every 20 s (a stroll, under the speed limit), heading north. */
+  const trail = (n: number, stepM: number): Location[] =>
+    Array.from({ length: n }, (_, i) => ({ latitude: offsetLatitude(52.5, i * stepM), longitude: 13.4, timestamp: T + i * 20_000, accuracy: 5 }));
+  const walkOf = (locations: Location[]) => ({ startTime: T, locations });
+
+  it('is false for a walk that never left its spot (no fixes, one fix, many fixes in place)', () => {
+    expect(walkHasMovement(walkOf([]))).toBe(false);
+    expect(walkHasMovement(walkOf(trail(1, 0)))).toBe(false);
+    expect(walkHasMovement(walkOf(trail(30, 0)))).toBe(false);
+  });
+
+  it('is false just under the distance floor, true from it', () => {
+    expect(walkDistanceMeters(walkOf(trail(2, NO_MOVEMENT_MAX_DISTANCE_M - 2)))).toBeLessThan(NO_MOVEMENT_MAX_DISTANCE_M);
+    expect(walkHasMovement(walkOf(trail(2, NO_MOVEMENT_MAX_DISTANCE_M - 2)))).toBe(false);
+    expect(walkHasMovement(walkOf(trail(2, NO_MOVEMENT_MAX_DISTANCE_M + 2)))).toBe(true);
+    expect(walkHasMovement(walkOf(trail(11, 10)))).toBe(true); // 100 m in ten steps
+  });
+
+  it('counts a real walk even when some steps are filtered out as jumps', () => {
+    const jump = trail(2, 3000); // a ride: adds no distance
+    expect(walkHasMovement(walkOf([...trail(6, 20), ...jump.slice(1).map((l) => ({ ...l, timestamp: T + 60_000 }))]))).toBe(true);
+  });
+
+  it('a spot paints fewer cells than the floor, so the cell half never lets a stationary walk count as movement', () => {
+    // Measured: one spot paints about 5 cells. The cell floor must stay above that or the rule goes dead.
+    expect(paintedCells(trail(1, 0)).size).toBeLessThan(NO_MOVEMENT_CELLS_BELOW);
+    expect(paintedCells(trail(1, 0)).size).toBeGreaterThanOrEqual(2); // so a floor of 2 could never hold
+  });
+
+  it('20 minutes of +-15 m GPS jitter around one point is no movement, although it sums to far more than 50 m', () => {
+    // 120 fixes, one per 10 s, on a 15 m circle around one spot (a phone left standing). Steps are up to 30 m in 10 s, so they all count as distance.
+    const jitter: Location[] = Array.from({ length: 120 }, (_, i) => {
+      const angle = i * 2.4;
+      return {
+        latitude: 52.5 + (15 * Math.sin(angle)) / 111320,
+        longitude: 13.4 + (15 * Math.cos(angle)) / (111320 * Math.cos((52.5 * Math.PI) / 180)),
+        timestamp: T + i * 10_000,
+        accuracy: 5,
+      };
+    });
+    expect(walkDistanceMeters(walkOf(jitter))).toBeGreaterThan(5 * NO_MOVEMENT_MAX_DISTANCE_M);
+    expect(walkHasMovement(walkOf(jitter))).toBe(false);
+  });
+
+  it('the radius is measured from the first fix: a trail that gets beyond it is movement, even if it comes back', () => {
+    const out = trail(6, 10); // 50 m out, in 10 m steps
+    const back = [...out].reverse().map((l, i) => ({ ...l, timestamp: T + (6 + i) * 20_000 }));
+    expect(NO_MOVEMENT_RADIUS_M).toBeLessThan(50);
+    expect(walkHasMovement(walkOf([...out, ...back]))).toBe(true);
+    expect(walkHasMovement(walkOf(trail(5, 9)))).toBe(false); // 36 m out: inside the radius
+  });
+
+  it('a teleport (a step the distance rule rejects) is not movement', () => {
+    expect(walkHasMovement(walkOf(trail(2, 3000)))).toBe(false);
   });
 });

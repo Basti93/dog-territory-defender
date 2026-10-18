@@ -11,9 +11,11 @@ import { usePresenceViewer } from './src/sync/usePresenceViewer';
 import { usePartnerHomecoming } from './src/sync/usePartnerHomecoming';
 import { useLiveSharePrompt } from './src/sync/useLiveSharePrompt';
 import { LiveSharePrompt } from './src/components/LiveSharePrompt';
+import { DiscardWalkPrompt } from './src/components/DiscardWalkPrompt';
 import { screenKey, useNavigation } from './src/app/navigation';
 import { useWalkSession } from './src/app/useWalkSession';
 import { useWalkRestore } from './src/app/useWalkRestore';
+import { useWalkEndFlow } from './src/app/useWalkEndFlow';
 import { activeWalkRecorder } from './src/app/activeWalkRuntime';
 import { useCelebration } from './src/app/useCelebration';
 import { useFirstLaunch } from './src/app/useFirstLaunch';
@@ -121,6 +123,11 @@ export default function App() {
       });
     },
   });
+  // Ending a walk early (cancel, or Finish on a walk that went nowhere): see useWalkEndFlow.
+  const walkEnd = useWalkEndFlow(walkSession, nav.goDoorstep);
+  const discardPrompt = (
+    <DiscardWalkPrompt visible={walkEnd.discardPromptOpen && walkSession.isTracking} onDiscard={walkEnd.cancelWalkNow} onKeepWalking={walkEnd.keepWalking} />
+  );
   // The one-time "may {partner} see your walk live?" question at the first walk start (opt-in; nothing is sent before a yes).
   const liveShare = useLiveSharePrompt({
     settings: repos.settingsRepository,
@@ -265,6 +272,8 @@ export default function App() {
   // (a one-off reward moment, not part of persistent navigation) must win and
   // render on top; the player lands on the Doorstep once they dismiss it.
   const worldScene = (homecoming: { walk: HomecomingWalk; onDone: () => void } | null) => (
+    <>
+      {discardPrompt}
       <WorldScene
         dogName={dogName}
         treats={treats ?? 0}
@@ -290,10 +299,13 @@ export default function App() {
         onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
         onStartWalk={() => {
           nav.goTo('map');
-          walkSession.startWalk();
+          // A running walk is never started again (the gate sign opens the map then); this is only a backstop.
+          if (!walkSession.isTracking) walkSession.startWalk();
         }}
         updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
         walkActive={walkSession.isTracking}
+        onCancelWalk={walkEnd.requestCancelWalk}
+        flashNote={walkEnd.walkEndNote}
         onOpenMap={() => nav.goTo('map')}
         onOpenHistory={() => nav.goTo('history')}
         onOpenSettings={() => nav.goTo('settings')}
@@ -305,6 +317,7 @@ export default function App() {
         onOpenTerritories={() => nav.goTo('territories')}
         homeRangeRefreshKey={homeRangeRefreshKey}
       />
+    </>
   );
 
   // The one-off reward moment (a "Heimkehr") plays over the world scene, never as a separate screen.
@@ -454,6 +467,7 @@ export default function App() {
         'map',
         <>
           <LiveSharePrompt visible={liveShare.visible} partnerName={liveShare.partnerName} onAnswer={liveShare.answer} />
+          {discardPrompt}
           <MapScreen
             repos={repos}
             walk={walkSession.walk}
@@ -472,8 +486,8 @@ export default function App() {
             onOpenTerritories={() => nav.goTo('territories')}
             neighbourhood={syncEngine}
             onBackToDoorstep={nav.goDoorstep}
-            onFinishWalk={walkSession.finishWalk}
-            onCancelWalk={walkSession.cancelWalk}
+            onFinishWalk={walkEnd.finishWalkNow}
+            onCancelWalk={walkEnd.requestCancelWalk}
             onNewWalk={() => {
               walkSession.newWalk();
               // The idle map has no Start Walk button (home-dashboard design.md

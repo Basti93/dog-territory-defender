@@ -44,9 +44,26 @@ describe('decideWalkRestore', () => {
 
   it('finishes when the auto-finish rules say it is done: back home after the dwell', () => {
     // Out to 200 m, then back at the start for the whole dwell.
-    const fixes = [fixAt(0, 0), fixAt(200, 4 * MIN), fixAt(0, 9 * MIN), fixAt(1, 9 * MIN + HOME_DWELL_MS + 10_000)];
-    const decision = decideWalkRestore(walkOf(fixes), T0 + 9 * MIN + HOME_DWELL_MS + 20_000, true);
+    // Walked there and back in 5 m steps, so the walk has real distance.
+    const out = Array.from({ length: 41 }, (_, i) => fixAt(i * 5, i * 10_000));
+    const back = Array.from({ length: 41 }, (_, i) => fixAt(200 - i * 5, 4 * MIN + i * 10_000));
+    const fixes = [...out, ...back, fixAt(1, 12 * MIN + HOME_DWELL_MS + 10_000)];
+    const decision = decideWalkRestore(walkOf(fixes), T0 + 12 * MIN + HOME_DWELL_MS + 20_000, true);
     expect(decision).toEqual({ kind: 'finish', endedBy: 'auto-home', reason: 'home' });
+  });
+
+  it('discards, instead of finishing, a stale walk that never moved', () => {
+    const fixes = [fixAt(0, 0), fixAt(5, MIN), fixAt(8, 2 * MIN)];
+    expect(decideWalkRestore(walkOf(fixes), T0 + RESTORE_MAX_AGE_MS + 5 * MIN, true)).toEqual({ kind: 'discard' });
+  });
+
+  it('discards a walk the still rule would end when it never moved', () => {
+    const fixes = [fixAt(0, 0), fixAt(5, 2 * MIN)];
+    expect(decideWalkRestore(walkOf(fixes), T0 + 2 * MIN + STILL_MS + MIN, true)).toEqual({ kind: 'discard' });
+  });
+
+  it('still resumes a fresh walk with no movement yet (the player may just have started)', () => {
+    expect(decideWalkRestore(walkOf([fixAt(0, 0), fixAt(5, MIN)]), T0 + 2 * MIN, true).kind).toBe('resume');
   });
 
   it('finishes when the dog stood still for the still limit', () => {

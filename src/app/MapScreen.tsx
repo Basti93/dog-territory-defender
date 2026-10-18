@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { MapView } from '../components/MapView';
 import { useViertelChrome } from '../components/world/useViertelChrome';
 import { SomewhereWildCard, SomewhereWildSpot } from '../components/SomewhereWildCard';
-import { Button, palette, spacing, textStyle, tokens } from '../ui';
+import { Button, palette, spacing, TextLink, textStyle, tokens } from '../ui';
 import { dogDisplayName } from '../economy/denEconomy';
 import { formatDistanceKm, t } from '../i18n';
 import { walkDistanceMeters } from '../utils/geometry';
@@ -114,12 +114,12 @@ export function MapScreen(p: MapScreenProps) {
             <Button label={t('app.backToDoorstep')} variant="secondary" onPress={p.onBackToDoorstep} />
           ) : (
             <>
-              {/* Two-way terminal action model: Finish Walk always saves the
-                  trail and paints it into the Home Range, regardless of shape.
-                  Never dismissible to the Doorstep while tracking — an
-                  explicit non-goal (home-dashboard design.md Decisions 8-13). */}
+              {/* Terminal actions: Finish Walk saves the trail and paints it into the Home Range, unless the walk never
+                  went anywhere (walkHasMovement: then nothing is stored, like a cancel). Cancel Walk discards the walk
+                  (App asks once if it has moved) and stays a calm link under the big Finish button.
+                  The live map can be left with back (the walk keeps running), never by finishing or cancelling. */}
               <Button label={t('app.finishWalk')} onPress={p.onFinishWalk} />
-              <Button label={t('common.cancel')} variant="secondary" labelColor={tokens.warm} onPress={p.onCancelWalk} />
+              <TextLink label={t('walk.cancelWalk')} onPress={p.onCancelWalk} style={styles.cancelLink} textStyleOverride={{ color: tokens.warm }} />
             </>
           )}
 
@@ -152,5 +152,6 @@ const styles = StyleSheet.create({
   statLabel: { color: palette.muted },
   autoHint: { color: palette.muted, textAlign: 'center', marginBottom: spacing.sm },
   buttons: { gap: spacing.sm },
+  cancelLink: { alignSelf: 'center' },
   error: { color: tokens.warm, marginTop: spacing.sm },
 });

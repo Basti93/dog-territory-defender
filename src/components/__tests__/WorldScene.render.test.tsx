@@ -47,6 +47,7 @@ async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70, stateExt
   const callbacks = {
     onStartWalk: jest.fn(),
     onOpenMap: jest.fn(),
+    onCancelWalk: jest.fn(),
     onOpenHistory: jest.fn(),
     onOpenSettings: jest.fn(),
     onTreatsChanged: jest.fn(),
@@ -69,7 +70,7 @@ async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70, stateExt
       {...extra}
     />
   );
-  await screen.findByRole('button', { name: t('world.gateLabel') });
+  await screen.findByRole('button', { name: extra.walkActive ? t('walk.gateBackLabel') : t('world.gateLabel') });
   await flush();
   return { view, denEconomyRepository, ...callbacks };
 }
@@ -98,12 +99,13 @@ describe('WorldScene', () => {
     await unmountAndExpectNoTimers(view);
   });
 
-  it('pressing Buddy plays his sound and also heads for the gate', async () => {
-    const { view, onStartWalk } = await setup();
+  it('pressing Buddy plays his sound and does not start a walk', async () => {
+    const { view, onStartWalk, onOpenMap } = await setup();
     await fireEvent.press(screen.getByRole('button', { name: 'Rex' }));
     expect(sounds.playBuddy).toHaveBeenCalledTimes(1);
-    await advance(650);
-    expect(onStartWalk).toHaveBeenCalledTimes(1);
+    await advance(1500); // longer than the gate beat: nothing may start
+    expect(onStartWalk).not.toHaveBeenCalled();
+    expect(onOpenMap).not.toHaveBeenCalled();
     await advance(1000);
     await unmountAndExpectNoTimers(view);
   });
@@ -342,6 +344,42 @@ describe('WorldScene bakery life', () => {
   });
 });
 
+describe('WorldScene during a walk', () => {
+  it('the gate sign reads "to the walk" and opens the live map instead of starting a second walk', async () => {
+    const { view, onStartWalk, onOpenMap } = await setup({ walkActive: true });
+    expect(screen.getByText(t('walk.gateBack'))).toBeOnTheScreen();
+    expect(screen.queryByText(t('world.gate'))).toBeNull();
+    expect(screen.queryByRole('button', { name: t('world.gateLabel') })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: t('walk.gateBackLabel') }));
+    expect(onOpenMap).toHaveBeenCalledTimes(1);
+    await advance(2000);
+    expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('shows a small cancel link under the sign that calls onCancelWalk', async () => {
+    const { view, onCancelWalk, onStartWalk } = await setup({ walkActive: true });
+    await fireEvent.press(screen.getByRole('button', { name: t('walk.cancelLinkLabel') }));
+    expect(onCancelWalk).toHaveBeenCalledTimes(1);
+    await advance(2000);
+    expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('has no cancel link and the usual gate sign when no walk runs', async () => {
+    const { view } = await setup();
+    expect(screen.getByText(t('world.gate'))).toBeOnTheScreen();
+    expect(screen.queryByText(t('walk.cancelLink'))).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('Buddy says the line after an early end', async () => {
+    const { view } = await setup({ flashNote: { key: 1, text: t('walk.cancelled.line') } });
+    expect(screen.getByText(t('walk.cancelled.line'))).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+});
+
 describe('pickSceneNotes', () => {
   const lines = [
     { text: 'a', kind: 'treats' as const },
@@ -351,6 +389,12 @@ describe('pickSceneNotes', () => {
   it('caps at two, update card first', () => {
     expect(pickSceneNotes(lines, null, true, new Set()).map((n) => n.key)).toEqual(['update', 'line-0']);
     expect(pickSceneNotes(lines, null, false, new Set()).map((n) => n.key)).toEqual(['line-0', 'line-1']);
+  });
+  it("puts the walk-end line first, ahead of the greeting and the away strip", () => {
+    const flash = { key: 7, text: 'Later, then!' };
+    expect(pickSceneNotes(lines, 'Hi', false, new Set(), null, null, flash).map((n) => n.key)).toEqual(['flash-7', 'line-0']);
+    expect(pickSceneNotes([], 'Hi', false, new Set(), null, null, flash).map((n) => n.key)).toEqual(['flash-7']);
+    expect(pickSceneNotes([], 'Hi', false, new Set(['flash-7']), null, null, flash).map((n) => n.key)).toEqual([]); // a tapped-away line leaves the yard quiet
   });
   it('uses the greeting only when nothing else is there, and skips dismissed notes', () => {
     expect(pickSceneNotes([], 'Hi', false, new Set()).map((n) => n.text)).toEqual(['Hi']);
