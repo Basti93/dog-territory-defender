@@ -17,7 +17,14 @@ export interface DecorImageProps {
 export function DecorImage({ source, resizeMode = 'cover', style }: DecorImageProps) {
   return (
     <View pointerEvents="none" style={style}>
-      <Image source={source} resizeMode={resizeMode} style={StyleSheet.absoluteFill} />
+      {/* Explicit percentage size, never absoluteFill insets: an Android <Image> sized only by
+          left/top/right/bottom insets renders at its intrinsic pixel size (a 2048px hill became
+          a 2048dp image, so the grass sat far below the scene). */}
+      <Image source={source} resizeMode={resizeMode} style={styles.fill} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  fill: { width: '100%', height: '100%' },
+});
