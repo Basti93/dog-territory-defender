@@ -17,3 +17,14 @@ files you want to keep in `keep.json` (no extension) and they are skipped:
     ["buddy-1", "buddy-2", "buddy-3"]
 
 `node scripts/generateSounds.mjs --ambient` only rebuilds `ambient-musicbox.wav`.
+
+## Importing a downloaded sound (macOS)
+
+```
+scripts/importSound.sh ~/Downloads/puppy-bark.mp3 buddy-1
+```
+
+Converts any mp3/m4a/wav to the app format, trims leading silence, caps at 1.5 s,
+and protects the cue in `keep.json`. Free sources usable in a published app without
+attribution: Pixabay (pixabay.com/sound-effects), Mixkit (mixkit.co). On Freesound use
+the CC0 filter. Restart the app after importing (Metro caches assets).
