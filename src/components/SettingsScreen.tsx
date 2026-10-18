@@ -238,7 +238,7 @@ export function SettingsScreen({
   }
 
   return (
-    <Screen backdrop="sky">
+    <Screen scroll backdrop="sky">
       <Header title={t('menu.settings')} icon="icon-settings" onBack={onClose} />
 
       <Card tint="sky" style={styles.reminderCard}>

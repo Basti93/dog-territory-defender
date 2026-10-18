@@ -269,7 +269,7 @@ export function DenScreen({
         <HeaderOverlay onClose={onClose} />
       </YardScene>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: spacing.xxl + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={styles.scrollView} contentContainerStyle={[styles.scroll, { paddingBottom: spacing.xxl + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {showOverflowNotice && (
           <Card tint="warm">
             <Text style={textStyle('body')}>{t('den.overflowNotice')}</Text>
@@ -421,6 +421,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: palette.background },
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: spacing.lg },
   headerRow: { marginBottom: 0 },
+  scrollView: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
   treatsRow: { alignItems: 'center', gap: spacing.xs },
   treatsChip: {

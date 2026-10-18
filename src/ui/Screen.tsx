@@ -38,7 +38,8 @@ export function Screen({ children, scroll = false, backdrop = 'none', style, con
       )}
       {scroll ? (
         <ScrollView
-          contentContainerStyle={[pad, contentStyle]}
+          style={styles.fill}
+          contentContainerStyle={[styles.grow, pad, contentStyle]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -54,6 +55,8 @@ export function Screen({ children, scroll = false, backdrop = 'none', style, con
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: palette.background },
   fill: { flex: 1 },
+  // flexGrow, never flex: 1: flex: 1 on a ScrollView content container locks it to the viewport on iOS (no scrolling).
+  grow: { flexGrow: 1 },
   sky: { position: 'absolute', top: 0, left: 0, right: 0, height: 260, opacity: 0.55, overflow: 'hidden' },
   band: { position: 'absolute', left: 0, right: 0, height: '12.5%', backgroundColor: palette.background },
 });
