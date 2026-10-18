@@ -3,7 +3,9 @@
 import { and, between, eq, isNull, sql } from 'drizzle-orm';
 import { MIN_CELLS_FOR_REWARD, newGroundCells, paintedCells, parseCellKey } from '@game/utils/grid';
 import { cumulativeDistance } from '@game/utils/geometry';
-import { bloomMultiplier } from '@game/economy/formulas';
+import { bloomMultiplier, manualLogBloomMultiplier } from '@game/economy/formulas';
+import { BALANCE } from '@game/economy/balanceConfig';
+import type { Location } from '@game/types';
 import { resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '@game/utils/territoryCluster';
 import { generateTerritoryId } from '@game/storage/TerritoryRepository';
 import type { Cell } from '@game/storage/HomeRangeRepository';
@@ -70,8 +72,10 @@ export async function ingestWalk(
       };
     }
 
-    if (req.startSource !== 'button') return { kind: 'rejected', reason: 'unsupported-source' };
-    if (req.locations.length === 0) return { kind: 'rejected', reason: 'no-locations' };
+    // A manual log ("Log a walk we missed") has no route by definition; a tracked walk must have one.
+    const isManual = req.startSource === 'manual-log';
+    if (isManual && req.locations.length > 0) return { kind: 'rejected', reason: 'unsupported-source' };
+    if (!isManual && req.locations.length === 0) return { kind: 'rejected', reason: 'no-locations' };
     if (req.startTime > now + API_LIMITS.maxWalkFutureSkewMs) return { kind: 'rejected', reason: 'start-in-future' };
     if (req.startTime < now - API_LIMITS.maxWalkAgeMs) return { kind: 'rejected', reason: 'too-old' };
 
@@ -85,9 +89,54 @@ export async function ingestWalk(
       .where(and(eq(walks.householdId, hid), sameLocalDay(walks.createdAt, tz, now)));
     if (recent >= config.limits.walksPerDayPerHousehold) return { kind: 'capped' };
 
+    // ---- manual-log quota, household-wide (src/economy/balanceConfig.ts freshGround; the app enforces
+    // the same per device in denEconomy.ts evaluateManualLogQuota). Counted by the day the server
+    // received the log, because a manual log's startTime is only "today" or "yesterday". Soft-deleted
+    // logs still count: deleting a walk must not hand out a fresh quota.
+    // Over-quota is a permanent 422: the phone has already paid out its local copy, and the shared Den
+    // state that comes back in the next pull silently corrects the balance.
+    let refreshRoute: Location[] | null = null;
+    if (isManual) {
+      const [{ logsToday }] = await dbx
+        .select({ logsToday: sql<number>`count(*)::int` })
+        .from(walks)
+        .where(and(eq(walks.householdId, hid), eq(walks.startSource, 'manual-log'), sameLocalDay(walks.createdAt, tz, now)));
+      if (logsToday >= BALANCE.freshGround.maxManualLogsPerDay) return { kind: 'rejected', reason: 'manual-log-quota' };
+
+      if (req.refreshRouteWalkId) {
+        const [{ refreshesToday }] = await dbx
+          .select({ refreshesToday: sql<number>`count(*)::int` })
+          .from(walks)
+          .where(
+            and(
+              eq(walks.householdId, hid),
+              eq(walks.startSource, 'manual-log'),
+              sql`${walks.reward}->>'routeRefreshed' = 'true'`,
+              sameLocalDay(walks.createdAt, tz, now)
+            )
+          );
+        if (refreshesToday < BALANCE.freshGround.maxRouteRefreshesPerDay) {
+          const [routeWalk] = await dbx
+            .select({ route: walks.route })
+            .from(walks)
+            .where(
+              and(
+                eq(walks.householdId, hid),
+                eq(walks.id, req.refreshRouteWalkId),
+                eq(walks.startSource, 'button'),
+                isNull(walks.deletedAt)
+              )
+            );
+          const route = (routeWalk?.route ?? []) as Location[];
+          if (paintedCells(route).size > 0) refreshRoute = route;
+        }
+      }
+    }
+
     // ---- compute from the route and the server's own cell state
-    const painted = paintedCells(req.locations);
-    const qualifies = painted.size >= MIN_CELLS_FOR_REWARD;
+    // A manual log paints nothing and always earns (identical to the app: closed, 0 distance, 0 cells).
+    const painted = isManual ? new Set<string>() : paintedCells(req.locations);
+    const qualifies = isManual || painted.size >= MIN_CELLS_FOR_REWARD;
     const distanceMeters = cumulativeDistance(req.locations);
     const rangeRows = await dbx.select().from(cells).where(eq(cells.householdId, hid));
     const rangeBefore: Cell[] = rangeRows.map((r) => ({
@@ -101,7 +150,7 @@ export async function ingestWalk(
     const rangeSet = new Set(rangeRows.map((r) => `${r.ix},${r.iy}`));
     const lastRefreshed = new Map(rangeRows.map((r) => [`${r.ix},${r.iy}`, r.lastRefreshed] as const));
     const newGround = newGroundCells(painted, rangeSet);
-    const bloom = bloomMultiplier(painted, lastRefreshed, now);
+    const bloom = isManual ? (refreshRoute ? manualLogBloomMultiplier() : 1) : bloomMultiplier(painted, lastRefreshed, now);
 
     // Cell timestamps come from the walk itself, never the receive time: keeps the merge order-independent.
     let walkEnd = req.startTime;
@@ -247,6 +296,32 @@ export async function ingestWalk(
       denApi = await saveDen(dbx, hid, denRow.rev, xp.state, now);
     }
 
+    // ---- manual-log route refresh: freshness only (lastRefreshed), never lastTracked, no new cells,
+    // no visits, no territory change. Only cells the Range already has; household-wide like all cells.
+    if (refreshRoute) {
+      const refreshJson = JSON.stringify(
+        Array.from(paintedCells(refreshRoute)).map((id) => {
+          const { ix, iy } = parseCellKey(id);
+          return [ix, iy];
+        })
+      );
+      await dbx.execute(sql`
+        update cells c set last_refreshed = greatest(c.last_refreshed, ${now}::bigint)
+        from jsonb_array_elements(${refreshJson}::jsonb) e
+        where c.household_id = ${hid}::uuid and c.ix = (e->>0)::int and c.iy = (e->>1)::int`);
+      touchedCells = (
+        await dbx
+          .select()
+          .from(cells)
+          .where(
+            and(
+              eq(cells.householdId, hid),
+              sql`(${cells.ix}, ${cells.iy}) in (select (e->>0)::int, (e->>1)::int from jsonb_array_elements(${refreshJson}::jsonb) e)`
+            )
+          )
+      ).map(cellFromRow);
+    }
+
     if (creditedTerritoryId) {
       await dbx
         .update(territories)
@@ -271,6 +346,7 @@ export async function ingestWalk(
       territoryId: creditedTerritoryId,
       newTerritoryName,
       mergedTerritoryNames,
+      ...(isManual ? { routeRefreshed: refreshRoute !== null } : {}),
     };
 
     const [stored] = await dbx

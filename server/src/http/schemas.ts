@@ -33,8 +33,9 @@ export const WalkUploadSchema = Type.Object(
   {
     id: Id,
     startTime: Type.Number({ minimum: 0 }),
-    startSource: Type.Literal('button'),
+    startSource: Type.Union([Type.Literal('button'), Type.Literal('manual-log')]),
     locations: Type.Array(LocationSchema, { maxItems: API_LIMITS.maxLocationsPerWalk }),
+    refreshRouteWalkId: Type.Optional(Id),
     territoryNameHint: Type.Optional(Str(0, 80)),
   },
   { additionalProperties: false }
@@ -57,6 +58,11 @@ export const CommandSchema = Type.Object(
         { additionalProperties: false }
       ),
       Type.Object({ kind: Type.Literal('walk.delete'), walkId: Id }, { additionalProperties: false }),
+      Type.Object(
+        // pattern: at least one non-space character, so a whitespace-only name is a 400, not an empty name
+        { kind: Type.Literal('player.rename'), name: Type.String({ minLength: 1, maxLength: API_LIMITS.maxRenameLength, pattern: '\\S' }) },
+        { additionalProperties: false }
+      ),
     ]),
   },
   { additionalProperties: false }

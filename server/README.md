@@ -53,5 +53,5 @@ Public: `GET /healthz`, `POST /v1/join`. Everything else needs `Authorization: B
 ## Behaviour worth knowing
 
 - Walks are append-only and idempotent by client id; the server recomputes cells, territories and reward from the route. Cell timestamps come from the walk, never receive time, so merging is order-independent; `visits` = baseline + distinct household-days (`cell_days`).
-- Den state is server-authoritative, changed only by walks and commands (`den.upgrade`, `den.claim`, `dog.update`, `walk.delete`); commands are idempotent by `clientId`. Passive accrual is applied lazily.
+- Den state is server-authoritative, changed only by walks and commands (`den.upgrade`, `den.claim`, `dog.update`, `walk.delete`, `player.rename`); commands are idempotent by `clientId`. Passive accrual is applied lazily.
 - Hardening: strict schemas (unknown properties rejected), 64 KiB body (1 MiB walks, 5 MiB import), helmet headers, no CORS, per-IP and per-device rate limits, IP bans in `banned_ips`, per-household daily write caps, redacted structured access log. Residual risk: design Decision 16.

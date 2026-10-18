@@ -35,6 +35,8 @@ export const API_LIMITS = {
   /** Walks older than this are rejected (reason `too-old`). */
   maxWalkAgeMs: 30 * 24 * 60 * 60 * 1000,
   maxDisplayNameLength: 40,
+  /** `player.rename` (and the app's name fields): trimmed length 1..this. */
+  maxRenameLength: 24,
   maxDogNameLength: 40,
   /** Founding import ceilings (body limit 5 MiB). */
   maxImportWalks: 2000,
@@ -65,7 +67,13 @@ export interface ApiError {
   reason?: WalkRejectedReason;
 }
 
-export type WalkRejectedReason = 'start-in-future' | 'too-old' | 'no-locations' | 'unsupported-source';
+export type WalkRejectedReason =
+  | 'start-in-future'
+  | 'too-old'
+  | 'no-locations'
+  | 'unsupported-source'
+  /** manual-log: the household already logged BALANCE.freshGround.maxManualLogsPerDay walks today. */
+  | 'manual-log-quota';
 
 // ----------------------------------------------------------------- join
 
@@ -179,8 +187,19 @@ export interface WalkUploadRequest {
   /** Client-generated UUID; the idempotency key. Re-upload returns the stored result. */
   id: string;
   startTime: number;
-  startSource: 'button';
+  /**
+   * 'manual-log' = "Log a walk we missed": `locations` must be empty, nothing is painted, the reward
+   * is the same flat treats/XP via the shared formulas. Household-wide quota (balanceConfig
+   * freshGround.maxManualLogsPerDay, maxRouteRefreshesPerDay) is enforced on the server.
+   */
+  startSource: 'button' | 'manual-log';
   locations: Location[];
+  /**
+   * manual-log only: id of a previously tracked walk whose cells get a household-wide freshness
+   * refresh (lastRefreshed only, never lastTracked, no new cells) and the manual-log bloom multiplier.
+   * Silently ignored when the day's refresh is used up or the walk has no route.
+   */
+  refreshRouteWalkId?: string;
   /** Optional reverse-geocoded name hint for a territory born by this walk (server falls back to a generic name). */
   territoryNameHint?: string;
 }
@@ -202,6 +221,8 @@ export interface WalkReward {
   /** Names for the celebration beat; null when no birth/merge happened or it is the very first territory. */
   newTerritoryName: string | null;
   mergedTerritoryNames: [string, string] | null;
+  /** manual-log only: the route refresh was applied (counts against the household's daily refresh). */
+  routeRefreshed?: boolean;
 }
 
 export interface WalkUploadResponse {
@@ -225,7 +246,13 @@ export type CommandBody =
   /** Applies passive accrual to the stored Den state (the "collect" tap). Always ok. */
   | { kind: 'den.claim' }
   | { kind: 'dog.update'; name?: string | null; appearance?: Record<string, unknown> }
-  | { kind: 'walk.delete'; walkId: string };
+  /**
+   * Walks are soft-deleted; the cells they painted STAY (the Range never shrinks, so a delete cannot
+   * be used to undo or game the shared map). Emits `walk.deleted`.
+   */
+  | { kind: 'walk.delete'; walkId: string }
+  /** Changes the caller's own display name (trimmed, 1..maxRenameLength). Emits `member.updated`. */
+  | { kind: 'player.rename'; name: string };
 
 export interface CommandRequest {
   /** Client-generated UUID, the idempotency key. Replay returns the stored result. */
@@ -257,7 +284,8 @@ export type EventKind =
   | 'territory.changed'
   | 'den.updated'
   | 'dog.updated'
-  | 'member.joined';
+  | 'member.joined'
+  | 'member.updated';
 
 export interface EventPayloads {
   'walk.added': { walk: ApiWalkMeta; cellsPainted: number };
@@ -267,6 +295,7 @@ export interface EventPayloads {
   'den.updated': { den: ApiDenState };
   'dog.updated': { dog: ApiDog };
   'member.joined': { player: ApiPlayer };
+  'member.updated': { player: ApiPlayer };
 }
 
 export type ApiEvent = {

@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { CommandRequest, CommandResponse, CommandErrorCode } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
-import { dogs, economyCommands, households, walks } from '../db/schema';
+import { dogs, economyCommands, households, players, walks } from '../db/schema';
 import { canonicalJson } from '../lib/canonicalJson';
 import { sameLocalDay } from '../lib/time';
 import { applyPassiveAccrual, upgradeBuilding } from '../economy/denTransitions';
@@ -99,6 +99,7 @@ export async function runCommand(
         break;
       }
       case 'walk.delete': {
+        // Soft delete only: the cells this walk painted stay (the shared Range never shrinks).
         const [row] = await dbx
           .update(walks)
           .set({ deletedAt: new Date(now) })
@@ -108,6 +109,22 @@ export async function runCommand(
           outcome = { ok: false, error: 'not-found' };
         } else {
           await appendEvent(dbx, hid, 'walk.deleted', auth.playerId, { walkId: cmd.walkId });
+        }
+        break;
+      }
+      case 'player.rename': {
+        const name = cmd.name.trim();
+        const [row] = await dbx
+          .update(players)
+          .set({ displayName: name })
+          .where(and(eq(players.id, auth.playerId), eq(players.householdId, hid)))
+          .returning();
+        if (!row) {
+          outcome = { ok: false, error: 'not-found' };
+        } else {
+          await appendEvent(dbx, hid, 'member.updated', auth.playerId, {
+            player: { id: row.id, displayName: row.displayName, joinedAt: row.createdAt.getTime() },
+          });
         }
         break;
       }
