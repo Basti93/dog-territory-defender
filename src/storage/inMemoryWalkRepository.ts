@@ -3,6 +3,7 @@ import { StoredWalk, WalkRepository } from './WalkRepository';
 
 export function createInMemoryWalkRepository(): WalkRepository {
   const walks = new Map<string, StoredWalk>();
+  const newestFirst = () => Array.from(walks.values()).sort((a, b) => b.startTime - a.startTime);
 
   return {
     async saveWalk(walk: Walk): Promise<void> {
@@ -11,7 +12,11 @@ export function createInMemoryWalkRepository(): WalkRepository {
     },
 
     async getWalks(): Promise<StoredWalk[]> {
-      return Array.from(walks.values()).sort((a, b) => b.startTime - a.startTime);
+      return newestFirst();
+    },
+
+    async getRecentWalks(limit: number): Promise<StoredWalk[]> {
+      return newestFirst().slice(0, Math.max(0, Math.floor(limit)));
     },
 
     async getWalk(id: string): Promise<StoredWalk | null> {

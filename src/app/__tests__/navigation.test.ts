@@ -20,11 +20,12 @@ describe('screenKey', () => {
     expect(screenKey('den')).toBeNull(); // alias of the world scene, which hosts the portrait WebView
     expect(screenKey('map')).toBeNull();
     expect(screenKey('territories')).toBeNull();
+    expect(screenKey('history')).toBeNull(); // the Album: an open postcard hosts a WebView
   });
 
   it('gives every other screen a distinct FadeSlideIn key', () => {
     const keys = ALL_SCREENS.map(screenKey).filter((k): k is string => k !== null);
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(4);
     expect(new Set(keys).size).toBe(keys.length);
   });
 });

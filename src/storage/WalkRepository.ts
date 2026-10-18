@@ -7,6 +7,8 @@ export interface StoredWalk extends Walk {
 export interface WalkRepository {
   saveWalk(walk: Walk): Promise<void>;
   getWalks(): Promise<StoredWalk[]>;
+  /** The `limit` newest walks (startTime descending). Cheap alternative to getWalks() when only the latest few are needed (the bench). */
+  getRecentWalks(limit: number): Promise<StoredWalk[]>;
   getWalk(id: string): Promise<StoredWalk | null>;
   deleteWalk(id: string): Promise<void>;
   /** Household sync: records that the server acknowledged this walk. No-op for an unknown id. */

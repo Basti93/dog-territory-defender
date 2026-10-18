@@ -56,6 +56,12 @@ export function createSqliteWalkRepository(dbName: string = DEFAULT_DB_NAME): Wa
       return rows.map(rowToStoredWalk);
     },
 
+    async getRecentWalks(limit: number): Promise<StoredWalk[]> {
+      const db = await dbPromise;
+      const rows = await db.getAllAsync<WalkRow>('SELECT * FROM walks ORDER BY startTime DESC LIMIT ?', Math.max(0, Math.floor(limit)));
+      return rows.map(rowToStoredWalk);
+    },
+
     async getWalk(id: string): Promise<StoredWalk | null> {
       const db = await dbPromise;
       const row = await db.getFirstAsync<WalkRow>('SELECT * FROM walks WHERE id = ?', id);

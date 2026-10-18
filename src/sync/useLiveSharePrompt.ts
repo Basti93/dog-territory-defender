@@ -65,3 +65,13 @@ export function useLiveSharePrompt({ settings, getStatus, isTracking, presence }
 
   return { visible: state.visible, partnerName: state.partnerName, answer };
 }
+
+/**
+ * Whether the pending question may be on screen right now. App.tsx renders the dialog at the root, over any screen,
+ * so it needs this gate: only while a walk is being tracked, and never over the first-launch flow or a homecoming
+ * (celebration or partner return). While gated off the question stays pending and comes up as soon as the gate opens
+ * during that or a later walk, so it is never lost.
+ */
+export function liveSharePromptMayShow(state: { pending: boolean; isTracking: boolean; firstLaunchDone: boolean; homecomingPlaying: boolean }): boolean {
+  return state.pending && state.isTracking && state.firstLaunchDone && !state.homecomingPlaying;
+}

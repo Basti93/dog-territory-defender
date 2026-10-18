@@ -75,7 +75,6 @@ export function useHardwareBack(): void {
 export type AppBackDecision =
   | 'default' // not ours: Android backgrounds the app
   | 'consume' // swallow the press, change nothing
-  | 'closeWalkPortrait'
   | 'doorstep'
   | 'pop';
 
@@ -85,12 +84,10 @@ export function resolveAppBack(ctx: {
   /** An own or partner Heimkehr is playing: a one-off reward moment, not skippable by back. */
   homecomingPlaying: boolean;
   screen: Screen;
-  viewingWalk: boolean;
   walkActive: boolean;
 }): AppBackDecision {
   if (!ctx.firstLaunchDone) return 'default';
   if (ctx.homecomingPlaying) return 'consume';
-  if (ctx.viewingWalk) return 'closeWalkPortrait';
   // The live map leaves to the scene; the walk itself keeps running (back never finishes or cancels it).
   if (ctx.screen === 'map' && ctx.walkActive) return 'doorstep';
   if (ctx.screen === 'doorstep') return 'default';

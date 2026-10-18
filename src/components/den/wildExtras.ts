@@ -2,7 +2,7 @@
 // Pure decisions only; YardExtras.tsx animates them. No rewards, no timers, no streaks: an extra never
 // gives anything and never counts anything. Rules: at most one extra now, at most once per day per extra,
 // never the same extra twice in one session, random pick among the eligible.
-import type { SessionKind } from '../DoorstepScreen';
+import type { SessionKind } from '../doorstepSession';
 
 export type WildExtraId =
   | 'daisy-abduction'

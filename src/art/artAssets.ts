@@ -16,9 +16,7 @@ export type ArtKey =
   | 'icon-pin'
   | 'icon-badge'
   | 'icon-home'
-  | 'icon-settings'
   | 'icon-walks'
-  | 'icon-den'
   | 'doorstep-sky'
   | 'celebration-burst'
   // Yard scene props (redesign step 1).
@@ -26,7 +24,6 @@ export type ArtKey =
   | 'fence-post-end'
   | 'gate-closed'
   | 'gate-open'
-  | 'bench'
   | 'bench-empty'
   | 'bowl'
   | 'bowl-empty'
@@ -89,9 +86,7 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'icon-pin': require('../../assets/art/icon-pin.png'),
   'icon-badge': require('../../assets/art/icon-badge.png'),
   'icon-home': require('../../assets/art/icon-home.png'),
-  'icon-settings': require('../../assets/art/icon-settings.png'),
   'icon-walks': require('../../assets/art/icon-walks.png'),
-  'icon-den': require('../../assets/art/icon-den.png'),
   'doorstep-sky': require('../../assets/art/doorstep-sky.png'),
   'celebration-burst': require('../../assets/art/celebration-burst.png'),
   'doghouse-4': require('../../assets/art/doghouse-4.png'),
@@ -117,7 +112,6 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'fence-post-end': require('../../assets/art/fence-post-end.png'),
   'gate-closed': require('../../assets/art/gate-closed.png'),
   'gate-open': require('../../assets/art/gate-open.png'),
-  'bench': require('../../assets/art/bench.png'),
   'bench-empty': require('../../assets/art/bench-empty.png'),
   'bowl': require('../../assets/art/bowl.png'),
   'bowl-empty': require('../../assets/art/bowl-empty.png'),

@@ -23,7 +23,7 @@ interface TerritoryPortraitProps {
   cells?: Cell[];
   /** The portrait tap — opens the map (dismiss only, per design.md Decision 7). */
   onPress: () => void;
-  /** Called once cells are known, with whether they're empty. The caller (DoorstepScreen/TerritoryCard) renders its own "hasn't marked the map yet" copy in that case — this component itself simply renders nothing (design.md Decision 2's "TerritoryPortrait simply isn't rendered when cells.length === 0"). */
+  /** Called once cells are known, with whether they're empty. The caller (the world scene/TerritoryCard) renders its own "hasn't marked the map yet" copy in that case — this component itself simply renders nothing (design.md Decision 2's "TerritoryPortrait simply isn't rendered when cells.length === 0"). */
   onEmptyChange?: (isEmpty: boolean) => void;
   /** Portrait height in px (default 160). The Doorstep passes a smaller value so Buddy fits above Start Walk. */
   height?: number;

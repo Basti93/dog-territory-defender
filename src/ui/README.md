@@ -22,7 +22,7 @@ Text: `<Text style={[textStyle('h1'), { color: palette.muted }]}>`. Names: displ
 - `StatTile` props `value`, `label`, `icon`, `decimals`, `format`: `<StatTile value={42} label="Walks" icon="icon-walks" />` (wrap in a row with `gap`)
 - `ListRow` props `title`, `subtitle`, `icon`, `onPress`, `hideChevron`: `<ListRow title="Park loop" subtitle="Mon, 2.1 km" icon="icon-pin" onPress={open} />`
 - `EmptyState` props `title`, `message`, children = Buddy: `<EmptyState title="No walks yet" message="Your first one will show up here."><BuddyAvatar .../></EmptyState>`
-- `ArtImage` props `art`, `size`, `width`, `height`: `<ArtImage art="icon-den" size={32} />` (contain-fit, rounded placeholder if PNG is missing)
+- `ArtImage` props `art`, `size`, `width`, `height`: `<ArtImage art="icon-treat" size={32} />` (contain-fit, rounded placeholder if PNG is missing)
 
 ## Existing primitives (unchanged)
 `PressableScale`, `AnimatedNumber`, `Confetti`, `TreatPop`, `FadeSlideIn`, `tokens`. Keep copy warm: claim, defend, protect.

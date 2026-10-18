@@ -1,6 +1,6 @@
 // Pure Buddy mood + trick logic (design.md Decision 4). No React, no timers:
 // the component owns timing, this file owns decisions.
-import type { GreetingFlavor, SessionKind } from '../DoorstepScreen';
+import type { GreetingFlavor, SessionKind } from '../doorstepSession';
 import { t } from '../../i18n';
 import type { BuddySkin } from '../../buddy/buddySkin';
 

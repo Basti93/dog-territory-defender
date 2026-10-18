@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { createInMemorySettingsRepository } from '../../storage/inMemorySettingsRepository';
-import { useLiveSharePrompt } from '../useLiveSharePrompt';
+import { liveSharePromptMayShow, useLiveSharePrompt } from '../useLiveSharePrompt';
 
 function setup(over: { joined?: boolean; partnerName?: string | null } = {}) {
   const settings = createInMemorySettingsRepository();
@@ -77,5 +77,33 @@ describe('live share prompt', () => {
     await flush();
     expect(hook.result.current.visible).toBe(true);
     expect(hook.result.current.partnerName).toBeNull();
+  });
+});
+
+describe('liveSharePromptMayShow (the root-level gate in App.tsx)', () => {
+  const open = { pending: true, isTracking: true, firstLaunchDone: true, homecomingPlaying: false };
+
+  it('shows on any screen while a walk is tracked and the question is pending', () => {
+    expect(liveSharePromptMayShow(open)).toBe(true);
+  });
+
+  it('stays hidden with nothing pending or no walk running', () => {
+    expect(liveSharePromptMayShow({ ...open, pending: false })).toBe(false);
+    expect(liveSharePromptMayShow({ ...open, isTracking: false })).toBe(false);
+  });
+
+  it('never covers the first-launch flow or a homecoming', () => {
+    expect(liveSharePromptMayShow({ ...open, firstLaunchDone: false })).toBe(false);
+    expect(liveSharePromptMayShow({ ...open, homecomingPlaying: true })).toBe(false);
+  });
+
+  it('the hook keeps the question pending while the gate is closed, so it can come up later', async () => {
+    const { render } = setup();
+    const hook = await render(true);
+    await flush();
+    expect(hook.result.current.visible).toBe(true);
+    // A homecoming starts: the gate closes, the hook still says pending, nothing is answered or stored.
+    expect(liveSharePromptMayShow({ ...open, pending: hook.result.current.visible, homecomingPlaying: true })).toBe(false);
+    expect(liveSharePromptMayShow({ ...open, pending: hook.result.current.visible })).toBe(true);
   });
 });

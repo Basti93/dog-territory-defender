@@ -1,21 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
 
-import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
-import { BuildingId, BuildingLevel, artOr, buildingArtOrBest } from '../../art/artAssets';
-import { BuddyMood } from '../buddy/buddyMood';
-import { YardBuddy, YardBuddyGeometry } from './YardBuddy';
-import { YardButterflies } from './YardButterflies';
-import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from './YardExtras';
-import type { WildExtraId } from './wildExtras';
+import { BuildingId, BuildingLevel, buildingArtOrBest } from '../../art/artAssets';
+import type { YardBuddyGeometry } from './YardBuddy';
 import { SpotId, clampX } from './yardLife';
-import { ArtImage, Badge, DecorImage, palette } from '../../ui';
-import { t } from '../../i18n';
+import { ArtImage } from '../../ui';
 
-// The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
-// Presentation only; the parent owns all state. It is the hero of the Den, so
-// the buildings are large (stage 1 160px ... stage 5 300px).
+// Yard layout maths (building sizes per art stage, positions, ground box) and the BuildingSprite, used by the
+// WorldScene. Buildings are large (stage 1 160px ... stage 5 300px).
 
 export type YardBuildingKey = 'doghouse' | 'bakery' | 'sniffGarden';
 
@@ -44,9 +37,6 @@ export const STAGE_SIZE: Record<BuildingLevel, number> = { 1: 160, 2: 210, 3: 26
 /** Yard height: ~48% of the screen, never so short that a stage-3 doghouse gets squashed. */
 export const YARD_MIN_HEIGHT = 380;
 export const YARD_MAX_HEIGHT = 440;
-export function yardHeightFor(screenHeight: number): number {
-  return Math.max(YARD_MIN_HEIGHT, Math.min(YARD_MAX_HEIGHT, Math.round(screenHeight * 0.48)));
-}
 
 const BUDDY_SIZE = 130;
 // All vertical shares below are measured from the TOP of the yard (H = yard height).
@@ -66,13 +56,6 @@ const PLACEMENT: Record<YardBuildingKey, { cx: number; baseTop: number }> = {
   doghouse: { cx: 0.5, baseTop: 0.6 },
   bakery: { cx: 0.2, baseTop: 0.9 },
   sniffGarden: { cx: 0.8, baseTop: 0.9 },
-};
-
-// i18n keys (shared with DenScreen's building cards), resolved at render time.
-const BUILDING_NAME_KEY: Record<YardBuildingKey, string> = {
-  doghouse: 'den.building.doghouse.name',
-  bakery: 'den.building.bakery.name',
-  sniffGarden: 'den.building.sniffGarden.name',
 };
 
 /** yard-ground-wide.png is a 2:1 hill (2048x1024) filling everything under its horizon edge to edge; measured horizon peaks ~26% from the image top (centre), ~39% at the sides. */
@@ -216,117 +199,6 @@ export interface YardBuilding {
   level: number;
 }
 
-interface YardSceneProps {
-  appearance: BuddyAppearance;
-  name: string;
-  buildings: YardBuilding[];
-  mood: BuddyMood;
-  /** Building Buddy sniffs toward (tapped, else cheapest affordable upgrade), or null. */
-  curiousAbout: YardBuildingKey | null;
-  /** Changes on every successful upgrade; `building` bounces and sparkles. */
-  upgrade: { building: YardBuildingKey; n: number } | null;
-  /** Tap on a building (the screen scrolls to its upgrade card). */
-  onSelectBuilding: (key: YardBuildingKey) => void;
-  height: number;
-  /** A Wild Extra to play now (rare cosmetic cameo); the scene reports when it has finished. */
-  wildExtra?: { id: WildExtraId; onDone: () => void } | null;
-  /** Overlay drawn on top of the scene (the Den header). */
-  children?: React.ReactNode;
-}
-
-export function YardScene({
-  appearance,
-  name,
-  buildings,
-  mood,
-  curiousAbout,
-  upgrade,
-  onSelectBuilding,
-  height,
-  wildExtra = null,
-  children,
-}: YardSceneProps) {
-  const { width } = useWindowDimensions();
-  const sky = artOr('doorstep-sky', null);
-  const ground = artOr('yard-ground-wide', null);
-  // Buddy looks toward the building he is curious about: bakery is on the left, the rest on the right.
-  const facing = curiousAbout === 'bakery' ? 'left' : 'right';
-  const sizes = {} as Record<YardBuildingKey, number>;
-  for (const b of buildings) sizes[b.key] = STAGE_SIZE[artTierForLevel(b.level)];
-  const layout = yardLayout(width, height, sizes);
-  const g = layout.ground;
-  const [tap, setTap] = useState<{ building: YardBuildingKey; n: number } | null>(null);
-  const gardenStage3 = (buildings.find((b) => b.key === 'sniffGarden')?.level ?? 0) >= ART_TIER_3_FROM_LEVEL;
-  const renderSprite = (b: YardBuilding) => {
-    const box = layout.sprites[b.key];
-    return (
-      <BuildingSprite
-        key={b.key}
-        building={b}
-        size={box.size}
-        left={box.left}
-        bottom={box.bottom}
-        bounceN={upgrade && upgrade.building === b.key ? upgrade.n : 0}
-      />
-    );
-  };
-  const extraEl = wildExtra ? <YardExtras id={wildExtra.id} layout={layout} width={width} height={height} onDone={wildExtra.onDone} /> : null;
-  const extraBehind = !!wildExtra && BEHIND_DOGHOUSE_EXTRAS.includes(wildExtra.id);
-  const renderHit = (b: YardBuilding) => {
-    const hit = layout.hits[b.key];
-    return (
-      <Pressable
-        key={b.key}
-        accessibilityRole="button"
-        accessibilityLabel={t('den.showUpgrade', { name: t(BUILDING_NAME_KEY[b.key]) })}
-        style={[styles.hit, { left: hit.left, bottom: hit.bottom, width: hit.width, height: hit.height }]}
-        onPress={() => {
-          setTap((prev) => ({ building: b.key, n: (prev?.n ?? 0) + 1 }));
-          onSelectBuilding(b.key);
-        }}
-      />
-    );
-  };
-  return (
-    <View style={[styles.scene, { height }]}>
-      {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
-      {ground && (
-        // Native ratio, contain (never crop the horizon); the hill bleeds past both side edges and the bottom.
-        <DecorImage source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, bottom: 0 }]} />
-      )}
-      {/* Touch layering (zIndex): sprites 0 (inert art), building hit boxes 1 (tile area only), Buddy 5, header overlay 10. */}
-      {buildings.filter((b) => b.key !== 'doghouse').map(renderSprite)}
-      <YardBuddy
-        appearance={appearance}
-        name={name}
-        mood={mood}
-        curiousFacing={facing}
-        replayKey={upgrade?.n}
-        geometry={yardWalkGeometry(layout, width)}
-        butterflies={gardenStage3}
-        tap={tap}
-      />
-      {extraBehind && extraEl}
-      {buildings.filter((b) => b.key === 'doghouse').map(renderSprite)}
-      {YARD_ORDER.map((k) => buildings.find((b) => b.key === k)).filter((b): b is YardBuilding => !!b).map(renderHit)}
-      {gardenStage3 && <YardButterflies garden={layout.sprites.sniffGarden} />}
-      {!extraBehind && extraEl}
-      {/* Level badges sit above everything so none is ever hidden. */}
-      {buildings.map((b) => {
-        const box = layout.badges[b.key];
-        return (
-          <View key={b.key} pointerEvents="none" style={[styles.badgeWrap, { left: box.left, bottom: box.bottom }]}>
-            <Badge label={`Lv ${b.level}`} tint="warm" />
-          </View>
-        );
-      })}
-      <View style={styles.overlay} pointerEvents="box-none">
-        {children}
-      </View>
-    </View>
-  );
-}
-
 export function BuildingSprite({
   building,
   size,
@@ -380,16 +252,6 @@ export function BuildingSprite({
 }
 
 const styles = StyleSheet.create({
-  scene: {
-    overflow: 'hidden',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    backgroundColor: palette.skyTint,
-  },
-  ground: { position: 'absolute' },
   sprite: { position: 'absolute', zIndex: 0 },
-  hit: { position: 'absolute', zIndex: 1 },
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
-  badgeWrap: { position: 'absolute', width: BADGE_W, height: BADGE_H, alignItems: 'center' },
   sparkle: { position: 'absolute', top: 0, right: 8, fontSize: 24 },
 });

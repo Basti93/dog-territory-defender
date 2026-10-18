@@ -136,7 +136,7 @@ describe('WorldScene', () => {
   it('the cheapest affordable building says "Upgrade possible" instead of its level', async () => {
     const { view } = await setup();
     expect(screen.getByText(t('world.upgradePossible'))).toBeOnTheScreen();
-    expect(screen.getByText('Treat Bakery · Lv 1')).toBeOnTheScreen();
+    expect(screen.getByText('Treat Bakery · Lv\u00A01')).toBeOnTheScreen();
     await unmountAndExpectNoTimers(view);
   });
 

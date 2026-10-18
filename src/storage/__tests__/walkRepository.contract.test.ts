@@ -163,4 +163,12 @@ describe('WalkRepository contract', () => {
     await repo.replaceAll([makeWalk({ id: 'only-manual', startSource: 'manual-log', locations: [] })]);
     expect(await repo.getLastWalkEnd()).toBeNull();
   });
+
+  it('getRecentWalks returns only the newest walks, newest first', async () => {
+    const repo = createInMemoryWalkRepository();
+    for (const [id, startTime] of [['a', 1000], ['c', 3000], ['b', 2000], ['d', 4000]] as const) await repo.saveWalk(makeWalk({ id, startTime }));
+    expect((await repo.getRecentWalks(3)).map((w) => w.id)).toEqual(['d', 'c', 'b']);
+    expect((await repo.getRecentWalks(10)).map((w) => w.id)).toEqual(['d', 'c', 'b', 'a']);
+    expect(await repo.getRecentWalks(0)).toEqual([]);
+  });
 });

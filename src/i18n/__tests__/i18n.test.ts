@@ -1,5 +1,5 @@
 import { tapCaption } from '../../components/buddy/buddyMood';
-import { pickGreeting } from '../../components/DoorstepScreen';
+import { pickGreeting } from '../../components/doorstepSession';
 import { currentTitleForLevel } from '../../economy/milestones';
 import { ACHIEVEMENTS } from '../../economy/personalStats';
 import de from '../de';
@@ -47,9 +47,9 @@ describe('i18n', () => {
     });
 
     it('passes extra vars', () => {
-      expect(tPlural('den.streetsByHeart', 2, { dog: 'Rex' })).toBe('Rex knows 2 streets by heart.');
+      expect(tPlural('wild.newGround.noLabel', 2, { dog: 'Rex', when: 'today' })).toBe('Rex learned 2 new streets today.');
       setLocale('de');
-      expect(tPlural('den.streetsByHeart', 1, { dog: 'Rex' })).toBe('Rex kennt 1 Straße in- und auswendig.');
+      expect(tPlural('wild.newGround.noLabel', 1, { dog: 'Rex', when: 'heute' })).toBe('Rex hat heute 1 neue Straße kennengelernt.');
     });
   });
 

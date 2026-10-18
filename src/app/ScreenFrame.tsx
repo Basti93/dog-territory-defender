@@ -7,7 +7,7 @@ import { FadeSlideIn, palette } from '../ui';
  * The cream container every screen sits in. `fadeKey` wraps the child in
  * FadeSlideIn (null = no wrapper). FadeSlideIn rule: Android WebViews inside
  * an animating-opacity parent can render blank. Never wrap a screen that hosts
- * a WebView (MapView, WalkPortraitScreen, Doorstep/Territories via
+ * a WebView (MapView, the Album, Territories via
  * TerritoryPortrait) in FadeSlideIn; see navigation.ts's screenKey.
  */
 export function ScreenFrame({

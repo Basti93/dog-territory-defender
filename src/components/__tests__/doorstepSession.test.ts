@@ -1,6 +1,6 @@
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
-import { AwayStripDeps, resolveAwayStripLines, resolveDoorstepSession } from '../DoorstepScreen';
+import { AwayStripDeps, resolveAwayStripLines, resolveDoorstepSession } from '../doorstepSession';
 import { setLocale } from '../../i18n';
 
 // These tests assert English copy; pin the locale explicitly.

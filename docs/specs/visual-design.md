@@ -63,6 +63,17 @@ The following five key screens SHALL follow this intent:
 - **WHEN** the player opens the app or returns to the map with no walk currently active
 - **THEN** the player's full Home Range (Range outline plus Bloom fill) SHALL be visible on the map, reflecting every walk ever recorded, not just the most recently finished one
 
+### Requirement: Postcards on the Bench (Album)
+Every finished tracked walk that went somewhere SHALL be a two-sided postcard, derived from the walk (nothing extra is stored); a walk that painted nothing gets none, and a manual log is a handwriting-only card (no route, no flip). The front is the walk's trail on the muted patchwork; the back is handwritten (`hand` font, ink green): weekday plus part of the day (Morgen, Vormittag, Mittag, Nachmittag, Abend, Nacht), the distance, "drei neue Straßen" only when there were new streets, one Buddy line chosen from what was special that day (new territory, first-time place, long walk, morning/evening/night, with a fallback pool), and a postmark with the territory name. The bench in the yard SHALL fan the 3 newest cards as small static paper cards (no WebView, no text, no counter); one card, Buddy's favourite (first-time place, else new territory, else longest walk), carries a small paw stamp without explanation. Tapping the bench opens the Album: a calm grid of every card, newest first, never pruned; an opened card turns over by tap or swipe, and Back turns it face-up before closing it. Cards SHALL NOT compare walks, show a total, or offer share/export, and the card stays quiet: it does not repeat the homecoming's star number as a headline.
+
+#### Scenario: Bench with many walks
+- **WHEN** the player has more than three cards
+- **THEN** only the three newest are on the bench, with no number anywhere, and tapping the bench opens the Album
+
+#### Scenario: Opening a card
+- **WHEN** the player taps a card in the Album and then taps or swipes it
+- **THEN** it turns over (a transform, never an opacity fade, because the front hosts a WebView) to the handwritten back, and at most one card WebView exists at a time
+
 ### Requirement: Delight Interaction Moments
 Where the relevant screen exists, the system SHALL implement: paw prints appearing briefly on pull-to-refresh on the map; a bounce plus a "ding" sound when a collectible is tapped and collected; a subtle red outline on overlapping rival territory (the player's own territory stays green) with a "defend" action (walk it again) available on tap; a full-screen celebration with a tail-wag animation and a ticking XP counter on dog level-up; and gentle, not aggressive, confetti at the end of a walk.
 

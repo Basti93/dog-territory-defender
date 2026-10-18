@@ -9,7 +9,7 @@ import { loadHouseholdLines, onPartnerWalks, partnerHomecoming, presenceSender, 
 import { useSync } from './src/sync/useSync';
 import { usePresenceViewer } from './src/sync/usePresenceViewer';
 import { usePartnerHomecoming } from './src/sync/usePartnerHomecoming';
-import { useLiveSharePrompt } from './src/sync/useLiveSharePrompt';
+import { liveSharePromptMayShow, useLiveSharePrompt } from './src/sync/useLiveSharePrompt';
 import { LiveSharePrompt } from './src/components/LiveSharePrompt';
 import { DiscardWalkPrompt } from './src/components/DiscardWalkPrompt';
 import { screenKey, useNavigation } from './src/app/navigation';
@@ -29,8 +29,7 @@ import { EdgeSwipeBack } from './src/app/EdgeSwipeBack';
 import { MapScreen } from './src/app/MapScreen';
 import { SomewhereWildSpot } from './src/components/SomewhereWildCard';
 import { TerritoriesScreen } from './src/components/TerritoriesScreen';
-import { WalkHistoryScreen } from './src/components/WalkHistoryScreen';
-import { WalkPortraitScreen } from './src/components/WalkPortraitScreen';
+import { AlbumScreen } from './src/components/AlbumScreen';
 import { isWeekend, queueWalkTrigger } from './src/components/den/wildExtras';
 import { WorldScene } from './src/components/world/WorldScene';
 import { partnerHomecomingWalk, type HomecomingWalk } from './src/components/world/homecomingPlan';
@@ -195,16 +194,12 @@ export default function App() {
         firstLaunchDone: firstLaunch.step === 'done',
         homecomingPlaying: !!celebration || !!partnerReturn.request,
         screen,
-        viewingWalk: !!nav.viewingWalk,
         walkActive: walkSession.isTracking,
       })
     ) {
       case 'default':
         return false;
       case 'consume':
-        return true;
-      case 'closeWalkPortrait':
-        nav.viewWalk(null);
         return true;
       case 'doorstep':
         nav.goDoorstep();
@@ -215,6 +210,23 @@ export default function App() {
   });
   useHardwareBack();
 
+  // The one-time live-share question is rendered at the root, so it shows on whichever screen the walk was started
+  // from (scene, map, ...), but never over the first-launch flow or a homecoming (see liveSharePromptMayShow).
+  const liveSharePrompt = (
+    <LiveSharePrompt
+      visible={liveSharePromptMayShow({
+        pending: liveShare.visible,
+        isTracking: walkSession.isTracking,
+        firstLaunchDone: firstLaunch.step === 'done',
+        homecomingPlaying: !!celebration || !!partnerReturn.request,
+      })}
+      partnerName={liveShare.partnerName}
+      onAnswer={liveShare.answer}
+    />
+  );
+  // Everything below renders the current screen. It is a closure (deliberately not re-indented, to keep the diff
+  // small) so the root-level prompt above can sit next to whatever screen is returned.
+  const renderScreens = (): React.ReactElement | null => {
   // Fonts + language gate: first render waits so no screen flashes the system
   // font or the wrong language.
   if (!ready) return null;
@@ -376,31 +388,17 @@ export default function App() {
         </ScreenFrame>
       );
     case 'history':
-      // The Walk Portrait renders above the history list while a walk is being
-      // viewed, with the screen left on 'history' underneath, so dismissing it
-      // returns to the still-mounted history list, not the map.
-      if (nav.viewingWalk) {
-        return swipeable(
-          'history-portrait',
-          <ScreenFrame fadeKey={null}>
-            <WalkPortraitScreen
-              walk={nav.viewingWalk}
-              walkRepository={repos.walkRepository}
-              homeRangeRepository={repos.homeRangeRepository}
-              dogName={dogName}
-              onClose={() => nav.viewWalk(null)}
-            />
-          </ScreenFrame>
-        );
-      }
+      // The Album (the bench's postcards). An open card is the Album's own overlay with its own back handling.
+      // It hosts the card's WebView, so screenKey('history') is null: never FadeSlideIn-wrapped.
       return swipeable(
         'history',
         <ScreenFrame fadeKey={fadeKey}>
-          <WalkHistoryScreen
+          <AlbumScreen
             buddyAppearance={buddyAppearance}
-            repository={repos.walkRepository}
+            walkRepository={repos.walkRepository}
             homeRangeRepository={repos.homeRangeRepository}
-            onSelectWalk={nav.viewWalk}
+            territoryRepository={repos.territoryRepository}
+            dogName={dogName}
             onWalkDeleted={(id) => void syncEngine.enqueueWalkDelete(id).catch(() => undefined)}
             onClose={() => {
               bumpRangeRefresh();
@@ -466,7 +464,6 @@ export default function App() {
       return swipeable(
         'map',
         <>
-          <LiveSharePrompt visible={liveShare.visible} partnerName={liveShare.partnerName} onAnswer={liveShare.answer} />
           {discardPrompt}
           <MapScreen
             repos={repos}
@@ -498,4 +495,11 @@ export default function App() {
         </>
       );
   }
+  };
+  return (
+    <>
+      {renderScreens()}
+      {liveSharePrompt}
+    </>
+  );
 }

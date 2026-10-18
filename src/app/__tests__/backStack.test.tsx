@@ -41,16 +41,13 @@ describe('registry precedence', () => {
 });
 
 describe('resolveAppBack', () => {
-  const base = { firstLaunchDone: true, homecomingPlaying: false, screen: 'settings' as Screen, viewingWalk: false, walkActive: false };
+  const base = { firstLaunchDone: true, homecomingPlaying: false, screen: 'settings' as Screen, walkActive: false };
 
   it('the Doorstep returns default so Android backgrounds the app', () => {
     expect(resolveAppBack({ ...base, screen: 'doorstep' })).toBe('default');
   });
   it('a screen pops', () => {
     expect(resolveAppBack(base)).toBe('pop');
-  });
-  it('the Walk Portrait closes before the screen stack', () => {
-    expect(resolveAppBack({ ...base, screen: 'history', viewingWalk: true })).toBe('closeWalkPortrait');
   });
   it('the live map with a walk running goes to the Doorstep (the walk is never touched)', () => {
     expect(resolveAppBack({ ...base, screen: 'map', walkActive: true })).toBe('doorstep');
@@ -70,7 +67,7 @@ function Harness({ onStartWalk }: { onStartWalk?: () => void }) {
   const [panel, setPanel] = React.useState(false);
   const walkActive = React.useRef(true);
   useBackAction(true, () => {
-    switch (resolveAppBack({ firstLaunchDone: true, homecomingPlaying: false, screen: nav.screen, viewingWalk: false, walkActive: walkActive.current })) {
+    switch (resolveAppBack({ firstLaunchDone: true, homecomingPlaying: false, screen: nav.screen, walkActive: walkActive.current })) {
       case 'default':
         return false;
       case 'doorstep':

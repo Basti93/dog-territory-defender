@@ -1,5 +1,4 @@
 import { useCallback, useRef, useState } from 'react';
-import { StoredWalk } from '../storage/WalkRepository';
 
 /**
  * Every full-screen destination behind the first-launch flow and the
@@ -28,13 +27,11 @@ export function screenAfterClose(screen: Screen): Screen {
  * Key for the FadeSlideIn wrapper, or null for screens that must NOT be
  * wrapped. FadeSlideIn rule: Android WebViews inside an animating-opacity
  * parent can render blank. Never wrap a screen that hosts a WebView (MapView,
- * WalkPortraitScreen, Doorstep/Territories via TerritoryPortrait) in
- * FadeSlideIn. DoorstepScreen fades only its non-portrait children itself.
+ * the Album with its open postcard, Territories via TerritoryPortrait) in
+ * FadeSlideIn. WorldScene hosts the portrait WebView itself.
  */
 export function screenKey(screen: Screen): string | null {
   switch (screen) {
-    case 'history':
-      return 'history';
     case 'debugLog':
       return 'debug-log';
     case 'settings':
@@ -47,6 +44,7 @@ export function screenKey(screen: Screen): string | null {
     case 'den':
     case 'map':
     case 'territories':
+    case 'history': // the Album: an open postcard hosts a WebView
       return null;
   }
 }
@@ -94,12 +92,6 @@ export function navBack(state: NavState): NavState | null {
 
 export interface Navigation {
   screen: Screen;
-  /**
-   * The Walk Portrait, rendered above the history list while set (the screen
-   * stays 'history' underneath, so dismissing it returns to the history list).
-   * It hosts a WebView, so it is never FadeSlideIn-wrapped.
-   */
-  viewingWalk: StoredWalk | null;
   /** Open a screen; "back" returns to the one it was opened from. */
   goTo: (screen: Screen) => void;
   /** Dismiss the current screen to its parent per screenAfterClose. */
@@ -108,7 +100,6 @@ export interface Navigation {
   back: () => boolean;
   /** Back to the Doorstep and forget the history. */
   goDoorstep: () => void;
-  viewWalk: (walk: StoredWalk | null) => void;
 }
 
 export function useNavigation(): Navigation {
@@ -117,35 +108,22 @@ export function useNavigation(): Navigation {
   const [navState, setNavState] = useState<NavState>(HOME_NAV_STATE);
   // Mirror of the state so back() can answer synchronously (the hardware back listener needs a boolean).
   const stateRef = useRef(navState);
-  const [viewingWalk, setViewingWalk] = useState<StoredWalk | null>(null);
   const apply = useCallback((next: NavState) => {
     stateRef.current = next;
     setNavState(next);
   }, []);
-  // A Walk Portrait only lives inside History: leaving History by any route
-  // (notification tap, Doorstep, close) drops the viewed walk so History never
-  // reopens on a stale Portrait.
-  const goTo = useCallback(
-    (next: Screen) => {
-      if (next !== 'history') setViewingWalk(null);
-      apply(navPush(stateRef.current, next));
-    },
-    [apply]
-  );
+  const goTo = useCallback((next: Screen) => apply(navPush(stateRef.current, next)), [apply]);
   const goDoorstep = useCallback(() => {
-    setViewingWalk(null);
     apply(HOME_NAV_STATE);
   }, [apply]);
   const close = useCallback(() => {
-    setViewingWalk(null);
     apply(navClose(stateRef.current));
   }, [apply]);
   const back = useCallback(() => {
     const next = navBack(stateRef.current);
     if (!next) return false;
-    setViewingWalk(null);
     apply(next);
     return true;
   }, [apply]);
-  return { screen: navState.screen, viewingWalk, goTo, close, back, goDoorstep, viewWalk: setViewingWalk };
+  return { screen: navState.screen, goTo, close, back, goDoorstep };
 }

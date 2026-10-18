@@ -1,5 +1,7 @@
 # walk-history Specification
 
+> Since 2026-10-18 the history view is the Album of postcards (`visual-design.md`, "Postcards on the Bench"): a grid of cards, newest first, reached from the bench in the yard. Walks that painted nothing show no card, and the per-entry "rewarded / short" status is no longer shown (nothing is framed as lesser). Deleting works from the open card ("Diese Karte wegnehmen"), with the same confirmation and the same rule that the ground stays.
+
 ## Purpose
 
 Lets the user look back at walks they've previously recorded, so a walk isn't only visible in the moment it happens.

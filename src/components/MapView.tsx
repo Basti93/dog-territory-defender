@@ -9,7 +9,7 @@ import { log } from '../utils/log';
 import { paintedCells } from '../utils/grid';
 import { material, palette, radii, shadows, textStyle, tokens } from '../ui';
 import { Cell, HomeRangeRepository } from '../storage/HomeRangeRepository';
-import { t } from '../i18n';
+import { t, useLocale } from '../i18n';
 import { framePortraitNeighbours, neighbourOverlayPayload } from '../web/neighbourOverlay';
 import { embeddedFitFrame } from '../web/embeddedFit';
 import type { NeighbourhoodActions } from '../sync/neighbourhood';
@@ -69,6 +69,7 @@ export function MapView({
   chrome,
   bottomInset = 0,
 }: MapViewProps) {
+  useLocale(); // the chalk hint and the labels below resolve through t(); re-render on a language switch
   const webViewRef = useRef<WebView>(null);
   const [isReady, setIsReady] = useState(false);
   // The persisted Home Range, fetched once per refresh trigger (not on

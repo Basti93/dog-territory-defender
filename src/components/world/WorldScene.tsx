@@ -27,7 +27,7 @@ import type { WalkRepository } from '../../storage/WalkRepository';
 import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
-import type { AwayStripLine, DoorstepSession } from '../DoorstepScreen';
+import type { AwayStripLine, DoorstepSession } from '../doorstepSession';
 import { MapView } from '../MapView';
 import { BuildingSprite, YARD_ORDER, YardBuildingKey, artTierForLevel, yardWalkGeometry } from '../den/YardScene';
 import { YardBuddy } from '../den/YardBuddy';
@@ -37,6 +37,9 @@ import { useWildExtra } from '../den/useWildExtra';
 import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
 import { bowlAtCap, chimneyAnchor } from './bakeryRules';
 import { useBackAction } from '../../app/backStack';
+import { BENCH_WALK_WINDOW } from '../../postcards/postcards';
+import { usePostcards } from '../../postcards/usePostcards';
+import { BenchPostcards } from '../postcards/BenchPostcards';
 import { BuildingPanel } from './BuildingPanel';
 import { Homecoming } from './Homecoming';
 import { NeighbourCard } from './NeighbourCard';
@@ -315,15 +318,9 @@ export function WorldScene(props: WorldSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDenPanel, den.state]);
 
-  // Bench shows its postcard stack only when there is something in the Album.
-  const [hasWalks, setHasWalks] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    walkRepository.getWalks().then((walks) => alive && setHasWalks(walks.length > 0)).catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [walkRepository]);
+  // Bench: the newest postcards fanned on it (derived from the walks, nothing stored). Reloads when a walk was finished
+  // (range refresh) and again when the homecoming ends, so the new card is there when the player looks at the bench.
+  const postcards = usePostcards({ walkRepository, territoryRepository, recentWalks: BENCH_WALK_WINDOW, refreshKey: `${homeRangeRefreshKey ?? 0}:${homecoming ? 'h' : ''}` });
 
   // Homecoming: walks closed so far (this one included) picks the choreography variant; no new storage.
   const [homecomingCount, setHomecomingCount] = useState<number | null>(null);
@@ -702,7 +699,8 @@ export function WorldScene(props: WorldSceneProps) {
 
           {/* Bottom row: bench = Album, bowl = treats, mailbox = Post. */}
           <View pointerEvents="box-none" style={[styles.bottomRow, { top: layout.yardH, height: BOTTOM_ROW_H }]}>
-            <ArtDecor art={hasWalks ? 'bench' : 'bench-empty'} style={[styles.abs, { left: 6, top: 0, width: 140, height: 140 }]} />
+            <ArtDecor art="bench-empty" style={[styles.abs, { left: 6, top: 0, width: 140, height: 140 }]} />
+            <BenchPostcards cards={postcards.cards} favouriteId={postcards.favouriteId} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('world.albumLabel')}

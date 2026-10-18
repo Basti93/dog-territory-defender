@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { useLocale } from '../../i18n';
+import { Cell } from '../../storage/HomeRangeRepository';
+import { Territory } from '../../storage/TerritoryRepository';
 import { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import { TerritoryRepository } from '../../storage/TerritoryRepository';
 import { WalkRepository } from '../../storage/WalkRepository';
@@ -26,6 +29,35 @@ export interface ViertelChromeData {
 
 const INITIAL: ViertelChromeData = { loaded: false, territory: null, statsParts: [], notes: [], wildSpot: null, fallbackCenter: null, rangeEmpty: false };
 
+/** What one data load read: language-free. The texts (stats parts, notes, territory name) are derived from it per locale. */
+interface LoadedViertel {
+  now: number;
+  cells: Cell[];
+  closedWalks: number;
+  territories: Territory[];
+  lastWalkEnd: LatLon | null;
+  wildSpot: LatLon | null;
+  fallbackCenter: LatLon | null;
+}
+
+/** Pure: builds every text from the loaded data in the current language (t() reads the active locale). */
+function deriveChrome(loaded: LoadedViertel): ViertelChromeData {
+  const { now, cells, closedWalks, territories, lastWalkEnd, wildSpot, fallbackCenter } = loaded;
+  const rangeEmpty = cells.length === 0;
+  const notes = pickViertelNotes({ cells, wildSpot, now });
+  if (rangeEmpty && fallbackCenter) notes.push(emptyRangeNote(fallbackCenter));
+  return {
+    loaded: true,
+    territory: territoryHeading({ territories, cells, lastWalkEnd, now }),
+    // corners: the named-corner data model does not exist yet (SHOW_CORNERS is scaffolding), so that part stays hidden.
+    statsParts: statsSignParts({ walks: closedWalks, streets: streetsKnown(cells.length), corners: 0 }),
+    notes,
+    wildSpot,
+    fallbackCenter,
+    rangeEmpty,
+  };
+}
+
 interface Options {
   homeRangeRepository: HomeRangeRepository;
   walkRepository: WalkRepository;
@@ -40,10 +72,12 @@ interface Options {
 /**
  * Everything the Viertel signs and notes need, loaded once per mount and per `refreshKey`: the household's own numbers
  * (closed walks, streets known from the Range size, named corners = none yet), the territory heading, the notes and the
- * centre for an empty Range. No timers; nothing is posted to a WebView from here.
+ * centre for an empty Range. No timers; nothing is posted to a WebView from here. The data is read once, the texts are
+ * rebuilt when the language switches (new `notes` array = MapView posts SHOW_NOTES again), without reading anything again.
  */
 export function useViertelChrome({ homeRangeRepository, walkRepository, territoryRepository, dogName, refreshKey, wildSpot: givenWildSpot }: Options): ViertelChromeData {
-  const [data, setData] = useState<ViertelChromeData>(INITIAL);
+  const [loaded, setLoaded] = useState<LoadedViertel | null>(null);
+  const locale = useLocale();
   const wildKey = givenWildSpot === undefined ? 'own' : givenWildSpot ? `${givenWildSpot.latitude},${givenWildSpot.longitude}` : 'none';
 
   useEffect(() => {
@@ -73,18 +107,7 @@ export function useViertelChrome({ homeRangeRepository, walkRepository, territor
         fallbackCenter = lastWalkEnd ?? (await lastKnownCoords());
       }
       if (!alive) return;
-      const notes = pickViertelNotes({ cells, wildSpot: wild, now });
-      if (rangeEmpty && fallbackCenter) notes.push(emptyRangeNote(fallbackCenter));
-      setData({
-        loaded: true,
-        territory: territoryHeading({ territories, cells, lastWalkEnd, now }),
-        // corners: the named-corner data model does not exist yet (SHOW_CORNERS is scaffolding), so that part stays hidden.
-        statsParts: statsSignParts({ walks: closedWalks, streets: streetsKnown(cells.length), corners: 0 }),
-        notes,
-        wildSpot: wild,
-        fallbackCenter,
-        rangeEmpty,
-      });
+      setLoaded({ now, cells, closedWalks, territories, lastWalkEnd, wildSpot: wild, fallbackCenter });
     })().catch(() => undefined);
     return () => {
       alive = false;
@@ -93,5 +116,7 @@ export function useViertelChrome({ homeRangeRepository, walkRepository, territor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeRangeRepository, walkRepository, territoryRepository, dogName, refreshKey, wildKey]);
 
-  return data;
+  // `locale` is a dependency on purpose: deriveChrome calls t(), which reads the active language.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => (loaded ? deriveChrome(loaded) : INITIAL), [loaded, locale]);
 }

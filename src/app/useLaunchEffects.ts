@@ -7,7 +7,7 @@ import {
   pickGreeting,
   resolveAwayStripLines,
   resolveDoorstepSession,
-} from '../components/DoorstepScreen';
+} from '../components/doorstepSession';
 import { BuddyMood, resolveBuddyMood } from '../components/buddy/buddyMood';
 import { applyPassiveAccrual, dogDisplayName, reconcileBuddyLevelCatchUp } from '../economy/denEconomy';
 import { territoryMass, territoryRate } from '../economy/territoryEconomy';
@@ -57,7 +57,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
   const { denEconomyRepository, homeRangeRepository, personalStatsRepository, notificationRepository, settingsRepository, walkRepository, territoryRepository } =
     repos;
 
-  // Passed down to DoorstepScreen as already-computed values — re-deriving
+  // Passed down to the WorldScene as already-computed values — re-deriving
   // either after the launch routine has already advanced lastTickAt/consumed
   // the achievement queue would silently produce ~0 or an empty queue (see
   // docs/decisions/home-dashboard/design.md Decision 7).
@@ -65,7 +65,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
   const [pendingDenAchievements, setPendingDenAchievements] = useState<AchievementId[]>([]);
   // The Doorstep's session state, greeting copy, and away-strip lines —
   // resolved exactly once per app launch (home-dashboard design.md Decision
-  // 10) and passed to DoorstepScreen as props. The Doorstep is remountable, so
+  // 10) and passed to the WorldScene as props. The Doorstep is remountable, so
   // it must not re-derive these on its own mount or it would repeat-fire the
   // same "+N in the bowl" line on every return trip.
   const [doorstepSession, setDoorstepSession] = useState<DoorstepSession | null>(null);

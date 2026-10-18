@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { t } from '../../i18n';
+import { t, useLocale } from '../../i18n';
 import { WoodSign, material, textStyle } from '../../ui';
 import { TERRITORY_TITLE_KEYS } from '../TerritoryCard';
 import type { ViertelChromeData } from './useViertelChrome';
@@ -20,6 +20,7 @@ interface ViertelSignsProps {
  * Overlay only: the container lets every touch through except the signs themselves. Hidden until the data has loaded.
  */
 export function ViertelSigns({ chrome, onOpenTerritories, bottomInset = 0 }: ViertelSignsProps) {
+  useLocale(); // re-render on a language switch: the labels and the character title resolve through t() right here
   if (!chrome.loaded) return null;
   const { territory, statsParts } = chrome;
   return (

@@ -1,8 +1,31 @@
 import { setLocale, t } from '../../i18n';
-import { pickCelebrationHeadline } from '../CelebrationScreen';
+import { HomecomingWalk, pickClosingLine, resetClosingLineMemory } from '../world/homecomingPlan';
 import { WEIRD_ONE_IN, pickWeirdKey, seedHash, weirdLevelUpLine, weirdUpgradeLine } from '../weirdCopy';
 
 beforeAll(() => setLocale('en'));
+
+const homecomingWalk = (walkId: string): HomecomingWalk => ({
+  walkId,
+  rewards: {
+    cellsPainted: 40,
+    hasTerritory: true,
+    treatsEarned: 20,
+    tease: null,
+    unlockedAchievements: [],
+    leveledUpTo: null,
+    oldTreatsPerWalk: null,
+    newTreatsPerWalk: null,
+    cliffhangerTitle: null,
+    newGroundCellCount: 0,
+    bloomMultiplier: 1,
+  },
+  newTerritoryName: null,
+  mergedTerritoryNames: null,
+  territoryName: null,
+  distanceMeters: 1200,
+  walkTime: Date.parse('2026-10-13T18:00:00'),
+  manual: false,
+});
 
 describe('weird copy pickers', () => {
   it('pickWeirdKey fires for exactly 1 hash in WEIRD_ONE_IN', () => {
@@ -16,24 +39,20 @@ describe('weird copy pickers', () => {
     expect(pickWeirdKey(0, [])).toBeNull();
   });
 
-  it('the headline is deterministic per walk id and about 1 walk in 4 is weird, with {dog} filled in', () => {
+  it('the homecoming closing line is a weird headline for exactly the seeds pickWeirdKey picks, with {dog} filled in', () => {
     const weirdTexts = [t('weird.headline.floating', { dog: 'Rex' }), t('weird.headline.moon')];
     let weird = 0;
-    const ids = Array.from({ length: 400 }, (_, i) => `walk-${i}`);
-    for (const id of ids) {
-      const a = pickCelebrationHeadline(id, 'Rex');
-      expect(pickCelebrationHeadline(id, 'Rex')).toBe(a);
-      expect(a).not.toMatch(/[{}]/);
-      if (weirdTexts.includes(a)) weird++;
+    for (let i = 0; i < 400; i++) {
+      const walkId = `walk-${i}`;
+      resetClosingLineMemory();
+      const line = pickClosingLine(homecomingWalk(walkId), 'Rex');
+      expect(line).not.toMatch(/[{}]/);
+      const isWeirdSeed = seedHash(walkId) % WEIRD_ONE_IN === 0;
+      expect(weirdTexts.includes(line)).toBe(isWeirdSeed);
+      if (isWeirdSeed) weird++;
     }
-    expect(weird / ids.length).toBeGreaterThan(0.15);
-    expect(weird / ids.length).toBeLessThan(0.35);
-  });
-
-  it('normal headlines keep their old mapping (hash % 3)', () => {
-    // 'a' -> hash 97 -> 97 % 4 !== 0 so not weird; 97 % 3 === 1 -> headline.2
-    expect(seedHash('a')).toBe(97);
-    expect(pickCelebrationHeadline('a', 'Rex')).toBe('What a walk! Rex is thrilled.');
+    expect(weird / 400).toBeGreaterThan(0.15);
+    expect(weird / 400).toBeLessThan(0.35);
   });
 
   it('level-up and upgrade lines are rare, seeded, and come from the weird pools', () => {

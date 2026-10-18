@@ -35,7 +35,7 @@ export function startOfLocalDay(ms: number): number {
  * (docs/decisions/home-dashboard/design.md Decision 3) since this file is
  * already the de facto calendar-utilities module in this codebase (see
  * calendarDayKey's own doc comment). Used by SomewhereWildCard's dayPhrase
- * and DoorstepScreen.tsx's session-state resolution — the two places this
+ * and doorstepSession.ts's session-state resolution — the two places this
  * codebase currently need to answer "how many calendar days back was this."
  */
 export function calendarDayGap(earlier: number, later: number): number {
