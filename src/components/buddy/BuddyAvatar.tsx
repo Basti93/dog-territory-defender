@@ -35,6 +35,9 @@ export interface BuddyAvatarProps {
   excitedSettleMs?: number | null;
   /** Bump to restart the current mood's animation (e.g. a second upgrade while still excited). */
   replayKey?: number;
+  /** Hop-walk: play `walkHops` quick stride hops of `walkHopMs` each (the parent slides Buddy sideways). Set both, or neither. */
+  walkHops?: number;
+  walkHopMs?: number;
   /** Injectable random source for blink/flick/trick timing. */
   rng?: () => number;
   /** Art provider. Default: pre-rendered image skin (vector parts fill in for missing images). */
@@ -66,6 +69,8 @@ export function BuddyAvatar({
   showCaption = false,
   excitedSettleMs = 3000,
   replayKey,
+  walkHops,
+  walkHopMs,
   rng: rngProp = Math.random,
   skin: skinProp,
 }: BuddyAvatarProps) {
@@ -307,6 +312,24 @@ export function BuddyAvatar({
       run(Animated.sequence([timing(ear, -16, 170), timing(ear, 8, 170), timing(ear, 0, 190)]));
     };
 
+    // Stride hop for walking: timed so the whole hop is exactly `ms` (no spring), small and quick.
+    const stride = (ms: number) =>
+      Animated.sequence([
+        timing(v.squash, 0.92, ms * 0.15, Easing.out(Easing.quad)),
+        Animated.parallel([
+          Animated.timing(v.hopY, { toValue: -size * 0.06, duration: ms * 0.3, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          timing(v.squash, 1.05, ms * 0.3, Easing.out(Easing.quad)),
+        ]),
+        Animated.parallel([
+          Animated.timing(v.hopY, { toValue: 0, duration: ms * 0.3, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+          timing(v.squash, 0.97, ms * 0.3, Easing.in(Easing.quad)),
+        ]),
+        timing(v.squash, 1, ms * 0.25),
+      ]);
+    if (walkHops && walkHopMs) {
+      run(Animated.sequence(Array.from({ length: walkHops }, () => stride(walkHopMs))));
+    }
+
     if (m === 'idle' || m === 'curious') {
       run(wag(m === 'idle' ? 14 : 10, m === 'idle' ? 900 : 1200));
       chain(blink, 3000, 6000);
@@ -409,7 +432,7 @@ export function BuddyAvatar({
       timers.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveMood, tapTick, size, excitedSettleMs, skin, replayKey]);
+  }, [effectiveMood, tapTick, size, excitedSettleMs, skin, replayKey, walkHops, walkHopMs]);
 
   // ----- tap -----
   const handlePress = () => {

@@ -1,11 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
 import { BuildingId, BuildingLevel, artOr, buildingArt } from '../../art/artAssets';
-import { BuddyAvatar } from '../buddy';
 import { BuddyMood } from '../buddy/buddyMood';
+import { YardBuddy, YardBuddyGeometry } from './YardBuddy';
+import { YardButterflies } from './YardButterflies';
+import { SpotId, clampX } from './yardLife';
 import { ArtImage, Badge, PressableScale, palette } from '../../ui';
 import { t } from '../../i18n';
 
@@ -143,6 +145,29 @@ export function yardLayout(width: number, height: number, sizes: Record<YardBuil
   return { sprites, buddy, badges, ground: groundBox(width, height) };
 }
 
+/** Buddy stands this far to the inside of a side building's tile centre (clear of its level badge as far as the screen allows). */
+export const SPOT_SIDE_OFFSET = 70;
+/** Buddy's centre stays this far from the screen edges: his body stays on screen, over grass (the hill bleeds past both edges at the front line). */
+export const WALK_EDGE_MARGIN = 52;
+
+/** Pure: where Buddy may stand. Y never changes; he stays on the front ground line, below every tile base. */
+export function yardWalkGeometry(layout: YardLayout, width: number): YardBuddyGeometry {
+  const range = { min: WALK_EDGE_MARGIN, max: width - WALK_EDGE_MARGIN };
+  const centers = {
+    doghouse: layout.sprites.doghouse.left + layout.sprites.doghouse.size / 2,
+    bakery: layout.sprites.bakery.left + layout.sprites.bakery.size / 2,
+    sniffGarden: layout.sprites.sniffGarden.left + layout.sprites.sniffGarden.size / 2,
+  };
+  const baseCx = layout.buddy.left + layout.buddy.size / 2;
+  const spots: Record<SpotId, number> = {
+    front: clampX(baseCx, range),
+    doghouse: clampX(centers.doghouse, range),
+    bakery: clampX(centers.bakery - SPOT_SIDE_OFFSET, range),
+    sniffGarden: clampX(centers.sniffGarden + SPOT_SIDE_OFFSET, range),
+  };
+  return { baseCx, bottom: layout.buddy.bottom, size: layout.buddy.size, spots, centers, range };
+}
+
 interface YardBuilding {
   key: YardBuildingKey;
   level: number;
@@ -184,6 +209,8 @@ export function YardScene({
   for (const b of buildings) sizes[b.key] = STAGE_SIZE[artTierForLevel(b.level)];
   const layout = yardLayout(width, height, sizes);
   const g = layout.ground;
+  const [tap, setTap] = useState<{ building: YardBuildingKey; n: number } | null>(null);
+  const gardenStage3 = (buildings.find((b) => b.key === 'sniffGarden')?.level ?? 0) >= ART_TIER_3_FROM_LEVEL;
   const renderSprite = (b: YardBuilding) => {
     const box = layout.sprites[b.key];
     return (
@@ -194,7 +221,10 @@ export function YardScene({
         left={box.left}
         bottom={box.bottom}
         bounceN={upgrade && upgrade.building === b.key ? upgrade.n : 0}
-        onPress={() => onSelectBuilding(b.key)}
+        onPress={() => {
+          setTap((prev) => ({ building: b.key, n: (prev?.n ?? 0) + 1 }));
+          onSelectBuilding(b.key);
+        }}
       />
     );
   };
@@ -207,18 +237,18 @@ export function YardScene({
       )}
       {/* Draw order: side buildings, Buddy, then the doghouse last so it stays tappable. */}
       {buildings.filter((b) => b.key !== 'doghouse').map(renderSprite)}
-      <View style={[styles.buddy, { left: layout.buddy.left, bottom: layout.buddy.bottom }]} pointerEvents="box-none">
-        <BuddyAvatar
-          appearance={appearance}
-          size={BUDDY_SIZE}
-          replayKey={upgrade?.n}
-          facing={facing}
-          mood={mood}
-          name={name}
-          excitedSettleMs={null}
-        />
-      </View>
+      <YardBuddy
+        appearance={appearance}
+        name={name}
+        mood={mood}
+        curiousFacing={facing}
+        replayKey={upgrade?.n}
+        geometry={yardWalkGeometry(layout, width)}
+        butterflies={gardenStage3}
+        tap={tap}
+      />
       {buildings.filter((b) => b.key === 'doghouse').map(renderSprite)}
+      {gardenStage3 && <YardButterflies garden={layout.sprites.sniffGarden} />}
       {/* Level badges sit above everything so none is ever hidden. */}
       {buildings.map((b) => {
         const box = layout.badges[b.key];
@@ -299,6 +329,5 @@ const styles = StyleSheet.create({
   ground: { position: 'absolute' },
   sprite: { position: 'absolute' },
   badgeWrap: { position: 'absolute', width: BADGE_W, height: BADGE_H, alignItems: 'center' },
-  buddy: { position: 'absolute' },
   sparkle: { position: 'absolute', top: 0, right: 8, fontSize: 24 },
 });

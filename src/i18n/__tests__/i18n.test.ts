@@ -162,10 +162,10 @@ describe('German copy pools', () => {
 
   it('pickers return German text without leftover placeholders', () => {
     setLocale('de');
-    expect(tapCaption(2, 'Rex')).toBe('Rex liebt das.');
+    expect(tapCaption(2, 'Rex')).toBe('Rex liebt das!');
     expect(pickGreeting('long-absence', 'Rex')).toBe('Rex hat die Stellung gehalten.');
     expect(pickGreeting('first-open', null)).not.toMatch(/[{}]/);
-    expect(currentTitleForLevel(2)).toBe('Türschwellen-Schnüffler');
+    expect(currentTitleForLevel(2)).toBe('Haustür-Schnüffler');
     expect(ACHIEVEMENTS['first-steps'].name).toBe('Erste Schritte');
   });
 });

@@ -1,4 +1,4 @@
-import { YARD_MIN_HEIGHT, yardLayout } from '../den/YardScene';
+import { YARD_MIN_HEIGHT, yardLayout, yardWalkGeometry } from '../den/YardScene';
 
 const STAGE_3 = { doghouse: 260, bakery: 260, sniffGarden: 260 };
 
@@ -42,6 +42,21 @@ describe('yardLayout (stage 3, min yard height)', () => {
         const overlapsHeadHorizontally = badge.left < L.buddy.left + L.buddy.size && badge.left + 72 > L.buddy.left;
         expect(overlapsHeadVertically && overlapsHeadHorizontally).toBe(false);
       }
+    });
+
+    it(`keeps every wander spot on the grass, apart from the others, below the doghouse base at width ${width}`, () => {
+      const G = yardWalkGeometry(L, width);
+      const xs = Object.values(G.spots);
+      for (const x of xs) {
+        expect(x).toBeGreaterThanOrEqual(G.range.min);
+        expect(x).toBeLessThanOrEqual(G.range.max);
+      }
+      xs.forEach((a, i) => xs.slice(i + 1).forEach((b) => expect(Math.abs(a - b)).toBeGreaterThanOrEqual(25)));
+      // Buddy never changes y: his head stays below the doghouse tile base, so he never covers an upper half.
+      const doghouseBaseFromTop = YARD_MIN_HEIGHT - L.sprites.doghouse.bottom - 0.14 * L.sprites.doghouse.size;
+      const buddyTopFromTop = YARD_MIN_HEIGHT - L.buddy.bottom - L.buddy.size;
+      expect(buddyTopFromTop + 0.3 * L.buddy.size).toBeGreaterThan(doghouseBaseFromTop - 0.001);
+      expect(G.spots.front).toBeCloseTo(G.baseCx, 5);
     });
   }
 });

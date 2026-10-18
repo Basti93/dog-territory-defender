@@ -15,6 +15,7 @@ const en: Record<string, string> = {
   "common.done": "Done",
   "dog.fallback.capitalized": "Your dog",
   "dog.fallback.lowercase": "your pup",
+  "dog.fallback.dative": "your dog",
 
   // ---- notifications
   "notification.walkReminder.body": "There's a little more territory out there, whenever you two are ready for it.",
