@@ -241,6 +241,9 @@ interface DoorstepScreenProps {
   territoryIncomeRate?: number;
   onAcknowledgePendingAchievements?: () => void;
   onStartWalk: () => void;
+  /** OTA update card (below Start Walk): shown only when set; never while a walk is active. */
+  updateCard?: { onApply: () => void; onLater: () => void };
+  walkActive?: boolean;
   onOpenMap: () => void;
   onOpenDen: () => void;
   /** Doorstep direct-access row (design.md Decision 12) — View Past Walks and Stats & Badges only; the Den already has its own entry point (the tease footer below). */
@@ -277,6 +280,8 @@ export function DoorstepScreen({
   territoryIncomeRate,
   onAcknowledgePendingAchievements,
   onStartWalk,
+  updateCard,
+  walkActive = false,
   onOpenMap,
   onOpenDen,
   onOpenHistory,
@@ -414,6 +419,16 @@ export function DoorstepScreen({
             {t('dog.bringsHome', { dog, count: formatNumber(buddyTreatsPerWalk(state.level, state.sniffGardenLevel)) })}
           </Text>
         </FadeSlideIn>
+
+        {updateCard && !walkActive && (
+          <Card tint="meadow" style={styles.updateCard}>
+            <Text style={[textStyle('small'), styles.centered]}>{t('update.ready')}</Text>
+            <View style={styles.updateButtons}>
+              <Button label={t('update.later')} variant="ghost" onPress={updateCard.onLater} style={styles.updateButton} />
+              <Button label={t('update.now')} onPress={updateCard.onApply} style={styles.updateButton} />
+            </View>
+          </Card>
+        )}
 
         {rangeEmpty ? (
           <Card tint="meadow" style={styles.emptyPortrait}>
@@ -647,6 +662,9 @@ function AwayStripLineView({ line, footerTreatsRef }: { line: AwayStripLine; foo
 const PORTRAIT_HEIGHT = 140;
 
 const styles = StyleSheet.create({
+  updateCard: { gap: spacing.md },
+  updateButtons: { flexDirection: 'row', gap: spacing.sm },
+  updateButton: { flex: 1, paddingHorizontal: spacing.md },
   // Full-bleed: the scene spans edge to edge, the body below re-adds padding.
   content: { paddingHorizontal: 0, paddingTop: 0 },
   // FadeSlideIn wrappers fill their parent by default; here they only wrap

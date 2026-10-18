@@ -15,6 +15,7 @@ import { useFirstLaunch } from './src/app/useFirstLaunch';
 import { useLaunchEffects } from './src/app/useLaunchEffects';
 import { useManualWalkLog } from './src/app/useManualWalkLog';
 import { useAppReady } from './src/app/useAppReady';
+import { useOtaUpdates } from './src/app/useOtaUpdates';
 import { LoadingView, ScreenFrame } from './src/app/ScreenFrame';
 import { MapScreen } from './src/app/MapScreen';
 import { SomewhereWildSpot } from './src/components/SomewhereWildCard';
@@ -46,6 +47,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // quota, first launch + location permission, then the once-per-launch routine).
 export default function App() {
   const { ready, localePreference, changeLocalePreference } = useAppReady(repos);
+  const ota = useOtaUpdates();
   const nav = useNavigation();
   const { screen } = nav;
   const [homeRangeRefreshKey, setHomeRangeRefreshKey] = useState(0);
@@ -244,6 +246,8 @@ export default function App() {
               nav.goTo('map');
               walkSession.startWalk();
             }}
+            updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
+            walkActive={walkSession.isTracking}
             onOpenMap={() => nav.goTo('map')}
             onOpenDen={() => nav.goTo('den')}
             onOpenHistory={() => nav.goTo('history')}
@@ -334,6 +338,7 @@ export default function App() {
             buddyAppearance={buddyAppearance}
             walkActive={walkSession.isTracking}
             syncEngine={syncEngine}
+            about={{ versionLabel: ota.currentVersionLabel, onCheck: ota.checkNow }}
             onSaveAppearance={saveAppearance}
             localePreference={localePreference}
             onChangeLocalePreference={changeLocalePreference}

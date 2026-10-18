@@ -16,7 +16,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-async function setup(sessionKind: 'fresh-open' | 'same-day-reopen' = 'fresh-open') {
+async function setup(sessionKind: 'fresh-open' | 'same-day-reopen' = 'fresh-open', extra: { updateCard?: { onApply: () => void; onLater: () => void }; walkActive?: boolean } = {}) {
   const denEconomyRepository = createInMemoryDenEconomyRepository();
   const callbacks = {
     onStartWalk: jest.fn(),
@@ -43,12 +43,32 @@ async function setup(sessionKind: 'fresh-open' | 'same-day-reopen' = 'fresh-open
       walkRepository={createInMemoryWalkRepository()}
       buddyAppearance={defaultBuddyAppearance()}
       {...callbacks}
+      {...extra}
     />
   );
   await screen.findByRole('button', { name: t('doorstep.startWalk') }); // den state loaded
   await flush();
   return { view, ...callbacks };
 }
+
+describe('DoorstepScreen update card', () => {
+  it('offers Jetzt/Später and calls the matching handler', async () => {
+    const updateCard = { onApply: jest.fn(), onLater: jest.fn() };
+    const { view } = await setup('fresh-open', { updateCard });
+    expect(screen.getByText(t('update.ready'))).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: t('update.now') }));
+    expect(updateCard.onApply).toHaveBeenCalledTimes(1);
+    await fireEvent.press(screen.getByRole('button', { name: t('update.later') }));
+    expect(updateCard.onLater).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('hides the card during an active walk', async () => {
+    const { view } = await setup('fresh-open', { updateCard: { onApply: jest.fn(), onLater: jest.fn() }, walkActive: true });
+    expect(screen.queryByText(t('update.ready'))).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+});
 
 describe('DoorstepScreen', () => {
   it('shows an enabled Start Walk button that starts the walk', async () => {

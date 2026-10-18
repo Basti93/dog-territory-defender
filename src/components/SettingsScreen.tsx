@@ -41,6 +41,8 @@ interface SettingsScreenProps {
   onChangeLocalePreference: (pref: LocalePreference) => void | Promise<void>;
   /** Household sync (multiplayer-sync). Omitted = no Household card and Restore stays as before. */
   syncEngine?: SyncEngine;
+  /** OTA update info + manual check (useOtaUpdates). Omitted = no About card. */
+  about?: { versionLabel: string; onCheck: () => Promise<'current' | 'ready' | 'unavailable'> };
 }
 
 function formatReminderTime(hour: number, minute: number): string {
@@ -70,7 +72,9 @@ export function SettingsScreen({
   localePreference,
   onChangeLocalePreference,
   syncEngine,
+  about,
 }: SettingsScreenProps) {
+  const [aboutStatus, setAboutStatus] = useState<string | null>(null);
   useLocale(); // re-render when the language switches
   const syncStatus = useSyncStatus(syncEngine);
   // Restoring an old file over live synced state would fork the household's history.
@@ -340,6 +344,22 @@ export function SettingsScreen({
         {syncStatus?.joined && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('household.restoreOff')}</Text>}
         {walkActive && <Text style={[textStyle('small'), styles.rowSubtitle]}>{t('settings.backup.walkActive')}</Text>}
       </Card>
+
+      {about && (
+        <Card style={styles.languageCard}>
+          <Text style={textStyle('h2')}>{t('settings.about.title')}</Text>
+          <Text style={[textStyle('small'), styles.rowSubtitle]}>{about.versionLabel}</Text>
+          <Button
+            label={t('settings.about.check')}
+            variant="ghost"
+            onPress={async () => {
+              const result = await about.onCheck();
+              setAboutStatus(t(`settings.about.${result}`));
+            }}
+          />
+          {aboutStatus && <Text style={[textStyle('small'), styles.rowSubtitle]}>{aboutStatus}</Text>}
+        </Card>
+      )}
 
       {Platform.OS === 'ios' && iosPicker && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setIosPicker(null)}>
