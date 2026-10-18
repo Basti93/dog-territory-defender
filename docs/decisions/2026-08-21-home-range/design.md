@@ -5,7 +5,7 @@
 Every formula here was validated by running **`home-range-prototype.mjs`** in this folder (standalone Node, nothing imported from or into `src/`). **Every worked number quoted below is that script's real output**, reproducible with:
 
 ```
-node openspec/changes/home-range/home-range-prototype.mjs
+node docs/decisions/home-range/home-range-prototype.mjs
 ```
 
 **What is already implemented**, since every number below is anchored to shipped code rather than to specs' prose:
@@ -15,7 +15,7 @@ node openspec/changes/home-range/home-range-prototype.mjs
 - `src/economy/formulas.ts` — `buddyTreatsPerWalk(L, sg) = round(buddyPayout(L) · (1 + sniffGardenPct(sg)/100))`, `buddyPayout(L) = round(50 · 1.055^(L−1))`, `sniffGardenPct(100) = 8.00 %`.
 - `src/economy/walkRewards.ts` — `DAILY_REWARD_MULTIPLIERS = [1, 1, 1, 0.5, 0.25, 0.1]` applied to the treat payout and the XP flat base on both the tracked-close and manual-log paths.
 - `src/economy/formulas.ts` — `xpAwardForWalk = 20·baseMult + 15·km + 5·min(area, 20 000)/1000`. **The area term reads the polygon this change deletes.**
-- `openspec/changes/archive/2026-08-21-virtual-dog-companion/design.md` — the invariant this design must not break: *no bonus percentage may ever be a function of Buddy's Level or of a player's treat balance*, and the +30 pp power ledger (Sniff Garden 8, Training Yard 6, Watch Tower 6, Spring Garden 3, Trophy Hall 3, Pack 4, Level 0).
+- `docs/decisions/2026-08-21-virtual-dog-companion/design.md` — the invariant this design must not break: *no bonus percentage may ever be a function of Buddy's Level or of a player's treat balance*, and the +30 pp power ledger (Sniff Garden 8, Training Yard 6, Watch Tower 6, Spring Garden 3, Trophy Hall 3, Pack 4, Level 0).
 
 ## Goals / Non-Goals
 

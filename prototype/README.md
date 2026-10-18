@@ -41,7 +41,7 @@ A live-editing **Tweaks Panel** appears in the bottom-right. Use it to change th
 
 ## Backlog ideas (not built yet)
 
-See the `BACKLOG IDEAS (not built yet)` comment block at the top of `Dog Territory Defender.html` and `openspec/specs/game-backlog/spec.md`. Pull them by owner feedback, not in a fixed order:
+See the `BACKLOG IDEAS (not built yet)` comment block at the top of `Dog Territory Defender.html` and `docs/specs/game-backlog.md`. Pull them by owner feedback, not in a fixed order:
 
 - **Repetition loop:** scent strength visualization, seasonal map variations (summer/autumn/winter), evening recap notifications
 - **Social layer:** local leaderboard (zip code), async multiplayer events, rolling 7-day scoring, soft territory overlap

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the Home Range: a persistent, per-player spatial grid replacing the one-polygon-per-walk territory model, tracked as two rendering layers (the Range, a permanent monotonic outline of everywhere the player has ever walked, and the Bloom, a colour-only freshness fill) plus a `visits` ghost-trail brightness channel. Numeric thresholds here are load-bearing — see `openspec/changes/archive/` for the introducing change's `design.md` before changing any of them.
+Defines the Home Range: a persistent, per-player spatial grid replacing the one-polygon-per-walk territory model, tracked as two rendering layers (the Range, a permanent monotonic outline of everywhere the player has ever walked, and the Bloom, a colour-only freshness fill) plus a `visits` ghost-trail brightness channel. Numeric thresholds here are load-bearing — see `docs/decisions/` for the introducing change's `design.md` before changing any of them.
 
 ## Requirements
 

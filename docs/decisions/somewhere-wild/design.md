@@ -45,7 +45,7 @@ WILD_THRESHOLD = clamp(
              // the feature alive but weaker (~13 days stale, multiplier 1.285). At K=1.0 unclamped math
              // wants 0.45 (~2.9 days stale — nearly always true, defeating the card's "mostly renders
              // nothing" intent) — 0.60 clamp holds a "most of a week untouched" feel (multiplier 1.60).
-             // Validated by game-economist pass, see openspec/changes/somewhere-wild/ decision log.
+             // Validated by game-economist pass, see docs/decisions/somewhere-wild/ decision log.
 ```
 
 **Correction (verified against `src/economy/balanceConfig.ts` post-archive):** the constants landed as `BALANCE.freshGround.k` and `BALANCE.freshGround.displayThresholdMultiplier`, not the `BALANCE.homeRange.bloomK`/`FRESH_GROUND_UI_THRESHOLD` names this Decision originally guessed at while `home-range-rewards` was still in flight. Both live in `src/economy/balanceConfig.ts`'s `freshGround` block, not a `homeRange` block. Every reference below and in `tasks.md`/`proposal.md` has been updated to the real names.

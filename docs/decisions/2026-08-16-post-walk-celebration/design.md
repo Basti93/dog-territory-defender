@@ -10,7 +10,7 @@
 - Confetti that's actually gentle (few pieces, brief, tokens' colors) — matches the tone rules, not generic app-store-review-request-style confetti.
 
 **Non-Goals:**
-- No dog XP/level display — doesn't exist yet, deferred per `visual-design`'s Phase-Scoped Visual Delivery (see proposal.md). **Superseded:** this deferral was explicitly reopened in `openspec/changes/den-level-xp/` (2026-08-16) at the owner's request — see that change's `design.md` Context section for the full record.
+- No dog XP/level display — doesn't exist yet, deferred per `visual-design`'s Phase-Scoped Visual Delivery (see proposal.md). **Superseded:** this deferral was explicitly reopened in `docs/decisions/den-level-xp/` (2026-08-16) at the owner's request — see that change's `design.md` Context section for the full record.
 - No celebration/reward path for open (unclosed) walks — unchanged, `walk-lifecycle` already specifies none.
 - No confetti/animation library dependency — hand-rolled with `Animated`, scoped to this one moment.
 

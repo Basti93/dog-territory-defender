@@ -10,7 +10,7 @@ This design went through a 3-pass process (two independent design drafts, one co
 - 18 one-off milestone achievements, purely personal/cosmetic prestige — explicitly no treats, XP, or gameplay bonus of any kind in Phase 1.
 - New `StatsScreen.tsx` for browsing lifetime stats and the achievement badge case, reachable next to the existing Den entry point.
 - Achievement unlocks surface in two existing places: the post-walk `CelebrationScreen` (walk-triggered achievements) and `DenScreen`'s existing notice-banner pattern (Den-triggered achievements) — no new full-screen interruption pattern.
-- `openspec/specs/game-phases/spec.md`'s Phase 1 requirement text gets a small delta explicitly including "personal lifetime stats and non-social, non-bonus achievements" in Phase 1's build scope, since this wasn't one of Phase 1's original four bullets.
+- `docs/specs/game-phases.md`'s Phase 1 requirement text gets a small delta explicitly including "personal lifetime stats and non-social, non-bonus achievements" in Phase 1's build scope, since this wasn't one of Phase 1's original four bullets.
 
 ## Capabilities
 

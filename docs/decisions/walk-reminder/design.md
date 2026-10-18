@@ -117,7 +117,7 @@ Checked against the rejected-copy table: no order ("whenever... ready," not "tim
 
 ## Decision 12 — Backlog classification
 
-This feature is the backlog's Repetition-loop notification idea (`openspec/specs/game-backlog/spec.md`), pulled at the founder's request. The former phase-pull-forward delta spec was dropped when phase gating was removed.
+This feature is the backlog's Repetition-loop notification idea (`docs/specs/game-backlog.md`), pulled at the founder's request. The former phase-pull-forward delta spec was dropped when phase gating was removed.
 
 ## Decisions — 2026-10-18 update
 

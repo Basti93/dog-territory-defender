@@ -1,6 +1,6 @@
 ## Why
 
-The project's planning knowledge (phased build plan, per-phase validation process, visual direction, and the Den/Pack/anti-snowball engagement mechanics with their load-bearing numeric thresholds) currently lives in five free-form prompt/brief documents under `docs/`. Now that the project has adopted OpenSpec for spec-driven development, that content needs to live as structured, queryable capability specs under `openspec/specs/` so it is the single source of truth, stays consistent with the OpenSpec workflow (propose → specs → apply → archive), and the ad-hoc `docs/*.md` files can be retired.
+The project's planning knowledge (phased build plan, per-phase validation process, visual direction, and the Den/Pack/anti-snowball engagement mechanics with their load-bearing numeric thresholds) currently lives in five free-form prompt/brief documents under `docs/`. Now that the project has adopted OpenSpec for spec-driven development, that content needs to live as structured, queryable capability specs under `docs/specs/` so it is the single source of truth, stays consistent with the OpenSpec workflow (propose → specs → apply → archive), and the ad-hoc `docs/*.md` files can be retired.
 
 ## What Changes
 
@@ -12,7 +12,7 @@ The project's planning knowledge (phased build plan, per-phase validation proces
 - Extract the 10 anti-snowball mechanisms (`docs/04-engagement-mechanics.md` Part 3) into an `anti-snowball` capability, preserving every numeric threshold exactly (e.g. soft caps at +50% above L50, ~30% max L100-vs-L1 advantage, Beginner's Luck 2x for 30 days, mentor +5% treats, seasonal resets every 3 months).
 - Fold the phase-to-mechanic rollout mapping (`docs/04-engagement-mechanics.md` Part 4) into the `game-phases` capability as a requirement cross-referencing `den-economy`, `pack-collection`, and `anti-snowball`.
 - Preserve the illustrative "Spring-Themed Engagement Examples" narrative (`docs/04-engagement-mechanics.md` Part 5) and the design north star quotes as descriptive prose (Purpose sections / scenario framing) rather than as formal requirements — they are flavor and intent, not testable behavior.
-- Update `CLAUDE.md` references from `docs/01`–`docs/05` to the corresponding `openspec/specs/<capability>/spec.md` paths.
+- Update `CLAUDE.md` references from `docs/01`–`docs/05` to the corresponding `docs/specs/<capability>/spec.md` paths.
 - Update `README.md` if it links to any `docs/*.md` path being removed.
 - Delete `docs/01-prototype-plan-prompt.md`, `docs/02-post-prototype-investigation-prompt.md`, `docs/03-design-brief.md`, `docs/04-engagement-mechanics.md`, `docs/05-design-update-prompt.md` once their content is captured. Remove the `docs/` directory if it ends up empty.
 - Leave `DECISIONS.md`, `README.md` (status content), and `prototype/` untouched in substance — this is a documentation restructuring, not a product or process change.
@@ -27,11 +27,11 @@ The project's planning knowledge (phased build plan, per-phase validation proces
 - `anti-snowball`: The 10 cross-cutting anti-snowball mechanisms and their exact numeric thresholds.
 
 ### Modified Capabilities
-(none — `openspec/specs/` is currently empty)
+(none — `docs/specs/` is currently empty)
 
 ## Impact
 
-- Affected: `openspec/specs/game-phases/spec.md`, `openspec/specs/visual-design/spec.md`, `openspec/specs/den-economy/spec.md`, `openspec/specs/pack-collection/spec.md`, `openspec/specs/anti-snowball/spec.md` (new files).
+- Affected: `docs/specs/game-phases.md`, `docs/specs/visual-design.md`, `docs/specs/den-economy.md`, `docs/specs/pack-collection.md`, `docs/specs/anti-snowball.md` (new files).
 - Affected: `CLAUDE.md` (doc references updated to point at specs), `README.md` (dead-link check).
 - Removed: `docs/01-prototype-plan-prompt.md`, `docs/02-post-prototype-investigation-prompt.md`, `docs/03-design-brief.md`, `docs/04-engagement-mechanics.md`, `docs/05-design-update-prompt.md`, and the `docs/` directory if empty afterward.
 - No code, app behavior, or `prototype/` changes. No numeric threshold is changed — only relocated and preserved exactly.

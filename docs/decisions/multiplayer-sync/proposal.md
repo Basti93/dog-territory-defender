@@ -51,4 +51,4 @@ Everything is local to one phone today (`game-backlog` Known stubs: "No backend,
 
 ## Source
 
-Owner request 2026-10-18; `/Users/user/Projects/heimserver-SERVER.md` (binding server rules); `openspec/specs/game-backlog/spec.md` (Social layer, cross-cutting constraints); `openspec/specs/anti-snowball/spec.md`; the binding game-master design for the Nachbarhunde bots (2026-10-18: six dogs, caps, copy, never-rules), summarised in design Decisions 17-24 and `specs/neighbour-dogs/spec.md`.
+Owner request 2026-10-18; `/Users/user/Projects/heimserver-SERVER.md` (binding server rules); `docs/specs/game-backlog.md` (Social layer, cross-cutting constraints); `docs/specs/anti-snowball.md`; the binding game-master design for the Nachbarhunde bots (2026-10-18: six dogs, caps, copy, never-rules), summarised in design Decisions 17-24 and `specs/neighbour-dogs/spec.md`.

@@ -58,7 +58,7 @@ The original concept's daily-souvenir / permanent-keepsake / milestone-place lay
 - Exact milestone-title levels and copy (front-loaded spacing, matching how the existing Level curve itself front-loads).
 - How the Den-building-bonus copy reframe ("the Sniff Garden means Buddy sniffs out more") is implemented without creating a real mechanical dependency between owning a building and the dog leveling — narrative link only, per the Guardrails.
 - Whether/when to revisit the deferred souvenir/keepsake/yard layer once the numbers-only version has real usage data.
-- Which phase this belongs to — most likely Phase 1 alongside the existing Den/Level work, but needs confirming against `openspec/specs/game-phases/spec.md`'s phase-gating rule before implementation starts.
+- Which phase this belongs to — most likely Phase 1 alongside the existing Den/Level work, but needs confirming against `docs/specs/game-phases.md`'s phase-gating rule before implementation starts.
 
 ## Superseded: The Yard Grows With You
 

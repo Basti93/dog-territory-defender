@@ -18,7 +18,7 @@ See `proposal.md` - Why. This is a pure documentation-to-specs migration: five `
 `game-phases`, `visual-design`, `den-economy`, `pack-collection`, `anti-snowball`. Considered a single monolithic `product-spec` capability instead — rejected because OpenSpec deltas are per-capability, and a future change touching only, say, Pack tuning would otherwise force a delta across unrelated Den/anti-snowball content. Considered splitting Den and Pack further (e.g. one capability per building) — rejected as over-fragmentation for a 10-row table with no independent lifecycle.
 
 ### Phase-gating rule lives inside `game-phases`, not as a standalone capability or purely in CLAUDE.md
-The rule ("never build a later phase's features early") is a process constraint, but OpenSpec's own model treats "the build process SHALL NOT implement out-of-phase features" as a testable requirement on the system's development process, not on runtime behavior — so it fits the `### Requirement: Phase Gating Rule` format cleanly. It stays paired with the 5 phase requirements in one file because the rule only makes sense next to the phases it gates, and splitting it out would force every reader to cross-reference two capabilities to understand one rule. `CLAUDE.md` keeps a short pointer to `openspec/specs/game-phases/spec.md` (see proposal's Impact) rather than restating the rule, so there is one source of truth.
+The rule ("never build a later phase's features early") is a process constraint, but OpenSpec's own model treats "the build process SHALL NOT implement out-of-phase features" as a testable requirement on the system's development process, not on runtime behavior — so it fits the `### Requirement: Phase Gating Rule` format cleanly. It stays paired with the 5 phase requirements in one file because the rule only makes sense next to the phases it gates, and splitting it out would force every reader to cross-reference two capabilities to understand one rule. `CLAUDE.md` keeps a short pointer to `docs/specs/game-phases.md` (see proposal's Impact) rather than restating the rule, so there is one source of truth.
 
 ### `docs/02-post-prototype-investigation-prompt.md` becomes a `Requirement` inside `game-phases`, not a separate capability
 Its content (the audit's 8 sections, the CONTINUE/ITERATE/PIVOT/KILL decision) is itself a testable process requirement ("the team SHALL produce this audit before advancing"), so it was written as `### Requirement: Per-Phase Validation Process` rather than dropped as pure process. It stays inside `game-phases` because it has no independent existence apart from the phase plan it validates.
@@ -45,8 +45,8 @@ Per `CLAUDE.md`, the prototype is a design spec to be pixel-recreated, not a sta
 
 ## Migration Plan
 
-1. Land this change's delta specs into `openspec/specs/` via `/opsx:sync` (or archive, which syncs inline).
-2. Update `CLAUDE.md` references from `docs/01`-`docs/05` to the corresponding `openspec/specs/<capability>/spec.md` paths.
+1. Land this change's delta specs into `docs/specs/` via `/opsx:sync` (or archive, which syncs inline).
+2. Update `CLAUDE.md` references from `docs/01`-`docs/05` to the corresponding `docs/specs/<capability>/spec.md` paths.
 3. Check `README.md` for dead links to the removed docs and fix any found.
 4. Delete the 5 superseded `docs/*.md` files and the `docs/` directory if left empty.
 5. Run `openspec validate` to confirm structural validity.

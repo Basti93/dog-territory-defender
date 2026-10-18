@@ -1,6 +1,6 @@
 # Art checklist (pre-rendered 3D sprites)
 
-Style decision: `openspec/changes/buddy-comes-alive/design.md`, Decision 12. Code only animates these PNGs. Dog parts: see `assets/buddy/README.md`.
+Style decision: `docs/decisions/buddy-comes-alive/design.md`, Decision 12. Code only animates these PNGs. Dog parts: see `assets/buddy/README.md`.
 
 ## Locked style sentence (paste into EVERY prompt)
 

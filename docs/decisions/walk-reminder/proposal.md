@@ -1,6 +1,6 @@
 ## Status
 
-Drafted by `senior-app-architect`, technically scoping a feature whose fun/anti-guilt guardrails were already fully designed and resolved by two prior `game-master` passes recorded in `openspec/changes/archive/2026-08-22-walk-start-experience/proposal.md`'s "Notification Timing (resolved)" section. Those guardrails are not re-litigated here — this proposal only scopes them technically, plus resolves the backlog-classification question that document's own "Open Questions for the Technical Split" left open.
+Drafted by `senior-app-architect`, technically scoping a feature whose fun/anti-guilt guardrails were already fully designed and resolved by two prior `game-master` passes recorded in `docs/decisions/2026-08-22-walk-start-experience/proposal.md`'s "Notification Timing (resolved)" section. Those guardrails are not re-litigated here — this proposal only scopes them technically, plus resolves the backlog-classification question that document's own "Open Questions for the Technical Split" left open.
 
 ## Why
 
@@ -43,7 +43,7 @@ This reuses the existing `notifications`/`NotificationRepository` machinery this
 
 ## Scope
 
-Pulled from the backlog (Repetition loop) at the founder's explicit request. Guardrails were designed in two `game-master` passes. Phase gating was removed by owner decision on 2026-10-18; see `openspec/specs/game-backlog/spec.md`.
+Pulled from the backlog (Repetition loop) at the founder's explicit request. Guardrails were designed in two `game-master` passes. Phase gating was removed by owner decision on 2026-10-18; see `docs/specs/game-backlog.md`.
 
 ## Open Questions — RESOLVED by user, 2026-08-22
 
@@ -53,4 +53,4 @@ Pulled from the backlog (Repetition loop) at the founder's explicit request. Gua
 
 ## Source
 
-Concept and guardrails: two `game-master` subagent passes, recorded verbatim in `openspec/changes/archive/2026-08-22-walk-start-experience/proposal.md`'s "Notification Timing (resolved)" section. Technical scoping: `senior-app-architect`, grounded in `src/notifications/notificationDecision.ts`, `src/notifications/earnedTrigger.ts`, `src/notifications/scheduler.ts`, `src/storage/NotificationRepository.ts` (+ sqlite/in-memory impls), `src/storage/WalkRepository.ts`, `src/types.ts`'s `Walk.startSource`, `src/components/DoorstepMenu.tsx`, `src/components/DebugLogScreen.tsx`, `src/utils/debugLog.ts`, `src/utils/manualWalkLog.ts`, `App.tsx`'s merged mount effect and notification-tap listener, and `openspec/specs/game-backlog/spec.md`.
+Concept and guardrails: two `game-master` subagent passes, recorded verbatim in `docs/decisions/2026-08-22-walk-start-experience/proposal.md`'s "Notification Timing (resolved)" section. Technical scoping: `senior-app-architect`, grounded in `src/notifications/notificationDecision.ts`, `src/notifications/earnedTrigger.ts`, `src/notifications/scheduler.ts`, `src/storage/NotificationRepository.ts` (+ sqlite/in-memory impls), `src/storage/WalkRepository.ts`, `src/types.ts`'s `Walk.startSource`, `src/components/DoorstepMenu.tsx`, `src/components/DebugLogScreen.tsx`, `src/utils/debugLog.ts`, `src/utils/manualWalkLog.ts`, `App.tsx`'s merged mount effect and notification-tap listener, and `docs/specs/game-backlog.md`.

@@ -1,6 +1,6 @@
 ## Status
 
-**Technical, ready to implement — depends on `home-range` having already archived.** This is the second half of the `home-range` technical split (see `openspec/changes/home-range/design.md`'s "Technical Split Addendum" for why it split this way). All concept, geometry, and payout-curve reasoning lives in that file, already validated by `openspec/changes/home-range/home-range-prototype.mjs` — this proposal only scopes what ships in this half and does not repeat the math.
+**Technical, ready to implement — depends on `home-range` having already archived.** This is the second half of the `home-range` technical split (see `docs/decisions/home-range/design.md`'s "Technical Split Addendum" for why it split this way). All concept, geometry, and payout-curve reasoning lives in that file, already validated by `docs/decisions/home-range/home-range-prototype.mjs` — this proposal only scopes what ships in this half and does not repeat the math.
 
 ## Why
 
@@ -27,4 +27,4 @@
 
 ## Source
 
-Concept and geometry/economy validation: see `openspec/changes/home-range/proposal.md` and `design.md`. Technical split: `senior-app-architect` review of `home-range`, see this repo session's decision to split into two changes.
+Concept and geometry/economy validation: see `docs/decisions/home-range/proposal.md` and `design.md`. Technical split: `senior-app-architect` review of `home-range`, see this repo session's decision to split into two changes.

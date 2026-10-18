@@ -1,6 +1,6 @@
 ## Why
 
-Phase 1's hypothesis — "claiming territory plus earning passive treats creates a 'want to walk again tomorrow' feeling" — needs a real treats economy to test at all. Right now nothing generates or stores treats; `openspec/specs/den-economy/spec.md` and `openspec/specs/anti-snowball/spec.md` already fully describe the target behavior (treats from walks, passive generation, exponential building costs, soft cap above level 50) from the earlier docs→specs conversion, but none of it is implemented. This change builds the underlying economy — treats balance, passive generation, building levels/costs, soft cap — as a tested, config-driven core, without the Den screen UI (that's the next change).
+Phase 1's hypothesis — "claiming territory plus earning passive treats creates a 'want to walk again tomorrow' feeling" — needs a real treats economy to test at all. Right now nothing generates or stores treats; `docs/specs/den-economy.md` and `docs/specs/anti-snowball.md` already fully describe the target behavior (treats from walks, passive generation, exponential building costs, soft cap above level 50) from the earlier docs→specs conversion, but none of it is implemented. This change builds the underlying economy — treats balance, passive generation, building levels/costs, soft cap — as a tested, config-driven core, without the Den screen UI (that's the next change).
 
 ## What Changes
 
@@ -25,4 +25,4 @@ Phase 1's hypothesis — "claiming territory plus earning passive treats creates
 - New module: `src/economy/` (`balanceConfig.ts`, `formulas.ts`, tests).
 - New module: `src/storage/DenEconomyRepository.ts` + SQLite/in-memory implementations + contract tests, mirroring `src/storage/WalkRepository.ts`'s pattern.
 - `App.tsx`: `stopWalk()`'s closing branch awards treats via the new repository; no new UI beyond what's needed to confirm this works (a plain treats-balance readout is fine here — the real Den screen is the next change).
-- `openspec/specs/`: unchanged.
+- `docs/specs/`: unchanged.

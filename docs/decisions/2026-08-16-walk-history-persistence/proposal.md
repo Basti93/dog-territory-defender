@@ -8,7 +8,7 @@ All walk data lives only in React state today — a reload, crash, or app close 
 - New `WalkRepository` interface (`saveWalk`, `getWalks`, `getWalk`, `deleteWalk`) — the only way any app code touches walk storage. Implemented locally on `expo-sqlite` now; swappable later without touching call sites.
 - Local schema modeled single-table/NoSQL-style (walk id as key, a handful of queryable columns, full walk record as a JSON body) rather than a normalized relational schema, so it maps cleanly onto a future DynamoDB table instead of a relational rewrite.
 - Schema includes a nullable `syncedAt` column, unused for now — forward-compat for a future AWS sync service (out of scope here; see design.md).
-- New walk history view: a simple list of past walks (date, closed/open status, rough stats), reachable from the main screen. Phase 0 has no tab navigation yet (that's Phase 1 scope per `openspec/specs/game-phases/spec.md`), so this is a lightweight in-app view (e.g. a toggled screen/modal), not a new navigation library.
+- New walk history view: a simple list of past walks (date, closed/open status, rough stats), reachable from the main screen. Phase 0 has no tab navigation yet (that's Phase 1 scope per `docs/specs/game-phases.md`), so this is a lightweight in-app view (e.g. a toggled screen/modal), not a new navigation library.
 - `App.tsx`'s in-progress walk still lives in React state during an active walk (unchanged); on End Walk/Close Territory, it's additionally persisted via the repository.
 
 ## Capabilities
