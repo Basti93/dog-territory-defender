@@ -43,6 +43,8 @@ export interface SyncState {
   lastMemberJoined: { playerName: string; at: number; /** Absent in state saved before renames existed. */ playerId?: string } | null;
   /** Newest first, at most NEIGHBOUR_LINES_KEPT. Absent in state saved before neighbours existed. */
   neighbourLines?: NeighbourLineEntry[];
+  /** The server answered 426 to a write: this app is older than the server accepts. Cleared by the next accepted write. Absent in older state. */
+  needsUpdate?: boolean;
 }
 
 /** A neighbour line from the event feed (Track B): an i18n key plus params, never copy. */

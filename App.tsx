@@ -204,6 +204,8 @@ export default function App() {
         session={launch.doorstepSession}
         greeting={launch.doorstepGreeting}
         awayStripLines={launch.awayStripLines}
+        accruedDelta={launch.accruedDelta}
+        territoryIncomeRate={launch.territoryIncomeRate}
         denEconomyRepository={repos.denEconomyRepository}
         personalStatsRepository={repos.personalStatsRepository}
         homeRangeRepository={repos.homeRangeRepository}

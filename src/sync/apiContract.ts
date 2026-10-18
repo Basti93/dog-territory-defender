@@ -12,6 +12,29 @@ import type { Location } from '../types';
 
 export const API_PREFIX = '/v1';
 
+/**
+ * API level: a plain integer that only ever grows. The server sends it on every response (`X-Api-Level`) and in
+ * `GET /healthz`; the app sends the level it was built for on every request (`X-Client-Api-Level`).
+ * Rules: inside one level only additive fields; the server is rolled out BEFORE the app; a breaking change gets
+ * `/v2` paths. The server may raise MIN_CLIENT_API_LEVEL (env) to refuse mutating requests from older apps with
+ * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
+ * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
+ */
+export const API_LEVEL = 2;
+
+export const API_HEADERS = {
+  /** Response header: the server's API level. */
+  serverLevel: 'X-Api-Level',
+  /** Request header: the API level the app was built for. */
+  clientLevel: 'X-Client-Api-Level',
+} as const;
+
+/** Body of `GET /healthz`. */
+export interface HealthzResponse {
+  ok: true;
+  apiLevel: number;
+}
+
 export const API_PATHS = {
   healthz: '/healthz',
   join: '/v1/join',
@@ -57,6 +80,7 @@ export const API_LIMITS = {
 
 /** Machine-readable error codes. `unauthorized` is the single uniform 401 body. */
 export type ApiErrorCode =
+  | 'upgrade_required' // 426: mutating request from an app older than the server's MIN_CLIENT_API_LEVEL
   | 'unauthorized' // 401: missing/unknown/revoked token, and every unknown path without a token
   | 'invalid_invite' // 403: join refused (unknown, expired, used or household full: deliberately indistinguishable)
   | 'bad_request' // 400: schema validation failed

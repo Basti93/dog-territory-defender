@@ -62,7 +62,7 @@ type AvSound = import('expo-av').Audio.Sound;
 /**
  * Looping, very quiet kalimba "music box" under the Doorstep, Den and
  * celebration. Never during a walk (the walk is audio-first with its own cues),
- * never in the background, goes quiet after 5 minutes on one screen.
+ * never when the app is not in front (paused at once, no fade), goes quiet after 5 minutes on one screen.
  */
 export function useAmbientMusic({ screen, walkActive, enabled }: { screen: AmbientScreen; walkActive: boolean; enabled: boolean }): void {
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
@@ -191,6 +191,16 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
           }
         }
       });
+    } else if (soundRef.current && playingRef.current && !appActive) {
+      // Not in front: stop at once. A fade would need JS timers that iOS may
+      // already have suspended, and nothing may sound in the background.
+      const sound = soundRef.current;
+      stopFade();
+      volumeRef.current = 0;
+      playingRef.current = false;
+      setMusicPlaying(false);
+      sound.setVolumeAsync(0).catch(() => {});
+      sound.pauseAsync().catch(() => {});
     } else if (soundRef.current && playingRef.current) {
       const sound = soundRef.current;
       fadeTo(sound, 0, FADE_OUT_MS, () => {

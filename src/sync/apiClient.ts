@@ -4,6 +4,8 @@
 // (client) from "token revoked" (unauthorized).
 
 import {
+  API_HEADERS,
+  API_LEVEL,
   API_PATHS,
   ApiError as ApiErrorBody,
   ApiWalkFull,
@@ -25,7 +27,8 @@ import {
   WalkUploadResponse,
 } from './apiContract';
 
-export type ApiErrorKind = 'network' | 'timeout' | 'unauthorized' | 'client' | 'server';
+/** `upgrade-required` = HTTP 426: the server wants a newer app for writes. Not retryable by itself; the outbox keeps the item. */
+export type ApiErrorKind = 'network' | 'timeout' | 'unauthorized' | 'upgrade-required' | 'client' | 'server';
 
 export class ApiError extends Error {
   readonly kind: ApiErrorKind;
@@ -92,7 +95,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       controller.abort();
     }, timeoutMs);
     try {
-      const headers: Record<string, string> = { Accept: 'application/json' };
+      const headers: Record<string, string> = { Accept: 'application/json', [API_HEADERS.clientLevel]: String(API_LEVEL) };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (options.token) headers.Authorization = `Bearer ${options.token}`;
       let response: Response;
@@ -118,6 +121,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
         }
         const message = `HTTP ${response.status}${code ? ` ${code}` : ''}`;
         if (response.status === 401) throw new ApiError('unauthorized', message, response.status, code);
+        if (response.status === 426) throw new ApiError('upgrade-required', message, response.status, code);
         // 408/425/429 are "try again later" even though they are 4xx.
         if (response.status >= 500 || response.status === 408 || response.status === 425 || response.status === 429) {
           throw new ApiError('server', message, response.status, code);

@@ -122,3 +122,15 @@ Abhängigkeiten, die oft übersehen werden: d braucht Konzept-Schritt 5, c brauc
 - **Keine Täuschung über Bots:** Nachbarhunde bleiben offen „simuliert“ (Pfoten-Roboter-Abzeichen auf dem Zettel), und echte Nachbarn werden nie mit Bots vermischt dargestellt.
 
 Prüfliste pro Slice: Spec-Änderung zuerst (falls Spielregel), `game-master` für Text, `senior-architect` bei Server-Schema und Kanälen, Check-auf-Gerät-Liste für den Owner, Eintrag im Decisions-Log (`design.md` dieses Changes) und README-Status.
+
+## 7. Owner-Entscheidungen 2026-10-18
+
+Antworten auf die offenen Fragen aus Abschnitt 5:
+
+1. **Partner-Präsenz = live wachsender Pfad** (Heftfaden), also die ausführliche Variante von Slice a, nicht nur Punkt oder Schild.
+2. **Nachbarhunde werden an dem Tag angeschaltet, an dem ihre Oberfläche fertig ist** (`NEIGHBOURS_ENABLED=true` erst mit dem Build, der b-1 zeigt, und erst wenn beide Telefone ihn haben).
+3. **Android-Hintergrundabfrage später** (keine neue native Abhängigkeit jetzt, kein `expo-background-task`).
+4. **Apple-Developer-Programm später** (kein APNs, 7-Tage-Neuinstallation auf dem iPhone bleibt vorerst; Sign in with Apple wartet).
+5. **PLZ-Rangliste vorerst durch eine gemeinsame kooperative Summe ersetzt** (Spec-Änderung in `docs/specs/anti-snowball.md` mit `game-master`, bevor Slice e gebaut wird).
+
+F0 (Betriebsbasis) ist umgesetzt: API-Level (`API_LEVEL = 2`, `X-Api-Level`, `X-Client-Api-Level`, 426 nur bei Schreibzugriffen, `MIN_CLIENT_API_LEVEL`), unbekannte Event-Arten werden ignoriert (Test), `deploy/restore-drill.sh` und `make restore-drill`, zweite Backup-Kopie über `BACKUP_COPY_DIR` / `BACKUP_RSYNC_TARGET`. Abweichung von Abschnitt 3: `GET /healthz` meldet jetzt `apiLevel` (Owner-Vorgabe; Decision 16 wollte keine Version nach außen, es ist nur eine kleine Ganzzahl), `apiLevel` steht als Header statt in `snapshot`/`events`, und das Skript liegt in `deploy/`, nicht `ops/`.

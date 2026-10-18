@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Dog Territory Defender",
+    "name": "Tails Up",
     "slug": "dog-territory-defender",
     "version": "0.1.0",
     "sdkVersion": "54.0.0",
@@ -13,14 +13,7 @@
       "bundleIdentifier": "com.dogtd.mobile",
       "infoPlist": {
         "UIBackgroundModes": [
-          "location",
-          "audio",
-          "location",
-          "audio",
-          "location",
-          "audio",
-          "location",
-          "audio"
+          "location"
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -49,7 +42,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermissions": "Allow Dog Territory Defender to track your walks",
+          "locationAlwaysAndWhenInUsePermissions": "Allow Tails Up to track your walks",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }

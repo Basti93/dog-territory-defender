@@ -103,6 +103,9 @@ export function PressableScale({
   const scale = useMemo(() => Animated.multiply(press, breatheScale), [press, breatheScale]);
   const { layout, visual } = splitStyle(style);
   const radius = visual.borderRadius ?? 12;
+  // Grow boxes only when the caller sizes the button (flex/height); otherwise they stay content-sized.
+  const wantsFill = layout.flex !== undefined || layout.flexGrow !== undefined || layout.height !== undefined || layout.minHeight !== undefined || layout.aspectRatio !== undefined;
+  const fill = wantsFill ? styles.fill : null;
 
   return (
     <Pressable
@@ -129,8 +132,8 @@ export function PressableScale({
       testID={testID}
     >
       {/* Disabled dimming lives on a wrapper so it multiplies with, rather than replaces, a caller's own opacity. */}
-      <View style={[styles.fill, disabled && styles.disabled]}>
-        <Animated.View style={[styles.fill, visual, { transform: [{ scale }] }]}>
+      <View style={[fill, disabled && styles.disabled]}>
+        <Animated.View style={[fill, visual, { transform: [{ scale }] }]}>
           {pulsing && (
             <Animated.View
               pointerEvents="none"
@@ -148,7 +151,8 @@ export function PressableScale({
 }
 
 const styles = StyleSheet.create({
-  // Lets a flex/height given to the outer Pressable pass through to the visual box.
+  // Lets a flex/height given to the outer Pressable pass through to the visual box. Only applied when the caller sets
+  // one: flexGrow here under a shrink-wrapped Pressable (alignSelf: 'flex-start') makes Yoga size it ~10000 px tall in a ScrollView.
   fill: { flexGrow: 1 },
   disabled: { opacity: 0.5 },
 });

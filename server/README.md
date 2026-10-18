@@ -31,7 +31,7 @@ Docker image: build with the repo root as context.
 docker build -f server/Dockerfile -t dog-territory-api .
 ```
 
-Env (see `.env.example`): `DATABASE_URL`, `PORT` (7000), `READY_PORT` (7100, internal `/readyz`, never publish), `LOG_LEVEL`, `HOUSEHOLD_MAX_PLAYERS`, `TRUST_PROXY_CIDR` (default 172.16.0.0/12; the only network whose X-Forwarded-For is trusted), `LOG_FORWARDED_HEADERS` (debug: log req.ip + forwarded headers for the first 50 requests), `MIGRATE_ON_START`, `NEIGHBOURS_ENABLED`, `OVERPASS_URL`, `OVERPASS_PAUSE_MS`.
+Env (see `.env.example`): `DATABASE_URL`, `PORT` (7000), `READY_PORT` (7100, internal `/readyz`, never publish), `LOG_LEVEL`, `HOUSEHOLD_MAX_PLAYERS`, `TRUST_PROXY_CIDR` (default 172.16.0.0/12; the only network whose X-Forwarded-For is trusted), `LOG_FORWARDED_HEADERS` (debug: log req.ip + forwarded headers for the first 50 requests), `MIGRATE_ON_START`, `MIN_CLIENT_API_LEVEL` (default 1), `NEIGHBOURS_ENABLED`, `OVERPASS_URL`, `OVERPASS_PAUSE_MS`.
 
 ## Operator CLI (the only admin surface; no admin endpoint exists)
 
@@ -47,7 +47,11 @@ Invite codes are shown once (only a hash is stored), single-use, valid 24 h.
 
 ## API v1 (all JSON; details in the contract file)
 
-Public: `GET /healthz`, `POST /v1/join`. Everything else needs `Authorization: Bearer <token>`; anything else, including unknown paths, answers the identical `401 {"error":"unauthorized"}`.
+Public: `GET /healthz` (`{ok, apiLevel}`), `POST /v1/join`.
+
+**API level** (`API_LEVEL` in `src/sync/apiContract.ts`, currently 2): every response carries `X-Api-Level`; the app sends `X-Client-Api-Level` (missing/invalid = 1). Requests other than GET/HEAD/OPTIONS (join excepted, auth checked first) from a client below `MIN_CLIENT_API_LEVEL` get `426 {"error":"upgrade_required"}`; reads always work. Rules: additive fields only inside a level, roll the server out before the app, breaking changes go to `/v2`, raise the minimum only once every phone has the new app.
+
+ Everything else needs `Authorization: Bearer <token>`; anything else, including unknown paths, answers the identical `401 {"error":"unauthorized"}`.
 
 `GET /v1/snapshot`, `POST /v1/walks`, `GET /v1/walks/:id`, `POST /v1/commands`, `GET /v1/events?after=&wait=&limit=`, `GET /v1/nearby?radiusM&include=cells`, `GET /v1/gifts`, `POST /v1/gifts/:id/open`, `GET /v1/coop/week` (the last three and nearby are empty/inactive unless `NEIGHBOURS_ENABLED=true`), `POST /v1/households/import` (founding seed, once), `POST /v1/logs` (device log shipping, below).
 

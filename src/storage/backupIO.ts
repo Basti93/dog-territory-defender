@@ -51,7 +51,7 @@ export type ShareBackupResult = { shared: true; uri: string } | { shared: false;
 /** Writes the backup JSON to the cache dir and opens the share sheet. `shared: false` means no share sheet exists; the file is at `uri`. */
 export async function shareBackup(): Promise<ShareBackupResult> {
   const backup = await exportBackup(defaultRepos());
-  const file = new File(Paths.cache, `dog-territory-defender-backup-${todayStamp()}.json`);
+  const file = new File(Paths.cache, `tails-up-backup-${todayStamp()}.json`);
   file.create({ overwrite: true });
   file.write(JSON.stringify(backup, null, 1));
   if (await Sharing.isAvailableAsync()) {

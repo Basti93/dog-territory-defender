@@ -12,7 +12,7 @@ import { createHousehold, createInvite } from '../src/services/households';
 
 export const NOW = Date.UTC(2026, 9, 18, 12, 0, 0);
 
-export function testConfig(overrides: Partial<Config['limits']> = {}, neighbours: Partial<Config['neighbours']> = {}): Config {
+export function testConfig(overrides: Partial<Config['limits']> = {}, neighbours: Partial<Config['neighbours']> = {}, minClientApiLevel = 1): Config {
   return {
     port: 0,
     readyPort: 0,
@@ -23,6 +23,7 @@ export function testConfig(overrides: Partial<Config['limits']> = {}, neighbours
     trustProxyCidr: '172.16.0.0/12',
     logForwardedHeaders: false,
     inviteTtlMs: 24 * 3600_000,
+    minClientApiLevel,
     neighbours: { enabled: false, overpassUrl: '', overpassPauseMs: 0, ...neighbours },
     limits: {
       unauthPerMinPerIp: 10_000,
@@ -64,10 +65,14 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function makeServer(limits: Partial<Config['limits']> = {}, neighbours: Partial<Config['neighbours']> = {}): Promise<TestServer> {
+export async function makeServer(
+  limits: Partial<Config['limits']> = {},
+  neighbours: Partial<Config['neighbours']> = {},
+  minClientApiLevel = 1
+): Promise<TestServer> {
   const { db, pg } = await makeDb();
   const state = { now: NOW };
-  const { app } = await buildApp({ db, config: testConfig(limits, neighbours), logger: false, now: () => state.now });
+  const { app } = await buildApp({ db, config: testConfig(limits, neighbours, minClientApiLevel), logger: false, now: () => state.now });
   await app.ready();
   return {
     app,

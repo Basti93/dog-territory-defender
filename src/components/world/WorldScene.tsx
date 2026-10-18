@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useDen } from '../../app/useDen';
+import { nextEffectLabel, useDen } from '../../app/useDen';
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
 import { buddyBackPoseSources } from '../../buddy/imageSkinSources';
@@ -18,7 +18,6 @@ import type { PersonalStatsRepository } from '../../storage/PersonalStatsReposit
 import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
 import type { WalkRepository } from '../../storage/WalkRepository';
-import { storageCap } from '../../economy/formulas';
 import { ArtImage, DecorImage, PaperNote, SpeechBubble, WoodSign, material, mix, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
@@ -29,6 +28,8 @@ import { YardBuddy } from '../den/YardBuddy';
 import { YardButterflies } from '../den/YardButterflies';
 import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
+import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
+import { bowlAtCap, chimneyAnchor } from './bakeryRules';
 import { BuildingPanel } from './BuildingPanel';
 import { Homecoming } from './Homecoming';
 import type { HomecomingWalk } from './homecomingPlan';
@@ -39,6 +40,7 @@ import {
   FENCE_SEG_H,
   FENCE_SEG_W,
   GATE_BOX,
+  GATE_SIGN_H,
   HINT_H,
   sceneLayout,
   viertelScrollTarget,
@@ -95,6 +97,10 @@ export interface WorldSceneProps {
   /** The `den` screen alias (notification taps): scroll to the yard and open the next-upgrade panel. */
   openDenPanel?: boolean;
   onDenPanelHandled?: () => void;
+  /** Treats the bakery accrued since the previous app open (App's launch routine; not re-derived). > 0 plays the welcome-back burst once per launch. */
+  accruedDelta?: number;
+  /** Current global territory income, treats/hour (App's launch routine); shown on the fence sign once revealed. */
+  territoryIncomeRate?: number;
   /** A walk just ended: the Heimkehr plays over the scene (camera to the Viertel, then the yard) until `onDone`. */
   homecoming?: { walk: HomecomingWalk; onDone: () => void } | null;
 }
@@ -106,21 +112,30 @@ interface Note {
   text: string;
 }
 
-/** Pure: at most two notes at once. The OTA update card comes first, then the away-strip lines in their given order; the greeting only fills an otherwise empty yard. */
+/** Pure: at most two notes at once. The OTA update card comes first, then the welcome-back line, then the away-strip lines in their given order; the greeting only fills an otherwise empty yard. */
 export function pickSceneNotes(
   awayStripLines: AwayStripLine[],
   greeting: string | null,
   hasUpdateCard: boolean,
-  dismissed: ReadonlySet<string>
+  dismissed: ReadonlySet<string>,
+  welcomeBack: string | null = null
 ): Note[] {
   const all: Note[] = [];
   if (hasUpdateCard) all.push({ key: 'update', kind: 'update', text: t('update.ready') });
-  awayStripLines.forEach((line, i) => all.push({ key: `line-${i}`, kind: 'line', text: line.text }));
+  // The welcome-back bubble tells the bakery's treats; the old away-strip treats line would say it twice.
+  if (welcomeBack) all.push({ key: 'welcome-back', kind: 'line', text: welcomeBack });
+  awayStripLines.forEach((line, i) => {
+    if (welcomeBack && line.kind === 'treats') return;
+    all.push({ key: `line-${i}`, kind: 'line', text: line.text });
+  });
   if (all.length === 0 && greeting) all.push({ key: 'greeting', kind: 'line', text: greeting });
   return all.filter((n) => !dismissed.has(n.key)).slice(0, MAX_NOTES);
 }
 
 let sleepyYawnPlayed = false;
+/** Sessions (one object per app launch, from App.tsx) whose welcome-back burst already played. */
+const welcomeBackPlayed = new WeakSet<DoorstepSession>();
+const WELCOME_BURST_MS = 1500;
 const BUDDY_GREETING_MS = 3000;
 
 export function WorldScene(props: WorldSceneProps) {
@@ -154,6 +169,8 @@ export function WorldScene(props: WorldSceneProps) {
     openDenPanel = false,
     onDenPanelHandled,
     homecoming = null,
+    accruedDelta = 0,
+    territoryIncomeRate = 0,
   } = props;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -324,10 +341,34 @@ export function WorldScene(props: WorldSceneProps) {
     ]).start();
   };
 
+  // ---- Bakery life: live bowl number, treats flying chimney -> bowl, welcome-back burst ----
+  // Nothing moves during a walk, the Homecoming, the gate beat or while the Viertel is in view.
+  const projecting = ready && !walkActive && !homecoming;
+  const flightsOn = projecting && !leaving && !isUp;
+  const projection = useBowlProjection({ state: den.state, extraRate: territoryIncomeRate, active: projecting });
+  // First Hof view of the launch: if the bakery accrued something while the app was closed, roll it in once.
+  const [welcome, setWelcome] = useState<{ n: number } | null>(null);
+  const [burst, setBurst] = useState<{ key: number; count: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!projecting || !session || welcome || welcomeBackPlayed.has(session)) return;
+    const n = Math.floor(accruedDelta);
+    if (n < 1) return;
+    welcomeBackPlayed.add(session);
+    setWelcome({ n });
+    setBurst({ key: 1, count: n });
+  }, [projecting, session, welcome, accruedDelta]);
+  const burstRunning = !!burst;
+  useEffect(() => {
+    if (!burstRunning) return;
+    const timer = setTimeout(() => setBurst(null), WELCOME_BURST_MS);
+    return () => clearTimeout(timer);
+  }, [burstRunning]);
+
   // ---- Notes (away strip, household, OTA card) ----
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
   const dismiss = (key: string) => setDismissed((prev) => new Set(prev).add(key));
-  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed);
+  const welcomeText = welcome ? t('world.welcomeBack', { n: formatNumber(welcome.n) }) : null;
+  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText);
   const bubbleNote = notes.find((n) => n.kind === 'line');
   const paperNote = notes.find((n) => n !== bubbleNote);
 
@@ -355,9 +396,16 @@ export function WorldScene(props: WorldSceneProps) {
   const buddyMoodNow: BuddyMood = den.excited || greetingPlaying ? 'excited' : curiousTarget ? 'curious' : buddyMood;
   const curiousFacing = curiousTarget === 'doghouse' ? 'left' : 'right';
   const gardenStage3 = artTierForLevel(levels.sniffGarden) >= 3;
-  const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
-  const treatCount = formatNumber(Math.floor(state.treats));
-  const bowlText = t('world.bowlSign', { count: treatCount, cap: formatNumber(cap) });
+  const cap = projection.cap;
+  const shownTreats = projection.projected;
+  const treatCount = formatNumber(Math.floor(shownTreats));
+  const chimneySprite = yard.sprites.bakery;
+  const chimney = chimneyAnchor(artTierForLevel(levels.bakery));
+  const chimneyPoint = {
+    x: chimneySprite.left + chimneySprite.size * chimney.fx,
+    y: layout.yardH - chimneySprite.bottom - chimneySprite.size + chimneySprite.size * chimney.fy,
+  };
+  const bowlPoint = { x: width / 2, y: layout.yardH + 54 };
   const extraEl = wildExtra.active ? (
     <YardExtras id={wildExtra.active} layout={yard} width={width} height={layout.yardH} onDone={wildExtra.onDone} />
   ) : null;
@@ -467,11 +515,16 @@ export function WorldScene(props: WorldSceneProps) {
                   <DecorImage source={pennant} resizeMode="contain" style={{ position: 'absolute', left: w.pennantLeft, bottom: w.pennantBottom, width: 36, height: 72 }} />
                 ) : null;
               })()}
+            {/* A slow sparkle beside that pennant: this building could grow. Only the affordable one, and only while the scene is calm. */}
+            {den.cheapestAffordable && flightsOn && !burst && (
+              <UpgradeSparkle left={yard.world[den.cheapestAffordable.building].pennantLeft + 32} bottom={yard.world[den.cheapestAffordable.building].pennantBottom + 4} />
+            )}
             {/* A small sign under every building. */}
             {YARD_ORDER.map((k) => {
               const w = yard.world[k];
               const pennantHere = den.cheapestAffordable?.building === k;
               const name = t(`den.building.${k}.name`);
+              const nextLine = pennantHere ? nextEffectLabel(k, state) : null;
               return (
                 <View
                   key={k}
@@ -484,7 +537,14 @@ export function WorldScene(props: WorldSceneProps) {
                     accessibilityLabel={t('world.buildingLabel', { name, level: levels[k] })}
                     textStyleOverride={SMALL_SIGN_TEXT}
                   >
-                    {pennantHere ? t('world.upgradePossible') : t('world.buildingSign', { name, level: levels[k] })}
+                    {pennantHere ? (
+                      <View style={styles.upgradeLabel}>
+                        <Text style={[textStyle('sign'), styles.upgradeTitle, SMALL_SIGN_TEXT]}>{t('world.upgradePossible')}</Text>
+                        {nextLine ? <Text style={[textStyle('small'), styles.upgradeNext]}>{nextLine}</Text> : null}
+                      </View>
+                    ) : (
+                      t('world.buildingSign', { name, level: levels[k] })
+                    )}
                   </WoodSign>
                 </View>
               );
@@ -571,7 +631,7 @@ export function WorldScene(props: WorldSceneProps) {
               </WoodSign>
             </View>
 
-            <ArtDecor art={state.treats >= 1 ? 'bowl' : 'bowl-empty'} style={[styles.abs, { left: width / 2 - 60, top: 4, width: 120, height: 120 }]} />
+            <BowlFill treats={shownTreats} cap={cap} boxLeft={width / 2 - 60} boxTop={4} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('world.bowlLabel', { count: treatCount, cap: formatNumber(cap) })}
@@ -580,10 +640,15 @@ export function WorldScene(props: WorldSceneProps) {
             />
             <Animated.View
               pointerEvents="none"
-              style={[styles.abs, { left: width / 2 - 80, top: 96, width: 160, alignItems: 'center', transform: [{ scale: bowlScale }] }]}
+              style={[styles.abs, { left: width / 2 - 115, top: 96, width: 230, alignItems: 'center', transform: [{ scale: bowlScale }] }]}
             >
               <WoodSign size="medium" textStyleOverride={SMALL_SIGN_TEXT}>
-                {bowlText}
+                <BowlSignContent
+                  shown={shownTreats}
+                  cap={cap}
+                  ratePerHour={homecoming ? 0 : projection.ratePerHour}
+                  welcomeFrom={welcome ? Math.max(0, Math.floor(state.treats - welcome.n)) : null}
+                />
               </WoodSign>
             </Animated.View>
 
@@ -599,6 +664,11 @@ export function WorldScene(props: WorldSceneProps) {
                 {t('world.post')}
               </WoodSign>
             </View>
+          </View>
+
+          {/* Treats flying from the bakery chimney into the bowl. */}
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 6 }]}>
+            <TreatFlights active={flightsOn} ratePerHour={projection.ratePerHour} atCap={bowlAtCap(shownTreats, cap)} from={chimneyPoint} to={bowlPoint} burst={burst} />
           </View>
 
           {selected && (
@@ -654,11 +724,18 @@ export function WorldScene(props: WorldSceneProps) {
               </View>
             </WoodSign>
           </View>
-          <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + 58, width: 150, transform: [{ rotate: '3deg' }] }]}>
+          <View pointerEvents="box-none" style={[styles.abs, { right: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '3deg' }] }]}>
             <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
               {title ? `${dog} · ${title}` : t('doorstep.dogLevel', { dog, level })}
             </WoodSign>
           </View>
+          {state.territoryIncomeRevealed && Math.round(territoryIncomeRate) >= 1 && (
+            <View pointerEvents="none" style={[styles.abs, { left: 6, top: layout.gateSignTop + GATE_SIGN_H + 4, width: 150, transform: [{ rotate: '-3deg' }] }]}>
+              <WoodSign size="small" textStyleOverride={SMALL_SIGN_TEXT}>
+                {t('world.territorySign', { n: formatNumber(Math.round(territoryIncomeRate)) })}
+              </WoodSign>
+            </View>
+          )}
           <Pressable
             onPress={scrollToViertel}
             accessibilityRole="button"
@@ -803,5 +880,8 @@ const styles = StyleSheet.create({
   },
   emptyNote: { alignSelf: 'stretch' },
   noteText: { color: material.ink },
+  upgradeLabel: { alignItems: 'center' },
+  upgradeTitle: { color: material.ink, textAlign: 'center' },
+  upgradeNext: { color: material.muted, textAlign: 'center' },
   updateButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, justifyContent: 'center' },
 });

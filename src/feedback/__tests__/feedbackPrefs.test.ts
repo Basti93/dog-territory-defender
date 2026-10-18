@@ -1,4 +1,4 @@
-import { getFeedbackPrefs, loadFeedbackPrefs, setFeedbackPrefs, shouldPlay, updateFeedbackPrefs } from '../feedbackPrefs';
+import { getFeedbackPrefs, loadFeedbackPrefs, setFeedbackPrefs, shouldPlay, shouldPlayNow, updateFeedbackPrefs } from '../feedbackPrefs';
 import { createInMemoryFeedbackPrefsRepository } from '../../storage/inMemoryFeedbackPrefsRepository';
 
 describe('shouldPlay', () => {
@@ -7,6 +7,17 @@ describe('shouldPlay', () => {
     expect(shouldPlay({ sound: true, haptics: false, music: true }, 'haptic')).toBe(false);
     expect(shouldPlay({ sound: false, haptics: true, music: true }, 'sound')).toBe(false);
     expect(shouldPlay({ sound: false, haptics: true, music: true }, 'haptic')).toBe(true);
+  });
+});
+
+describe('shouldPlayNow', () => {
+  const on = { sound: true, haptics: true, music: true };
+  it('plays only in the foreground with sound on', () => {
+    expect(shouldPlayNow('active', on)).toBe(true);
+    expect(shouldPlayNow('background', on)).toBe(false);
+    expect(shouldPlayNow('inactive', on)).toBe(false);
+    expect(shouldPlayNow(undefined, on)).toBe(false);
+    expect(shouldPlayNow('active', { ...on, sound: false })).toBe(false);
   });
 });
 

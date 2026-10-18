@@ -1,3 +1,5 @@
+Tails Up (Arbeitstitel: Dog Territory Defender)
+
 # Dog Territory Defender
 
 Location-based mobile game for dog owners: walk → GPS trail → close loop → claim territory. Spring-like, joyful, cookie-clicker background loop. Game design lives in `docs/specs/` (backlog, economy, anti-snowball, visual direction).

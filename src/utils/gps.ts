@@ -137,7 +137,7 @@ export async function startWatchingLocation(callback: (location: LocationType) =
       timeInterval: 1000,
       distanceInterval: 2,
       foregroundService: {
-        notificationTitle: 'Dog Territory Defender',
+        notificationTitle: 'Tails Up',
         notificationBody: t('gps.trackingBody'),
         notificationColor: '#2ECC71',
       },

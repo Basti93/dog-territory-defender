@@ -4,6 +4,9 @@ import type { TestInstance } from 'test-renderer';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { t } from '../../i18n';
+import { DenEconomyState } from '../../economy/denEconomy';
+import { passiveTreatsPerHour } from '../../economy/formulas';
+import { formatRatePerHour } from '../world/bakeryRules';
 import { createInMemoryDenEconomyRepository } from '../../storage/inMemoryDenEconomyRepository';
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
 import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPersonalStatsRepository';
@@ -27,9 +30,9 @@ afterEach(() => {
 });
 
 // Level-2 costs from balanceConfig: doghouse 60, sniff garden 72, bakery 96.
-async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70) {
+async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70, stateExtra: Partial<DenEconomyState> = {}) {
   const denEconomyRepository = createInMemoryDenEconomyRepository();
-  await denEconomyRepository.saveState({ ...(await denEconomyRepository.getState()), treats, dogName: 'Rex' });
+  await denEconomyRepository.saveState({ ...(await denEconomyRepository.getState()), treats, dogName: 'Rex', ...stateExtra });
   const callbacks = {
     onStartWalk: jest.fn(),
     onOpenMap: jest.fn(),
@@ -198,6 +201,95 @@ describe('WorldScene', () => {
       }
       expect(verdict).not.toBe('reachable');
     }
+  });
+});
+
+describe('WorldScene bakery life', () => {
+  it('shows the passive rate under the bowl number', async () => {
+    const { view } = await setup();
+    expect(screen.getByText(t('world.ratePerHour', { rate: formatRatePerHour(passiveTreatsPerHour(1, 1)) }))).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('adds the territory income to the rate and shows the fence sign only once the reveal flag is set', async () => {
+    const a = await setup({ territoryIncomeRate: 12.4 }, 70, { territoryIncomeRevealed: true });
+    expect(screen.getByText(t('world.territorySign', { n: '12' }))).toBeOnTheScreen();
+    expect(screen.getByText(t('world.ratePerHour', { rate: formatRatePerHour(passiveTreatsPerHour(1, 1) + 12.4) }))).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({ territoryIncomeRate: 12.4 }, 70, { territoryIncomeRevealed: false });
+    expect(screen.queryByText(t('world.territorySign', { n: '12' }))).toBeNull();
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('lays an extra bone next to the bowl at storage cap, and not below it', async () => {
+    const full = await setup({}, 200);
+    expect(screen.getByTestId('bowl-bone')).toBeOnTheScreen();
+    expect(screen.getAllByTestId(/^bowl-pile-/).length).toBe(5);
+    await unmountAndExpectNoTimers(full.view);
+    const some = await setup({}, 100);
+    expect(screen.queryByTestId('bowl-bone')).toBeNull();
+    await unmountAndExpectNoTimers(some.view);
+  });
+
+  it('the welcome-back bubble replaces the away-strip treats line and plays once per launch', async () => {
+    const session = { kind: 'fresh-open' as const, greetingFlavor: 'first-open' as const };
+    const props = { session, accruedDelta: 12, awayStripLines: [{ text: 'The Treat Bakery baked 12 treats.', kind: 'treats' as const }] };
+    const first = await setup(props);
+    expect(screen.getByText('The bakery kept busy: +12')).toBeOnTheScreen();
+    expect(screen.queryByText('The Treat Bakery baked 12 treats.')).toBeNull();
+    await advance(2000);
+    await unmountAndExpectNoTimers(first.view);
+    // Same launch, scene mounted again (back from a walk): no second burst, the old line is back as before.
+    const second = await setup(props);
+    expect(screen.queryByText('The bakery kept busy: +12')).toBeNull();
+    await unmountAndExpectNoTimers(second.view);
+  });
+
+  it('no welcome-back when nothing accrued', async () => {
+    const { view } = await setup({ accruedDelta: 0 });
+    expect(screen.queryByText(/The bakery kept busy/)).toBeNull();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('sparkles only on the affordable building and says what the next level gives', async () => {
+    const a = await setup({}, 70);
+    expect(screen.getAllByTestId('upgrade-sparkle').length).toBe(1);
+    expect(screen.getByText(t('world.upgradePossible'))).toBeOnTheScreen();
+    expect(screen.getByText(/^→ room for /)).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({}, 10);
+    expect(screen.queryByTestId('upgrade-sparkle')).toBeNull();
+    expect(screen.queryByText(t('world.upgradePossible'))).toBeNull();
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('a treat leaves the bakery every few seconds and lands; never more than six in the air', async () => {
+    const { view } = await setup({}, 70);
+    expect(screen.queryAllByTestId('treat-flight').length).toBe(0);
+    await advance(1600); // first emission comes after at most 1.5 s
+    expect(screen.queryAllByTestId('treat-flight').length).toBe(1);
+    await advance(30000);
+    expect(screen.queryAllByTestId('treat-flight').length).toBeLessThanOrEqual(6);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the welcome-back burst sends at most eight sprites and is over within a few seconds', async () => {
+    const { view } = await setup({ accruedDelta: 50 });
+    await advance(300);
+    const inAir = screen.queryAllByTestId('treat-flight').length;
+    expect(inAir).toBeGreaterThanOrEqual(2);
+    expect(inAir).toBeLessThanOrEqual(8);
+    await advance(1300); // burst done (0.7 s stagger + 0.6 s flight); the first single emission is still ahead
+    expect(screen.queryAllByTestId('treat-flight').length).toBeLessThanOrEqual(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('nothing sparkles or flies while a walk is active', async () => {
+    const { view } = await setup({ walkActive: true }, 70);
+    expect(screen.queryByTestId('upgrade-sparkle')).toBeNull();
+    await advance(5000);
+    expect(screen.queryAllByTestId('treat-flight').length).toBe(0);
+    await unmountAndExpectNoTimers(view);
   });
 });
 

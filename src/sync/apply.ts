@@ -256,6 +256,10 @@ export async function applyEvents(
           seq: event.seq,
         });
         break;
+      default:
+        // A kind this app does not know (the server is newer, see API_LEVEL): skip it. The cursor below still moves
+        // past it, so one unknown event never blocks the feed.
+        break;
     }
   }
   const result = await applyBatch(batch, repos, ctx, false);

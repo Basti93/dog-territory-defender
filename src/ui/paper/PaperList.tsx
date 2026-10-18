@@ -143,6 +143,7 @@ const styles = StyleSheet.create({
   ink: { color: material.ink },
   muted: { color: material.muted },
   hint: { marginTop: spacing.xs },
-  link: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  // 11 + 22 (body line) + 11 = 44 touch target without minHeight (minHeight on the Pressable would re-enable PressableScale's grow boxes).
+  link: { alignSelf: 'flex-start', paddingVertical: 11 },
   linkText: { color: material.inkGreen },
 });

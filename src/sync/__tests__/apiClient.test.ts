@@ -1,4 +1,5 @@
 import { ApiError, createApiClient } from '../apiClient';
+import { API_LEVEL } from '../apiContract';
 import { jsonResponse } from '../../test/syncHelpers';
 
 const client = (fetchImpl: unknown, timeoutMs = 50) =>
@@ -11,6 +12,22 @@ describe('apiClient', () => {
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://x.test/v1/events?after=3');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+  });
+
+  it('announces the API level the app was built for on every request', async () => {
+    const fetchImpl = jest.fn(async () => jsonResponse(200, { events: [], cursor: 0, hasMore: false, serverTime: 1 }));
+    await client(fetchImpl).events(0);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['X-Client-Api-Level']).toBe(String(API_LEVEL));
+  });
+
+  it('maps HTTP 426 to upgrade-required, which is not retryable but carries the code', async () => {
+    const err = await client(async () => jsonResponse(426, { error: 'upgrade_required' })).command({ clientId: 'c', command: { kind: 'player.rename', name: 'x' } }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.kind).toBe('upgrade-required');
+    expect(err.status).toBe(426);
+    expect(err.code).toBe('upgrade_required');
+    expect(err.retryable).toBe(false);
   });
 
   it.each([

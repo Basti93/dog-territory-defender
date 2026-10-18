@@ -19,6 +19,7 @@ describe('play', () => {
       },
       InterruptionModeAndroid: { DoNotMix: 1 },
     }));
+    require('react-native').AppState.currentState = 'active';
     const { play } = require('../sounds');
     play('buddy-1');
     await Promise.resolve();

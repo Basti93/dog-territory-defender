@@ -1,7 +1,7 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import { log } from '../utils/log';
-import { getFeedbackPrefs, shouldPlay } from './feedbackPrefs';
+import { getFeedbackPrefs, shouldPlay, shouldPlayNow } from './feedbackPrefs';
 
 export type SoundName = 'tap' | 'treat' | 'upgrade' | 'celebrate' | 'buddy-1' | 'buddy-2' | 'buddy-3' | 'sleepy' | 'new-street' | 'reward-reached' | 'walk-done';
 
@@ -23,6 +23,7 @@ const SOURCES: Record<SoundName, () => number> = {
 
 type AvSound = {
   replayAsync: () => Promise<unknown>;
+  stopAsync?: () => Promise<unknown>;
   getStatusAsync?: () => Promise<{ isLoaded?: boolean }>;
   unloadAsync?: () => Promise<unknown>;
 };
@@ -59,13 +60,9 @@ export function ensureAudioMode(): Promise<void> {
       const { Audio, InterruptionModeAndroid } = require('expo-av') as typeof import('expo-av');
       await Audio.setAudioModeAsync({
         playsInSilentModeIOS: false,
-        // Walk cues must sound with the screen off / app backgrounded.
-        // Android: the GPS foreground service keeps the process alive.
-        // iOS caveat: this only works if Info.plist UIBackgroundModes
-        // includes "audio"; the location background mode alone keeps the
-        // process running but the audio session may be suspended. Check
-        // app.json ios.infoPlist on a real device before relying on it.
-        staysActiveInBackground: true,
+        // Owner decision 2026-10-18: no sound at all while the app is not in
+        // front (including the in-walk cues). play() also guards on AppState.
+        staysActiveInBackground: false,
         shouldDuckAndroid: false,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
@@ -175,6 +172,30 @@ async function replayWithHeal(name: SoundName, sound: AvSound): Promise<void> {
   }
 }
 
+/** Stops every effect that is currently sounding (app went to background / inactive). */
+export function stopAllSounds(): void {
+  for (const sound of Object.values(loaded)) {
+    try {
+      sound?.stopAsync?.().catch(() => {});
+    } catch {
+      // player already gone
+    }
+  }
+}
+
+// Re-registered on every module evaluation (Fast Refresh) without leaking the old listener.
+declare global {
+  // eslint-disable-next-line no-var
+  var __dtdSoundsAppStateSub: { remove: () => void } | undefined;
+}
+globalThis.__dtdSoundsAppStateSub?.remove();
+globalThis.__dtdSoundsAppStateSub =
+  Platform.OS === 'web'
+    ? undefined
+    : AppState.addEventListener('change', (state) => {
+        if (state !== 'active') stopAllSounds();
+      });
+
 /** Loads every sound ahead of time (call at app start, non-blocking) so the first tap is audible. */
 export function preloadSounds(): Promise<void> {
   if (Platform.OS === 'web') return Promise.resolve();
@@ -194,6 +215,7 @@ let lastBuddySound: BuddySoundName | null = null;
 
 /** The "wuff-wuff" for a Buddy tap; rotates through the three motifs. */
 export function playBuddy(): void {
+  if (AppState.currentState !== 'active') return;
   lastBuddySound = pickBuddySound(lastBuddySound);
   // Always logged, so the Debug Log tells "tap never arrived" (no line) apart from "tap arrived, sound muted/failed".
   log('sound', { event: 'buddy-tap', sound: lastBuddySound, enabled: shouldPlay(getFeedbackPrefs(), 'sound') });
@@ -201,14 +223,16 @@ export function playBuddy(): void {
 }
 
 /**
- * Fire-and-forget. No-op when sound is off or on web. Waits for the load to
+ * Fire-and-forget. No-op when sound is off, on web, or when the app is not in front (never queued). Waits for the load to
  * finish before replaying, so even the very first call is audible. Failures
  * are written to the Debug Log, never thrown.
  */
 export function play(name: SoundName): void {
-  if (Platform.OS === 'web' || !shouldPlay(getFeedbackPrefs(), 'sound')) return;
+  if (Platform.OS === 'web' || !shouldPlayNow(AppState.currentState, getFeedbackPrefs())) return;
   ensureLoaded()
     .then(() => {
+      // The app may have left the foreground while the load was pending.
+      if (AppState.currentState !== 'active') return undefined;
       const sound = loaded[name];
       if (!sound) {
         log('sound', { event: 'play-skipped-not-loaded', sound: name });

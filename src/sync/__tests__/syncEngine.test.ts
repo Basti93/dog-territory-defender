@@ -212,6 +212,36 @@ describe('outbox retry', () => {
     expect((await repos.sync.getPending())[0].attempts).toBe(0);
   });
 
+  it('a 426 keeps the item queued (no attempt, not dead), sets needsUpdate, and a later accepted write clears it', async () => {
+    const repos = await joined();
+    let accept = false;
+    const uploadWalk = jest.fn(async () => {
+      if (!accept) throw new ApiError('upgrade-required', 'HTTP 426 upgrade_required', 426, 'upgrade_required');
+      return uploadOk();
+    });
+    const events = jest.fn(async () => emptyEvents);
+    const engine = makeEngine(repos, { uploadWalk, events });
+    await repos.walks.saveWalk(walk('w'));
+    await engine.enqueueWalk(walk('w'), null);
+    await engine.syncNow({ force: true });
+    expect((await engine.getStatus()).needsUpdate).toBe(true);
+    expect(await repos.sync.counts()).toEqual({ pending: 1, dead: 0 });
+    expect((await repos.sync.getPending())[0].attempts).toBe(0);
+    expect(events).not.toHaveBeenCalled();
+    accept = true; // e.g. the app was updated
+    await engine.syncNow({ force: true });
+    expect((await engine.getStatus()).needsUpdate).toBe(false);
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+
+  it('reads keep working while needsUpdate is set and the outbox is empty', async () => {
+    const repos = await joined();
+    await repos.sync.saveState({ needsUpdate: true });
+    const events = jest.fn(async () => emptyEvents);
+    await makeEngine(repos, { events }).syncNow();
+    expect(events).toHaveBeenCalled();
+  });
+
   it('does nothing and queues nothing when not joined', async () => {
     const repos = makeRepos();
     const uploadWalk = jest.fn();

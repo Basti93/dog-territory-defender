@@ -11,6 +11,15 @@ export function shouldPlay(prefs: FeedbackPrefs, kind: FeedbackKind): boolean {
   return kind === 'sound' ? prefs.sound : prefs.haptics;
 }
 
+/**
+ * Pure gate for effect sounds: the sound pref must be on AND the app must be in
+ * front. Nothing sounds in the background or while 'inactive' (owner decision
+ * 2026-10-18), not even the in-walk cues; they are dropped, never queued.
+ */
+export function shouldPlayNow(appState: string | null | undefined, prefs: FeedbackPrefs): boolean {
+  return appState === 'active' && shouldPlay(prefs, 'sound');
+}
+
 let current: FeedbackPrefs = { ...DEFAULT_FEEDBACK_PREFS };
 // Counts toggles made by the player; lets a slow startup load detect it lost the race.
 let userChanges = 0;

@@ -108,7 +108,7 @@ export function validateBackup(json: unknown): { ok: boolean; errors: string[] }
     return { ok: false, errors: ['Backup is not a JSON object'] };
   }
   if (json.app !== BACKUP_APP_MARKER) {
-    errors.push('Not a Dog Territory Defender backup (app marker missing or wrong)');
+    errors.push('Not a Tails Up backup (app marker missing or wrong)');
   }
   if (typeof json.schemaVersion !== 'number') {
     errors.push('schemaVersion missing');

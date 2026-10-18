@@ -6,7 +6,7 @@ MIGRATE_CMD ?= node dist/ops/migrate.js
 CLI_CMD     ?= node dist/ops/cli.js
 BUILD_CONTEXT ?= ..
 
-.PHONY: build up down logs device-logs migrate cli backup status
+.PHONY: build up down logs device-logs migrate cli backup restore-drill status
 build:   ## Image dog-territory-api:local aus ../server/Dockerfile (nicht zwischen 02:00 und 06:00)
 	docker build -f $(BUILD_CONTEXT)/server/Dockerfile -t dog-territory-api:local $(BUILD_CONTEXT)
 up:      ## alle Dienste starten
@@ -23,6 +23,8 @@ cli:     ## Operator-CLI: make cli ARGS="create-household --name Zuhause"
 	$(COMPOSE) exec api $(CLI_CMD) $(ARGS)
 backup:  ## pg_dump nach ~/dog-territory/backups
 	./backup.sh
+restore-drill: ## Restore-Probe: neuesten Dump in Wegwerf-Container einspielen, Zeilen zaehlen (monatlich; DB bleibt unberuehrt)
+	./restore-drill.sh
 status:
 	ss -tln | grep 700 || true
 	$(COMPOSE) ps

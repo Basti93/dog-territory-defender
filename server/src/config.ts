@@ -12,6 +12,8 @@ export interface Config {
   /** Debug aid: log req.ip + raw forwarded headers for the first 50 requests (LOG_FORWARDED_HEADERS=true). */
   logForwardedHeaders: boolean;
   inviteTtlMs: number;
+  /** Apps announcing a lower X-Client-Api-Level (or none = 1) get 426 on mutating routes. Default 1 = nobody is refused. */
+  minClientApiLevel: number;
   /** Track B (Nachbarhunde). Off by default; off = nearby is [], scheduler idle, no bots are created. */
   neighbours: {
     enabled: boolean;
@@ -54,6 +56,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxyCidr: env.TRUST_PROXY_CIDR ?? '172.16.0.0/12',
     logForwardedHeaders: env.LOG_FORWARDED_HEADERS === 'true',
     inviteTtlMs: 24 * 60 * 60 * 1000,
+    minClientApiLevel: int('MIN_CLIENT_API_LEVEL', 1, env),
     neighbours: {
       enabled: env.NEIGHBOURS_ENABLED === 'true',
       overpassUrl: env.OVERPASS_URL ?? '',

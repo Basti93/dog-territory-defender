@@ -49,6 +49,28 @@ export function effectText(building: BuildingKey, level: number, state: DenEcono
   }
 }
 
+/**
+ * The short "what the next level gives" line under a building's sign ("→ +6/hr", "→ room for 6,356"),
+ * or null at max level. Same formulas as effectText, just compact; no numbers of its own.
+ */
+export function nextEffectLabel(building: BuildingKey, state: DenEconomyState): string | null {
+  const level = getBuildingLevel(state, building);
+  if (level >= BALANCE.maxBuildingLevel) return null;
+  const next = level + 1;
+  switch (building) {
+    case 'doghouse':
+      return t('world.nextEffect.storage', { count: formatNumber(storageCap(next, state.level, state.bakeryLevel, state.sniffGardenLevel)) });
+    case 'bakery':
+      return t('world.nextEffect.passive', {
+        rate: formatNumber(passiveTreatsPerHour(next, state.level), { minimumFractionDigits: 0, maximumFractionDigits: 1 }),
+      });
+    case 'sniffGarden': {
+      const extra = buddyTreatsPerWalk(state.level, next) - buddyPayout(state.level);
+      return extra < 1 ? t('world.nextEffect.sniffWarmup') : t('world.nextEffect.sniff', { count: formatNumber(extra) });
+    }
+  }
+}
+
 /** The cheapest building upgrade Buddy can afford right now (he sniffs toward it), or undefined. */
 export function cheapestAffordableUpgrade(state: DenEconomyState): { building: BuildingKey; cost: number } | undefined {
   return BUILDING_ORDER.map((b) => {

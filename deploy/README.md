@@ -51,10 +51,36 @@ Zeile anhaengen (Crontab nie ersetzen):
 Manuell: `make backup`. Wiederherstellen: `./restore.sh ~/dog-territory/backups/dtd-<zeit>.sql.gz` (fragt nach, stoppt api,
 legt zuerst einen Sicherheitsdump `pre-restore-<zeit>.sql.gz` an, droppt die Schemas `drizzle` und `public`, spielt ein).
 
+### Zweite Kopie (ausserhalb der Platte)
+
+Dump und Datenbank liegen sonst auf derselben Platte. `backup.sh` kopiert den neuen Dump zusaetzlich, wenn eine
+dieser Variablen gesetzt ist (Standard: keine, dann passiert nichts). Im Cron vor den Aufruf schreiben oder in
+`~/.profile` exportieren:
+- `BACKUP_COPY_DIR=/mnt/extern/dtd`: lokaler Pfad (eingehaengte externe Platte, NAS). Dort werden ebenfalls nur
+  `dtd-*.sql.gz` aelter als 14 Tage geloescht. Nicht dasselbe Verzeichnis wie `BACKUP_DIR`.
+- `BACKUP_RSYNC_TARGET=user@host:dog-territory-backups`: rsync per ssh auf einen anderen Rechner (z.B. den Mac), nur mit
+  ssh-Schluessel (kein Passwort-Prompt im Cron); das Zielverzeichnis muss existieren. Dort wird nichts geloescht.
+Schlaegt die Kopie fehl (Platte nicht eingehaengt, Ziel offline), steht eine `WARN`-Zeile im Backup-Log und das Skript
+endet mit Exit 3; der Dump selbst ist trotzdem fertig.
+
+### Restore-Probe (monatlich, und einmal nach jeder Migration)
+
+`make restore-drill` (oder `./restore-drill.sh [<dump>]`): nimmt den neuesten `dtd-*.sql.gz`, startet einen
+Wegwerf-`postgres:16-alpine` (zufaelliger Name `dtd-restore-drill-...`, kein veroeffentlichter Port, 256 MB), spielt
+den Dump ein, druckt Zeilenzahlen (`households`, `walks`, `cells`, `den_state`, `events`) und entfernt den Container
+samt Volume. Die echte Datenbank und `restore.sh` werden nie angefasst. Das Ergebnis steht auch in
+`$BACKUP_DIR/drill.log`. Ein Dump, der sich so nicht einspielen laesst, ist kein Backup: dann sofort `make backup`
+wiederholen und den Fehler klaeren. Sinnvolle Zahlen: Haushalte/Walks etwa wie im Spiel (`make cli ARGS="list"`).
+
 ## Betrieb: Logs, Limits, Tageslimits
 
 - Alle Dienste: json-file-Logrotation 3 x 10 MB. db: 1 CPU, `pids_limit` 200. Image `tailscale/tailscale:v1.76.1` bewusst manuell anheben.
 - `docker compose stop api` wartet bis 30 s (`stop_grace_period`); SIGTERM weckt offene Long-Polls sofort.
+- **API-Level:** jede Antwort traegt `X-Api-Level`, `GET /healthz` meldet `apiLevel`. Die App sendet `X-Client-Api-Level`.
+  Regeln: innerhalb eines Levels nur additive Felder; **Server vor der App ausrollen**; Brueche bekommen `/v2`.
+  `MIN_CLIENT_API_LEVEL` (.env, Standard 1) weist aeltere Apps bei Schreibzugriffen mit 426 `upgrade_required` ab
+  (Lesen geht weiter, die App zeigt "Es gibt ein Update" und haelt ihre Aenderungen zurueck). Erst anheben, wenn
+  **beide** Telefone den neuen Stand haben (das iPhone mit kostenlosem Team ist oft zurueck!).
 - Tageslimits (Walks/Commands pro Haushalt) zaehlen den **Kalendertag in der Zeitzone des Haushalts**, derselbe Tag
   wie beim taeglichen Belohnungs-Multiplikator (kein gleitendes 24-h-Fenster mehr).
 

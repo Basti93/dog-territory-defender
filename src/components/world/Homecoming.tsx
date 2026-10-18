@@ -205,7 +205,7 @@ function BowlSign({ layout, width, bowl, earned, active }: { layout: SceneLayout
   }, [active, bowl.total]);
   // Covers the scene's own bowl sign at the same spot while the number climbs.
   return (
-    <View style={[styles.bowlSign, { left: width / 2 - 80, top: layout.hofTop + layout.yardH + 96 }]}>
+    <View style={[styles.bowlSign, { left: width / 2 - 115, top: layout.hofTop + layout.yardH + 96 }]}>
       <WoodSign size="medium" textStyleOverride={styles.smallSign}>
         <AnimatedNumber
           from={from}
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   seam: { position: 'absolute', left: 36, right: 36, height: 180, borderRadius: 14 },
   stitching: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: material.inkGreen },
   hint: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: material.muted },
-  bowlSign: { position: 'absolute', width: 160, alignItems: 'center' },
+  bowlSign: { position: 'absolute', width: 230, alignItems: 'center' },
   dot: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: '#C9A06A' },
   closing: { position: 'absolute', left: spacing.lg, right: spacing.lg },
   closingNote: { paddingVertical: 12 },

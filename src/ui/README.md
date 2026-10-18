@@ -32,6 +32,6 @@ Text: `<Text style={[textStyle('h1'), { color: palette.muted }]}>`. Names: displ
 
 ## Paper & signs (redesign, `paper/`)
 Material look for the yard redesign: `material` colours (`theme.ts`, separate from `tokens`), fonts `sign` (Fredoka 700), `signLight` (Fredoka 600), `hand` (Caveat 600; postcard phrases only), type styles `sign` 20, `signBig` 28, `hand` 22. Text on paper/signs is `material.ink`; signs >= 14, elsewhere >= 12.
-- `WoodSign` props `size='small'|'medium'|'wide'`, `rotate`, `onPress`, `art` (9-slice key once `sign-*.png` is registered; Views until then): `<WoodSign size="wide" onPress={go}>Gassi gehen</WoodSign>`
+- `WoodSign` props `size='small'|'medium'|'wide'`, `rotate`, `onPress`, `art` (optional sprite painted absolutely behind the text; default is the drawn face, size comes from text + padding only): `<WoodSign size="wide" onPress={go}>Gassi gehen</WoodSign>`
 - `PaperNote` (cream card, linen edge, no shadow), `Postcard side='front'|'back' lines=[...]`, `SpeechBubble tail='left'|'right'`, `stitch(width?, color?)` dashed cream seam style: `[stitch(3), { borderRadius: 20 }]`.
 - Fonts: `Fredoka-*`, `Caveat-SemiBold` in `assets/fonts/` (OFL texts `OFL-Fredoka.txt`, `OFL-Caveat.txt`).

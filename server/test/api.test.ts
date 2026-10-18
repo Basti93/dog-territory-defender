@@ -7,6 +7,7 @@ import type {
   SnapshotResponse,
   WalkUploadResponse,
 } from '@game/sync/apiContract';
+import { API_LEVEL } from '@game/sync/apiContract';
 import * as schema from '../src/db/schema';
 import { NOW, denRevOf, joinNew, makeServer, newHousehold, straightWalk, type TestServer } from './helpers';
 
@@ -46,7 +47,8 @@ describe('401 surface', () => {
   it('keeps /healthz public and minimal, with hardening headers and no server banner', async () => {
     const res = await s.app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true });
+    expect(res.json()).toEqual({ ok: true, apiLevel: API_LEVEL });
+    expect(res.headers['x-api-level']).toBe(String(API_LEVEL));
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-security-policy']).toContain("default-src 'none'");

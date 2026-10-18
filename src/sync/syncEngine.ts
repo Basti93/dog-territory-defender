@@ -53,6 +53,8 @@ export interface SyncStatus {
   busy: boolean;
   /** The server no longer accepts this phone's token. */
   unauthorized: boolean;
+  /** The server refused a write with 426: the app needs an update. Changes stay queued; the Household section shows `household.updateNeeded`. */
+  needsUpdate?: boolean;
 }
 
 export interface SyncCallbacks {
@@ -143,10 +145,19 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     await deps.sync.saveState({ clockOffsetMs: serverTime - now() });
   }
 
+  /** A write was accepted, so the server takes this app's level again (e.g. after an update). */
+  async function clearNeedsUpdate() {
+    if ((await deps.sync.getState()).needsUpdate) {
+      await deps.sync.saveState({ needsUpdate: false });
+      notify();
+    }
+  }
+
   /** Sends due outbox items in order. Returns true when the whole outbox is drained or dead-lettered. */
   async function push(client: ApiClient, force: boolean): Promise<boolean> {
     const items = await deps.sync.getPending();
     let lastDen: ApiDenState | null = null;
+    let sentOne = false;
     for (const item of items) {
       if (!force && item.nextAttemptAt > now()) return false; // keep order: nothing may jump the queue
       try {
@@ -165,10 +176,21 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           // and the server's Den state applied below is the silent correction.
         }
         await deps.sync.remove(item.id);
+        if (!sentOne) {
+          sentOne = true;
+          await clearNeedsUpdate();
+        }
       } catch (err) {
         if (!(err instanceof ApiError)) throw err;
         if (err.kind === 'unauthorized') {
           unauthorized = true;
+          return false;
+        }
+        if (err.kind === 'upgrade-required') {
+          // Not the item's fault: keep it queued untouched (no attempt burned) and wait for an app update.
+          await deps.sync.saveState({ needsUpdate: true });
+          log('SYNC_UPDATE_NEEDED', { status: err.status, kind: item.kind });
+          notify();
           return false;
         }
         const plan = planFailure(item.attempts, err.retryable, now());
@@ -365,6 +387,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
         dead: counts.dead,
         busy,
         unauthorized,
+        needsUpdate: state.needsUpdate === true,
       };
     },
 

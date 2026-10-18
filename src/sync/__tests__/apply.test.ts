@@ -256,3 +256,27 @@ describe('neighbour events (Track B)', () => {
     expect(getNearby()[0].rangeCells).toEqual([{ ix: 1, iy: 2 }]);
   });
 });
+
+describe('unknown event kinds (a newer server)', () => {
+  it('skips them without throwing, still applies the known events around them, and moves the cursor past them', async () => {
+    const repos = makeRepos();
+    const events = [
+      { seq: 5, kind: 'dog.updated', actorPlayerId: null, createdAt: 1, payload: { dog: { id: 'd', name: 'Rex', appearance: {}, updatedAt: 1 } } },
+      { seq: 6, kind: 'postcard.stamped', actorPlayerId: 'p-lisa', createdAt: 2, payload: { walkId: 'w1', stampKey: 'nice' } },
+      { seq: 7, kind: 'member.updated', actorPlayerId: 'p-lisa', createdAt: 3, payload: { player: { id: 'p-lisa', displayName: 'Lisa B.', joinedAt: 1 } } },
+    ] as unknown as ApiEvent[];
+    await expect(applyEvents(events, 7, repos, ctx())).resolves.toMatchObject({ walksAdded: 0, rangeChanged: false, neighbourEvents: false });
+    const state = await repos.sync.getState();
+    expect(state.cursor).toBe(7);
+    expect(state.players['p-lisa']).toBe('Lisa B.');
+    expect((await repos.denEconomy.getState()).dogName).toBe('Rex');
+  });
+
+  it('advances the cursor even when the whole batch is unknown', async () => {
+    const repos = makeRepos();
+    await repos.sync.saveState({ cursor: 3 });
+    const events = [{ seq: 4, kind: 'future.thing', actorPlayerId: null, createdAt: 1, payload: {} }] as unknown as ApiEvent[];
+    await applyEvents(events, 4, repos, ctx());
+    expect((await repos.sync.getState()).cursor).toBe(4);
+  });
+});

@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import type {
   ApiError,
   CommandRequest,
+  HealthzResponse,
   ImportRequest,
   JoinRequest,
   LogUploadRequest,
@@ -14,7 +15,7 @@ import type {
   SnapshotResponse,
   WalkUploadRequest,
 } from '@game/sync/apiContract';
-import { API_LIMITS, API_PATHS } from '@game/sync/apiContract';
+import { API_HEADERS, API_LEVEL, API_LIMITS, API_PATHS } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { FixedWindowLimiter } from '../lib/limiter';
@@ -110,6 +111,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
 
   app.addHook('onSend', async (_req, reply) => {
     reply.header('Cache-Control', 'no-store');
+    reply.header(API_HEADERS.serverLevel, String(API_LEVEL));
   });
 
   // Debug aid for the Funnel setup: which client IP does Fastify derive, and what did the proxy send?
@@ -170,6 +172,16 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
     req.auth = auth;
   });
 
+  // 3b) API level gate: only mutating requests are refused, so an out-of-date app can still read. A missing or
+  // malformed X-Client-Api-Level counts as level 1 (apps from before the handshake).
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return;
+    if (isPublic(req.method, req.url.split('?')[0])) return; // join: a fresh install must always be able to reach the server
+    const raw = Number(req.headers[API_HEADERS.clientLevel.toLowerCase()]);
+    const clientLevel = Number.isInteger(raw) && raw >= 1 ? raw : 1;
+    if (clientLevel < config.minClientApiLevel) return reply.code(426).send({ error: 'upgrade_required' } satisfies ApiError);
+  });
+
   // structured access log: route template only, never the raw URL/query, never tokens
   app.addHook('onResponse', async (req, reply) => {
     req.log.info(
@@ -200,7 +212,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
 
   // ------------------------------------------------------------------ routes
 
-  app.get(API_PATHS.healthz, async () => ({ ok: true }));
+  app.get(API_PATHS.healthz, async (): Promise<HealthzResponse> => ({ ok: true, apiLevel: API_LEVEL }));
 
   app.post(
     API_PATHS.join,

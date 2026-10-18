@@ -16,6 +16,7 @@ describe('play heal', () => {
       Audio: { setAudioModeAsync: jest.fn(async () => {}), Sound: { createAsync } },
       InterruptionModeAndroid: { DoNotMix: 1 },
     }));
+    require('react-native').AppState.currentState = 'active';
     return { dead, fresh, createAsync, sounds: require('../sounds') };
   }
 

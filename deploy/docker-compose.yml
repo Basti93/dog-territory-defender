@@ -38,6 +38,8 @@ services:
       # Nur das Netz des Tailscale-Sidecars gilt als Proxy (X-Forwarded-For). Wert nach erstem Start pruefen.
       TRUST_PROXY_CIDR: ${TRUST_PROXY_CIDR:-172.16.0.0/12}
       LOG_FORWARDED_HEADERS: ${LOG_FORWARDED_HEADERS:-false}   # true: erste 50 Requests mit req.ip + X-Forwarded-For loggen
+      # Apps mit niedrigerem X-Client-Api-Level bekommen 426 bei Schreibzugriffen (Lesen geht weiter). 1 = niemand wird abgewiesen.
+      MIN_CLIENT_API_LEVEL: ${MIN_CLIENT_API_LEVEL:-1}
       NEIGHBOURS_ENABLED: ${NEIGHBOURS_ENABLED:-false}
       OVERPASS_URL: ${OVERPASS_URL:-}
     ports:

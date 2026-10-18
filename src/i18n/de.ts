@@ -12,7 +12,7 @@
 // - treats          -> Leckerlis
 // - Doghouse        -> Hundehütte; Treat Bakery -> Leckerli-Bäckerei; Sniff Garden -> Schnüffelgarten
 // - badges          -> Abzeichen; Level stays "Level"; XP stays "XP"
-// - Buddy and "Dog Territory Defender" are names and are never translated.
+// - Buddy and "Tails Up" are names and are never translated.
 // - Possessives: avoid the genitive-s on dog names (names ending in s/x/z); write
 //   "Look von {dog}" / "Die Reviere von {dog}" instead.
 //   {dog} may be the fallback "Dein Hund" (nominative, capitalised), so never put it after
@@ -181,6 +181,13 @@ const de: Record<string, string> = {
   "world.buildingSign": "{name} · Lv {level}",
   "world.buildingLabel": "{name}, Stufe {level}",
   "world.panelClose": "Schließen",
+  "world.ratePerHour": "+{rate} pro Stunde",
+  "world.welcomeBack": "Die Bäckerei war fleißig: +{n}",
+  "world.nextEffect.storage": "→ Platz für {count}",
+  "world.nextEffect.passive": "→ +{rate}/Std",
+  "world.nextEffect.sniff": "→ +{count} pro Gassi",
+  "world.nextEffect.sniffWarmup": "→ Nase wärmt sich auf",
+  "world.territorySign": "Euer Revier bringt +{n} pro Stunde",
 
   // ---- doorstep menu
   "menu.debugLog": "Debug-Protokoll",
@@ -367,7 +374,7 @@ const de: Record<string, string> = {
   "settings.openSettings": "Einstellungen öffnen",
   "settings.language.system": "System",
   "settings.sound.title": "Sound",
-  "settings.sound.subtitle": "Kleine fröhliche Geräusche für Tipper, Leckerli und Buddy. Der Stumm-Schalter deines Handys hat immer Vorrang.",
+  "settings.sound.subtitle": "Kleine fröhliche Geräusche für Tipper, Leckerli und Buddy. Der Stumm-Schalter deines Handys hat immer Vorrang, und im Hintergrund bleibt es still.",
   "settings.music.title": "Musik",
   "settings.music.subtitle": "Eine leise Spieluhr-Melodie an der Haustür und im Hof. Nie während einer Gassirunde.",
   "settings.soundTest.title": "Sound-Test",
@@ -414,7 +421,7 @@ const de: Record<string, string> = {
   "settings.backup.restoreTitle": "Dieses Backup wiederherstellen?",
   "settings.backup.restoreMessage": "Damit wird alles auf diesem Handy durch das Backup ersetzt: Spaziergänge, Revier, Bau und Einstellungen. Das lässt sich nicht rückgängig machen.",
   "settings.backup.restoreConfirm": "Alles ersetzen",
-  "settings.backup.invalid": "Diese Datei ist kein Dog-Territory-Defender-Backup, deshalb wurde nichts verändert.",
+  "settings.backup.invalid": "Diese Datei ist kein Tails-Up-Backup, deshalb wurde nichts verändert.",
   "settings.backup.newerSchema": "Dieses Backup stammt von einer neueren App-Version. Bitte aktualisiere zuerst die App; es wurde nichts verändert.",
   "settings.backup.unreadable": "Diese Datei konnte nicht als Backup gelesen werden, deshalb wurde nichts verändert.",
   "settings.backup.walkActive": "Backups pausieren, solange ein Spaziergang läuft. Beende erst deinen Spaziergang.",
@@ -494,6 +501,7 @@ const de: Record<string, string> = {
   "household.status.outbox.one": "Eine Änderung wartet auf ihren Abgleich",
   "household.status.outbox.other": "Ein paar Änderungen warten auf ihren Abgleich",
   "household.status.unauthorized": "Dieses Handy braucht einen frischen Einladungscode, um wieder zum Haushalt zu gehören. Alles hier ist sicher und bleibt, wie es ist.",
+  "household.updateNeeded": "Für die App wartet ein Update. Bis dahin warten deine Änderungen sicher auf diesem Handy und werden danach geteilt.",
   "household.syncNow": "Jetzt abgleichen",
   "household.rename.saved": "Schön, der Haushalt kennt dich jetzt unter diesem Namen.",
   "household.rename.save": "Namen speichern",
