@@ -4,16 +4,9 @@ describe('play in the background', () => {
 
   function setup(appState: string) {
     jest.resetModules();
-    const sound = {
-      replayAsync: jest.fn(async () => ({})),
-      stopAsync: jest.fn(async () => ({})),
-      unloadAsync: jest.fn(async () => ({})),
-    };
+    const sound = { play: jest.fn(), pause: jest.fn(), seekTo: jest.fn(async () => {}), remove: jest.fn(), currentTime: 0 };
     const setAudioModeAsync = jest.fn(async () => {});
-    jest.doMock('expo-av', () => ({
-      Audio: { setAudioModeAsync, Sound: { createAsync: jest.fn(async () => ({ sound, status: {} })) } },
-      InterruptionModeAndroid: { DoNotMix: 1 },
-    }));
+    jest.doMock('expo-audio', () => ({ setAudioModeAsync, createAudioPlayer: jest.fn(() => sound) }));
     const { AppState } = require('react-native');
     AppState.currentState = appState;
     return { sound, setAudioModeAsync, AppState, sounds: require('../sounds') };
@@ -25,10 +18,10 @@ describe('play in the background', () => {
     sounds.play('reward-reached');
     sounds.playBuddy();
     await flush();
-    expect(sound.replayAsync).not.toHaveBeenCalled();
+    expect(sound.play).not.toHaveBeenCalled();
     AppState.currentState = 'active';
     await flush();
-    expect(sound.replayAsync).not.toHaveBeenCalled();
+    expect(sound.play).not.toHaveBeenCalled();
   });
 
   it('drops a play whose load finished after the app left the foreground', async () => {
@@ -36,14 +29,14 @@ describe('play in the background', () => {
     sounds.play('tap');
     AppState.currentState = 'background';
     await flush();
-    expect(sound.replayAsync).not.toHaveBeenCalled();
+    expect(sound.play).not.toHaveBeenCalled();
   });
 
   it('plays in the foreground', async () => {
     const { sound, sounds } = setup('active');
     sounds.play('tap');
     await flush();
-    expect(sound.replayAsync).toHaveBeenCalledTimes(1);
+    expect(sound.play).toHaveBeenCalledTimes(1);
   });
 
   it('stops sounding effects when the app leaves the foreground', async () => {
@@ -51,14 +44,14 @@ describe('play in the background', () => {
     await sounds.preloadSounds();
     const listener = AppState.addEventListener.mock.calls.find((c: unknown[]) => c[0] === 'change')![1];
     listener('active');
-    expect(sound.stopAsync).not.toHaveBeenCalled();
+    expect(sound.pause).not.toHaveBeenCalled();
     listener('inactive');
-    expect(sound.stopAsync).toHaveBeenCalled();
+    expect(sound.pause).toHaveBeenCalled();
   });
 
   it('does not keep the audio session alive in the background', async () => {
     const { setAudioModeAsync, sounds } = setup('active');
     await sounds.ensureAudioMode();
-    expect(setAudioModeAsync).toHaveBeenCalledWith(expect.objectContaining({ staysActiveInBackground: false }));
+    expect(setAudioModeAsync).toHaveBeenCalledWith(expect.objectContaining({ shouldPlayInBackground: false }));
   });
 });

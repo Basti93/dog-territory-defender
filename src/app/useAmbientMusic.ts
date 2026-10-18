@@ -57,7 +57,15 @@ export function useMusicPlaying(): boolean {
   );
 }
 
-type AvSound = import('expo-av').Audio.Sound;
+type MusicPlayer = import('expo-audio').AudioPlayer;
+
+function releasePlayer(player: MusicPlayer | null): void {
+  try {
+    player?.remove();
+  } catch {
+    // already released natively
+  }
+}
 
 /**
  * Looping, very quiet kalimba "music box" under the Doorstep, Den and
@@ -85,8 +93,8 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
   const wanted = wantedIgnoringQuiet && !quiet;
 
   const wantedRef = useRef(false);
-  const soundRef = useRef<AvSound | null>(null);
-  const loadingRef = useRef<Promise<AvSound | null> | null>(null);
+  const soundRef = useRef<MusicPlayer | null>(null);
+  const loadingRef = useRef<Promise<MusicPlayer | null> | null>(null);
   const fadeRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const volumeRef = useRef(0);
   const playingRef = useRef(false);
@@ -97,7 +105,15 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
     fadeRef.current = null;
   };
 
-  const fadeTo = (sound: AvSound, target: number, ms: number, done?: () => void) => {
+  const setPlayerVolume = (player: MusicPlayer, volume: number) => {
+    try {
+      player.volume = volume;
+    } catch {
+      // player already released
+    }
+  };
+
+  const fadeTo = (sound: MusicPlayer, target: number, ms: number, done?: () => void) => {
     stopFade();
     const from = volumeRef.current;
     const steps = Math.max(1, Math.round(ms / FADE_STEP_MS));
@@ -105,7 +121,7 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
     fadeRef.current = setInterval(() => {
       i += 1;
       volumeRef.current = from + ((target - from) * i) / steps;
-      sound.setVolumeAsync(volumeRef.current).catch(() => {});
+      setPlayerVolume(sound, volumeRef.current);
       if (i >= steps) {
         stopFade();
         done?.();
@@ -114,26 +130,29 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
   };
 
   // Loads the file once; resolves null on web or if loading fails (retried on the next want).
-  const load = (): Promise<AvSound | null> => {
+  const load = (): Promise<MusicPlayer | null> => {
     if (soundRef.current) return Promise.resolve(soundRef.current);
     if (!loadingRef.current) {
       loadingRef.current = (async () => {
         try {
           await ensureAudioMode();
-          const { Audio } = require('expo-av') as typeof import('expo-av');
-          const { sound } = await Audio.Sound.createAsync(require('../../assets/sounds/ambient-musicbox.wav'), {
-            isLooping: true,
-            volume: 0,
-            shouldPlay: false,
-          });
+          const { createAudioPlayer } = require('expo-audio') as typeof import('expo-audio');
+          const sound = createAudioPlayer(require('../../assets/sounds/ambient-musicbox.wav'));
+          sound.loop = true;
+          sound.volume = 0;
           if (unmountedRef.current) {
-            sound.unloadAsync().catch(() => {});
+            releasePlayer(sound);
             return null;
           }
           // Another app/sound taking audio focus can pause us; resume if we are still wanted.
-          sound.setOnPlaybackStatusUpdate((status) => {
-            if (status.isLoaded && !status.isPlaying && playingRef.current && wantedRef.current && !fadeRef.current) {
-              sound.playAsync().catch(() => {});
+          sound.addListener('playbackStatusUpdate', (status) => {
+            // The AppState check keeps this from re-starting the music when the OS pauses it on the way to the background.
+            if (status.isLoaded && !status.playing && playingRef.current && wantedRef.current && !fadeRef.current && AppState.currentState === 'active') {
+              try {
+                sound.play();
+              } catch {
+                // released
+              }
             }
           });
           soundRef.current = sound;
@@ -150,11 +169,11 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
   };
 
   // Start (or resume) playback on `sound` at volume 0, then fade in.
-  const startPlayback = async (sound: AvSound) => {
+  const startPlayback = async (sound: MusicPlayer) => {
     if (!playingRef.current) {
       volumeRef.current = 0;
-      await sound.setVolumeAsync(0);
-      await sound.playAsync();
+      sound.volume = 0;
+      sound.play();
       playingRef.current = true;
       setMusicPlaying(true);
     }
@@ -171,15 +190,10 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
           await startPlayback(sound);
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
-          if (!message.includes('does not exist')) {
-            // audio is a bonus; stay silent on failure, but leave a trace
-            log('music', { event: 'play-failed', error: message });
-            return;
-          }
-          // Native player is gone (e.g. after a hot reload): recreate once and resume.
+          // Native player may be gone (e.g. released by a hot reload): recreate once and resume.
           try {
             stopFade();
-            soundRef.current?.unloadAsync().catch(() => {});
+            releasePlayer(soundRef.current);
             soundRef.current = null;
             playingRef.current = false;
             const fresh = await load();
@@ -199,15 +213,23 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
       volumeRef.current = 0;
       playingRef.current = false;
       setMusicPlaying(false);
-      sound.setVolumeAsync(0).catch(() => {});
-      sound.pauseAsync().catch(() => {});
+      setPlayerVolume(sound, 0);
+      try {
+        sound.pause();
+      } catch {
+        // released
+      }
     } else if (soundRef.current && playingRef.current) {
       const sound = soundRef.current;
       fadeTo(sound, 0, FADE_OUT_MS, () => {
         if (wantedRef.current) return;
         playingRef.current = false;
         setMusicPlaying(false);
-        sound.pauseAsync().catch(() => {});
+        try {
+          sound.pause();
+        } catch {
+          // released
+        }
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,7 +240,7 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
       unmountedRef.current = true;
       stopFade();
       setMusicPlaying(false);
-      soundRef.current?.unloadAsync().catch(() => {});
+      releasePlayer(soundRef.current);
       soundRef.current = null;
     },
     []

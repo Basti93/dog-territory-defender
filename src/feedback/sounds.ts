@@ -21,50 +21,53 @@ const SOURCES: Record<SoundName, () => number> = {
   'walk-done': () => require('../../assets/sounds/walk-done.wav'),
 };
 
-type AvSound = {
-  replayAsync: () => Promise<unknown>;
-  stopAsync?: () => Promise<unknown>;
-  getStatusAsync?: () => Promise<{ isLoaded?: boolean }>;
-  unloadAsync?: () => Promise<unknown>;
-};
+type SoundPlayer = import('expo-audio').AudioPlayer;
 
-// Fast Refresh re-evaluates this module but expo-av's native players may already
-// be gone (or still alive and now orphaned). The cache therefore lives on
-// globalThis; a re-evaluated module unloads the previous instances and starts clean.
+// Fast Refresh re-evaluates this module while the previous native players are
+// still alive and now orphaned. The cache therefore lives on globalThis; a
+// re-evaluated module releases the previous players and starts clean.
 declare global {
   // eslint-disable-next-line no-var
-  var __dtdSounds: Partial<Record<SoundName, AvSound>> | undefined;
+  var __dtdSounds: Partial<Record<SoundName, SoundPlayer>> | undefined;
 }
 
-function discardPrevious(previous: Partial<Record<SoundName, AvSound>> | undefined): void {
-  if (!previous) return;
-  for (const sound of Object.values(previous)) {
-    try {
-      sound?.unloadAsync?.().catch(() => {});
-    } catch {
-      // already released natively
-    }
+function releasePlayer(player: SoundPlayer | undefined): void {
+  try {
+    player?.remove();
+  } catch {
+    // already released natively
   }
 }
+
+function discardPrevious(previous: Partial<Record<SoundName, SoundPlayer>> | undefined): void {
+  if (!previous) return;
+  for (const player of Object.values(previous)) releasePlayer(player);
+}
 discardPrevious(globalThis.__dtdSounds);
-const loaded: Partial<Record<SoundName, AvSound>> = (globalThis.__dtdSounds = {});
+const loaded: Partial<Record<SoundName, SoundPlayer>> = (globalThis.__dtdSounds = {});
 let audioModeSet = false;
 let inFlight: Promise<void> | null = null;
 let audioModeInFlight: Promise<void> | null = null;
 
-/** Sets the shared audio mode once (also used by useAmbientMusic). Silent switch wins on iOS. */
+/**
+ * Sets the shared audio mode once (also used by useAmbientMusic).
+ * - iOS: silent switch wins (playsInSilentMode false) and we mix with other apps' audio, as before.
+ * - Android: we take exclusive audio focus ('doNotMix'), as before.
+ * - Nothing keeps sounding in the background (shouldPlayInBackground false).
+ */
 export function ensureAudioMode(): Promise<void> {
   if (audioModeSet) return Promise.resolve();
   if (!audioModeInFlight) {
     audioModeInFlight = (async () => {
-      const { Audio, InterruptionModeAndroid } = require('expo-av') as typeof import('expo-av');
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: false,
+      const { setAudioModeAsync } = require('expo-audio') as typeof import('expo-audio');
+      await setAudioModeAsync({
+        playsInSilentMode: false,
         // Owner decision 2026-10-18: no sound at all while the app is not in
         // front (including the in-walk cues). play() also guards on AppState.
-        staysActiveInBackground: false,
-        shouldDuckAndroid: false,
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldPlayInBackground: false,
+        interruptionMode: Platform.OS === 'ios' ? 'mixWithOthers' : 'doNotMix',
+        allowsRecording: false,
+        shouldRouteThroughEarpiece: false,
       });
       audioModeSet = true;
     })()
@@ -73,10 +76,15 @@ export function ensureAudioMode(): Promise<void> {
         throw e;
       })
       .finally(() => {
-      audioModeInFlight = null;
-    });
+        audioModeInFlight = null;
+      });
   }
   return audioModeInFlight;
+}
+
+function createPlayer(name: SoundName): SoundPlayer {
+  const { createAudioPlayer } = require('expo-audio') as typeof import('expo-audio');
+  return createAudioPlayer(SOURCES[name]());
 }
 
 const ALL_SOUNDS = Object.keys(SOURCES) as SoundName[];
@@ -98,20 +106,17 @@ function ensureLoaded(): Promise<void> {
   if (audioModeSet && missing.length === 0) return Promise.resolve();
   if (!inFlight) {
     inFlight = (async () => {
-      const { Audio } = require('expo-av') as typeof import('expo-av');
       await ensureAudioMode();
-      await Promise.all(
-        missing.map(async (name) => {
-          loadAttempts[name] = (loadAttempts[name] ?? 0) + 1;
-          try {
-            const { sound } = await Audio.Sound.createAsync(SOURCES[name](), { shouldPlay: false });
-            loaded[name] = sound;
-          } catch (e) {
-            // one broken sound must not silence the rest; retried on a later play
-            log('sound', { event: 'load-failed', sound: name, attempt: loadAttempts[name], error: errorMessage(e) });
-          }
-        })
-      );
+      // createAudioPlayer is synchronous; the native player decodes in the background and plays as soon as it is ready.
+      for (const name of missing) {
+        loadAttempts[name] = (loadAttempts[name] ?? 0) + 1;
+        try {
+          loaded[name] = createPlayer(name);
+        } catch (e) {
+          // one broken sound must not silence the rest; retried on a later play
+          log('sound', { event: 'load-failed', sound: name, attempt: loadAttempts[name], error: errorMessage(e) });
+        }
+      }
       if (!preloadLogged && ALL_SOUNDS.every((n) => loaded[n] || (loadAttempts[n] ?? 0) >= MAX_LOAD_ATTEMPTS)) {
         preloadLogged = true;
         log('sound', { event: 'preload-complete', loaded: ALL_SOUNDS.filter((n) => loaded[n]).length, total: ALL_SOUNDS.length });
@@ -127,25 +132,19 @@ function ensureLoaded(): Promise<void> {
   return inFlight;
 }
 
-function isDeadPlayerError(e: unknown): boolean {
-  return errorMessage(e).includes('does not exist');
-}
-
-// Evicts the cached entry and creates a fresh native player. Separate from the
+// Releases the cached entry and creates a fresh native player. Separate from the
 // load-failure attempt counter on purpose. Concurrent heals of one sound share a promise.
-const reloading: Partial<Record<SoundName, Promise<AvSound>>> = {};
-function reloadSound(name: SoundName, reason: string): Promise<AvSound> {
+const reloading: Partial<Record<SoundName, Promise<SoundPlayer>>> = {};
+function reloadSound(name: SoundName, reason: string): Promise<SoundPlayer> {
   const existing = reloading[name];
   if (existing) return existing;
-  const old = loaded[name];
+  releasePlayer(loaded[name]);
   delete loaded[name];
-  discardPrevious({ [name]: old });
   const p = (async () => {
-    const { Audio } = require('expo-av') as typeof import('expo-av');
-    const { sound } = await Audio.Sound.createAsync(SOURCES[name](), { shouldPlay: false });
-    loaded[name] = sound;
+    const player = createPlayer(name);
+    loaded[name] = player;
     log('sound', { event: 'reloaded', sound: name, reason });
-    return sound as AvSound;
+    return player;
   })().finally(() => {
     delete reloading[name];
   });
@@ -153,30 +152,29 @@ function reloadSound(name: SoundName, reason: string): Promise<AvSound> {
   return p;
 }
 
-// Replays; if the native player is gone (unloaded, or "Player does not exist"
-// after a hot reload) re-creates it and retries exactly once. Throws if the retry fails.
-async function replayWithHeal(name: SoundName, sound: AvSound): Promise<void> {
-  let current = sound;
+// Restarts from the top. Only seeks when the player has moved, so the very first
+// play of a sound is a single synchronous call.
+async function restart(player: SoundPlayer): Promise<void> {
+  if (player.currentTime > 0) await player.seekTo(0);
+  player.play();
+}
+
+// Restarts the sound; if the native player is gone (released, e.g. after a hot
+// reload) re-creates it and retries exactly once. Throws if the retry fails.
+async function replayWithHeal(name: SoundName, player: SoundPlayer): Promise<void> {
   try {
-    const status = await current.getStatusAsync?.();
-    if (status && status.isLoaded === false) current = await reloadSound(name, 'not-loaded');
-  } catch (e) {
-    // getStatusAsync itself failing means the player is gone too
-    current = await reloadSound(name, isDeadPlayerError(e) ? 'player-missing' : 'status-failed');
-  }
-  try {
-    await current.replayAsync();
-  } catch (e) {
-    current = await reloadSound(name, isDeadPlayerError(e) ? 'player-missing' : 'replay-failed');
-    await current.replayAsync();
+    await restart(player);
+  } catch {
+    const fresh = await reloadSound(name, 'replay-failed');
+    await restart(fresh);
   }
 }
 
 /** Stops every effect that is currently sounding (app went to background / inactive). */
 export function stopAllSounds(): void {
-  for (const sound of Object.values(loaded)) {
+  for (const player of Object.values(loaded)) {
     try {
-      sound?.stopAsync?.().catch(() => {});
+      player?.pause();
     } catch {
       // player already gone
     }
@@ -233,12 +231,12 @@ export function play(name: SoundName): void {
     .then(() => {
       // The app may have left the foreground while the load was pending.
       if (AppState.currentState !== 'active') return undefined;
-      const sound = loaded[name];
-      if (!sound) {
+      const player = loaded[name];
+      if (!player) {
         log('sound', { event: 'play-skipped-not-loaded', sound: name });
         return undefined;
       }
-      return replayWithHeal(name, sound);
+      return replayWithHeal(name, player);
     })
     .catch((e) => {
       log('sound', { event: 'play-failed', sound: name, error: errorMessage(e) });

@@ -1,58 +1,56 @@
-// A dead native player ("Player does not exist." after a hot reload) is re-created and retried once.
+// A dead native player (released, e.g. after a hot reload) is re-created and retried once.
 describe('play heal', () => {
   const flush = () => new Promise((r) => setTimeout(r, 0));
 
-  function setup(secondReplay: () => Promise<any>) {
-    jest.resetModules();
-    const dead = {
-      replayAsync: jest.fn(async () => {
-        throw new Error('Player does not exist.');
-      }),
-      unloadAsync: jest.fn(async () => ({})),
-    };
-    const fresh = { replayAsync: jest.fn(secondReplay), unloadAsync: jest.fn(async () => ({})) };
-    const createAsync = jest.fn<Promise<{ sound: any; status: object }>, []>(async () => ({ sound: dead, status: {} }));
-    jest.doMock('expo-av', () => ({
-      Audio: { setAudioModeAsync: jest.fn(async () => {}), Sound: { createAsync } },
-      InterruptionModeAndroid: { DoNotMix: 1 },
-    }));
-    require('react-native').AppState.currentState = 'active';
-    return { dead, fresh, createAsync, sounds: require('../sounds') };
+  function makePlayer(play: () => void) {
+    return { play: jest.fn(play), pause: jest.fn(), seekTo: jest.fn(async () => {}), remove: jest.fn(), currentTime: 0 };
   }
 
-  it('re-creates the sound once and plays on the retry', async () => {
-    const { dead, fresh, createAsync, sounds } = setup(async () => ({}));
+  function setup(secondPlay: () => void) {
+    jest.resetModules();
+    const dead = makePlayer(() => {
+      throw new Error('Cannot use shared object that was already released');
+    });
+    const fresh = makePlayer(secondPlay);
+    const createAudioPlayer = jest.fn<any, []>(() => dead);
+    jest.doMock('expo-audio', () => ({ setAudioModeAsync: jest.fn(async () => {}), createAudioPlayer }));
+    require('react-native').AppState.currentState = 'active';
+    return { dead, fresh, createAudioPlayer, sounds: require('../sounds') };
+  }
+
+  it('re-creates the player once and plays on the retry', async () => {
+    const { dead, fresh, createAudioPlayer, sounds } = setup(() => {});
     await sounds.preloadSounds();
-    expect(createAsync).toHaveBeenCalledTimes(11);
-    createAsync.mockImplementation(async () => ({ sound: fresh, status: {} }));
+    expect(createAudioPlayer).toHaveBeenCalledTimes(11);
+    createAudioPlayer.mockImplementation(() => fresh);
     sounds.play('tap');
     await flush();
-    expect(dead.replayAsync).toHaveBeenCalledTimes(1);
-    expect(createAsync).toHaveBeenCalledTimes(12);
-    expect(fresh.replayAsync).toHaveBeenCalledTimes(1);
-    expect(dead.unloadAsync).toHaveBeenCalled();
+    expect(dead.play).toHaveBeenCalledTimes(1);
+    expect(createAudioPlayer).toHaveBeenCalledTimes(12);
+    expect(fresh.play).toHaveBeenCalledTimes(1);
+    expect(dead.remove).toHaveBeenCalled();
   });
 
-  it('reloads when getStatusAsync says not loaded, before replaying', async () => {
-    const { dead, fresh, createAsync, sounds } = setup(async () => ({}));
-    (dead as any).getStatusAsync = jest.fn(async () => ({ isLoaded: false }));
+  it('seeks back to the start before replaying a player that has moved', async () => {
+    const { dead, sounds } = setup(() => {});
+    dead.play.mockImplementation(() => {});
+    dead.currentTime = 0.4;
     await sounds.preloadSounds();
-    createAsync.mockImplementation(async () => ({ sound: fresh, status: {} }));
-    sounds.play('sleepy');
+    sounds.play('tap');
     await flush();
-    expect(dead.replayAsync).not.toHaveBeenCalled();
-    expect(fresh.replayAsync).toHaveBeenCalledTimes(1);
+    expect(dead.seekTo).toHaveBeenCalledWith(0);
+    expect(dead.play).toHaveBeenCalledTimes(1);
   });
 
   it('gives up after one retry when the fresh player fails too', async () => {
-    const { createAsync, fresh, sounds } = setup(async () => {
-      throw new Error('Player does not exist.');
+    const { createAudioPlayer, fresh, sounds } = setup(() => {
+      throw new Error('Cannot use shared object that was already released');
     });
     await sounds.preloadSounds();
-    createAsync.mockImplementation(async () => ({ sound: fresh, status: {} }));
+    createAudioPlayer.mockImplementation(() => fresh);
     sounds.play('tap');
     await flush();
-    expect(createAsync).toHaveBeenCalledTimes(12);
-    expect(fresh.replayAsync).toHaveBeenCalledTimes(1);
+    expect(createAudioPlayer).toHaveBeenCalledTimes(12);
+    expect(fresh.play).toHaveBeenCalledTimes(1);
   });
 });

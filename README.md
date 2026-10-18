@@ -11,7 +11,7 @@ The core game loop is feature-complete and the owner is in his own validation we
 Landed this weekend: clay 3D sprites via Blender, animated Buddy (image skin, markings, lying pose, walk frames), clay UI kit + Nunito, Den yard hero, pastel map, 3-slot reminders with diagnostics, onboarding, sound family + music box + in-walk cues, Backup/Restore, i18n de/en, App.tsx decomposition, component test harness.
 
 - **Gate:** `npm run check` (`tsc --noEmit && jest --silent`) before every commit. Nothing is CI-driven; no `.github` workflows exist.
-- **Rebuild rule:** three native deps were added (`expo-av`, `expo-haptics`, `expo-document-picker`), so run `npm install` and rebuild the dev client (`npx expo run:android`) once after pulling; JS-only changes still hot-reload.
+- **Rebuild rule:** native deps changed (`expo-av` replaced by `expo-audio` in 0.2.0, plus `expo-haptics`, `expo-document-picker`), so run `npm install` and rebuild the dev client (`npx expo run:android`) once after pulling; JS-only changes still hot-reload.
 
 ## Setup
 
