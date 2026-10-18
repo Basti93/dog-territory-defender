@@ -4,9 +4,11 @@
 // overlap, so the structural test below is the guard against a decorative
 // absolutely-positioned layer stealing touches on a real device.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
+import { artAssets } from '../../art/artAssets';
 import { t } from '../../i18n';
 import { createInMemoryDenEconomyRepository } from '../../storage/inMemoryDenEconomyRepository';
 import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
@@ -95,5 +97,17 @@ describe('Doorstep touch reachability', () => {
       }
       expect(verdict).not.toBe('reachable');
     }
+  });
+
+  it('draws the grass hill as a tall decor box that reaches into the scene', async () => {
+    await setup();
+    const ground = imagesIn(screen.root).find((img) => img.props.source === artAssets['yard-ground']);
+    expect(ground).toBeDefined();
+    const box = StyleSheet.flatten(ground!.parent!.props.style);
+    expect(box.height).toBeGreaterThan(100);
+    // horizon (26% of the box) sits 60px above the scene bottom: box top is above the bottom edge, box bottom hangs below it
+    expect(box.bottom).toBeLessThan(0);
+    expect(box.bottom + box.height).toBeGreaterThan(60);
+    expect(box.left).toBeLessThan(0);
   });
 });

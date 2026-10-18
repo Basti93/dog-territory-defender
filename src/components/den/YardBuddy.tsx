@@ -369,7 +369,8 @@ export function YardBuddy({ appearance, name, mood, curiousFacing, replayKey, ge
 }
 
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute' },
+  // Above the building hit boxes (zIndex 1) so Buddy is always the top-most touch target in the yard.
+  wrap: { position: 'absolute', zIndex: 5 },
   fx: { position: 'absolute', width: 40, height: 30 },
   dirtDot: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: tokens.brown },
   heart: { position: 'absolute', fontSize: 16, color: tokens.warm },

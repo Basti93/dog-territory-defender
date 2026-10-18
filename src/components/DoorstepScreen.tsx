@@ -501,7 +501,25 @@ const DOGHOUSE_MAX = 210;
 const DOGHOUSE_BASE_FRAC = 0.86;
 // Buddy's paws stand this far above the scene bottom (on the grass strip); his box is lowered by the
 // empty canvas under his feet. Horizontal centres are shares of the screen width.
-const BUDDY_FEET_Y = 36;
+const BUDDY_FEET_Y = 40;
+// yard-ground.png is a 3:2 hill (1536x1024) transparent above a horizon at ~26% of its height.
+const GROUND_ASPECT = 1.5;
+const GROUND_HORIZON_IN_IMAGE = 0.26;
+const GROUND_WIDTH_SHARE = 1.3;
+/** The horizon sits this far above the scene bottom; Buddy's feet and the doghouse base stand 20px below it (BUDDY_FEET_Y). */
+const GROUND_HORIZON_ABOVE_BOTTOM = 60;
+
+/** Pure: grass box in scene px. Centred, bleeds past both sides; its lower part hangs below the scene (clipped) so only the horizon band shows. */
+export function doorstepGroundBox(width: number): { width: number; height: number; left: number; bottom: number } {
+  const boxWidth = width * GROUND_WIDTH_SHARE;
+  const height = boxWidth / GROUND_ASPECT;
+  return {
+    width: boxWidth,
+    height,
+    left: (width - boxWidth) / 2,
+    bottom: GROUND_HORIZON_ABOVE_BOTTOM - (1 - GROUND_HORIZON_IN_IMAGE) * height,
+  };
+}
 const BUDDY_CX = 0.28;
 const DOGHOUSE_CX = 0.74;
 
@@ -527,8 +545,8 @@ function DoorstepScene({ appearance, mood, dog, doghouseLevel, menuButton, child
     <View style={[styles.scene, { height: insets.top + SCENE_HEIGHT }]}>
       {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
       {ground && (
-        // Backdrop: cover-fit so the grass bleeds past both edges.
-        <DecorImage source={ground} resizeMode="cover" style={[styles.ground, { width: width + 40, height: 140 }]} />
+        // Backdrop: 3:2 box matching the image (contain, nothing cropped), horizon 60px above the scene bottom.
+        <DecorImage source={ground} resizeMode="contain" style={[styles.ground, doorstepGroundBox(width)]} />
       )}
       <View
         style={[
@@ -637,7 +655,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.skyTint,
     ...shadows.soft,
   },
-  ground: { position: 'absolute', bottom: -24, left: -20 },
+  ground: { position: 'absolute' },
   doghouse: { position: 'absolute' },
   // Layering (decorative layers are pointerEvents="none"; interactive ones sit last): Buddy above the doghouse, header row (gear) above both.
   buddy: { position: 'absolute', zIndex: 1 },

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
@@ -8,7 +8,7 @@ import { BuddyMood } from '../buddy/buddyMood';
 import { YardBuddy, YardBuddyGeometry } from './YardBuddy';
 import { YardButterflies } from './YardButterflies';
 import { SpotId, clampX } from './yardLife';
-import { ArtImage, Badge, DecorImage, PressableScale, palette } from '../../ui';
+import { ArtImage, Badge, DecorImage, palette } from '../../ui';
 import { t } from '../../i18n';
 
 // The Den's yard scene: sky, a big grass stage, the three buildings and Buddy.
@@ -57,7 +57,7 @@ const SPRITE_BASE_FRAC = 0.86;
 // Where each building's TILE BASE stands: horizontal centre as a share of the yard width,
 // and base line as a share of yard height from the top. All three are inside the grass.
 const PLACEMENT: Record<YardBuildingKey, { cx: number; baseTop: number }> = {
-  doghouse: { cx: 0.5, baseTop: 0.62 },
+  doghouse: { cx: 0.5, baseTop: 0.6 },
   bakery: { cx: 0.2, baseTop: 0.9 },
   sniffGarden: { cx: 0.8, baseTop: 0.9 },
 };
@@ -71,9 +71,9 @@ const BUILDING_NAME_KEY: Record<YardBuildingKey, string> = {
 
 /** yard-ground-wide.png is a 2:1 hill (2048x1024) filling everything under its horizon edge to edge; measured horizon peaks ~26% from the image top (centre), ~39% at the sides. */
 export const GROUND_ASPECT = 2;
-const GROUND_HORIZON_IN_IMAGE = 0.26;
-/** Target horizon, share of yard height from the top (sky above). */
-const GROUND_HORIZON_TOP = 0.4;
+export const GROUND_HORIZON_IN_IMAGE = 0.26;
+/** Grass box height as a share of yard height: grass fills the lower ~60% (horizon ~0.42H), the box reaches higher because the image top is sky-transparent. */
+const GROUND_HEIGHT_SHARE = 0.78;
 /** Ground is at least this much wider than the screen so its edges bleed off both sides. */
 const GROUND_MIN_WIDTH_SHARE = 1.25;
 
@@ -81,19 +81,18 @@ export interface GroundBox {
   width: number;
   height: number;
   left: number;
-  /** Image top, px from the yard top (its bottom edge is the yard bottom, or lower). */
+  /** Image top, px from the yard top. The box bottom is exactly the yard bottom. */
   top: number;
   /** Horizon peak, px from the yard top. */
   horizonY: number;
 }
 
 /**
- * Hill geometry. Anchored to the yard bottom so no sky shows under it; sized so the horizon lands at
- * ~0.40H (a wider screen makes it taller, so the horizon rises a little). Contain-fit, never cropped.
+ * Hill geometry. Box is exactly 2:1 (matches the image, so `contain` letterboxes nothing), anchored to the
+ * yard bottom, centred horizontally, bleeding past both sides.
  */
 export function groundBox(width: number, height: number): GroundBox {
-  const hForHorizon = (height * (1 - GROUND_HORIZON_TOP)) / (1 - GROUND_HORIZON_IN_IMAGE);
-  const groundHeight = Math.max(hForHorizon, (width * GROUND_MIN_WIDTH_SHARE) / GROUND_ASPECT);
+  const groundHeight = Math.max(height * GROUND_HEIGHT_SHARE, (width * GROUND_MIN_WIDTH_SHARE) / GROUND_ASPECT);
   const groundWidth = groundHeight * GROUND_ASPECT;
   const top = height - groundHeight;
   return {
@@ -111,18 +110,48 @@ export interface LayoutBox {
   size: number;
 }
 
+/** Touch target in yard px, `bottom` measured up from the yard floor. */
+export interface HitBox {
+  left: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/** A building's tap target covers only its tile: this share of the sprite width (centred) by this share of its height, standing on the tile base. */
+const HIT_WIDTH_FRAC = 0.64;
+const HIT_HEIGHT_FRAC = 0.3;
+
 export interface YardLayout {
   sprites: Record<YardBuildingKey, LayoutBox>;
+  /** Building tap targets. Never overlap Buddy's box (trimmed on the Buddy side), so his taps always win. */
+  hits: Record<YardBuildingKey, HitBox>;
   buddy: LayoutBox;
   /** Badge boxes are BADGE_W x BADGE_H; `size` is unused (BADGE_W). */
   badges: Record<YardBuildingKey, LayoutBox>;
   ground: GroundBox;
 }
 
+/** If `hit` overlaps Buddy's box, cut it back horizontally on Buddy's side so the two never overlap. */
+function trimAwayFrom(hit: HitBox, buddy: LayoutBox): void {
+  const overlapsVertically = hit.bottom < buddy.bottom + buddy.size && hit.bottom + hit.height > buddy.bottom;
+  const hitRight = hit.left + hit.width;
+  const buddyRight = buddy.left + buddy.size;
+  if (!overlapsVertically || hit.left >= buddyRight || hitRight <= buddy.left) return;
+  const hitCentre = hit.left + hit.width / 2;
+  if (hitCentre >= buddy.left + buddy.size / 2) {
+    hit.width = hitRight - buddyRight;
+    hit.left = buddyRight;
+  } else {
+    hit.width = buddy.left - hit.left;
+  }
+}
+
 /** Pure geometry (px, `bottom` measured up from the yard floor) so it can be unit-tested. */
 export function yardLayout(width: number, height: number, sizes: Record<YardBuildingKey, number>): YardLayout {
   const sprites = {} as Record<YardBuildingKey, LayoutBox>;
   const badges = {} as Record<YardBuildingKey, LayoutBox>;
+  const hits = {} as Record<YardBuildingKey, HitBox>;
   const buddy: LayoutBox = { left: width * BUDDY_CX - BUDDY_SIZE / 2, bottom: height * (1 - BUDDY_FEET_TOP) - buddyFeetInset(BUDDY_SIZE), size: BUDDY_SIZE };
   for (const key of YARD_ORDER) {
     const size = sizes[key];
@@ -141,8 +170,16 @@ export function yardLayout(width: number, height: number, sizes: Record<YardBuil
     const underTile = height * (1 - place.baseTop) - BADGE_H - 4;
     const badgeBottom = key === 'doghouse' ? Math.max(underTile + 12, buddy.bottom + buddy.size) : underTile;
     badges[key] = { left: badgeLeft, bottom: badgeBottom, size: BADGE_W };
+    const hitWidth = size * HIT_WIDTH_FRAC;
+    hits[key] = {
+      left: left + size / 2 - hitWidth / 2,
+      bottom: bottom + (1 - SPRITE_BASE_FRAC) * size,
+      width: hitWidth,
+      height: size * HIT_HEIGHT_FRAC,
+    };
+    trimAwayFrom(hits[key], buddy);
   }
-  return { sprites, buddy, badges, ground: groundBox(width, height) };
+  return { sprites, hits, buddy, badges, ground: groundBox(width, height) };
 }
 
 /** Buddy stands this far to the inside of a side building's tile centre (clear of its level badge as far as the screen allows). */
@@ -221,6 +258,17 @@ export function YardScene({
         left={box.left}
         bottom={box.bottom}
         bounceN={upgrade && upgrade.building === b.key ? upgrade.n : 0}
+      />
+    );
+  };
+  const renderHit = (b: YardBuilding) => {
+    const hit = layout.hits[b.key];
+    return (
+      <Pressable
+        key={b.key}
+        accessibilityRole="button"
+        accessibilityLabel={t('den.showUpgrade', { name: t(BUILDING_NAME_KEY[b.key]) })}
+        style={[styles.hit, { left: hit.left, bottom: hit.bottom, width: hit.width, height: hit.height }]}
         onPress={() => {
           setTap((prev) => ({ building: b.key, n: (prev?.n ?? 0) + 1 }));
           onSelectBuilding(b.key);
@@ -233,9 +281,9 @@ export function YardScene({
       {sky && <DecorImage source={sky} resizeMode="cover" style={StyleSheet.absoluteFillObject} />}
       {ground && (
         // Native ratio, contain (never crop the horizon); the hill bleeds past both side edges and the bottom.
-        <DecorImage source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, top: g.top }]} />
+        <DecorImage source={ground} resizeMode="contain" style={[styles.ground, { width: g.width, height: g.height, left: g.left, bottom: 0 }]} />
       )}
-      {/* Draw order: side buildings, Buddy, then the doghouse last so it stays tappable. */}
+      {/* Touch layering (zIndex): sprites 0 (inert art), building hit boxes 1 (tile area only), Buddy 5, header overlay 10. */}
       {buildings.filter((b) => b.key !== 'doghouse').map(renderSprite)}
       <YardBuddy
         appearance={appearance}
@@ -248,6 +296,7 @@ export function YardScene({
         tap={tap}
       />
       {buildings.filter((b) => b.key === 'doghouse').map(renderSprite)}
+      {YARD_ORDER.map((k) => buildings.find((b) => b.key === k)).filter((b): b is YardBuilding => !!b).map(renderHit)}
       {gardenStage3 && <YardButterflies garden={layout.sprites.sniffGarden} />}
       {/* Level badges sit above everything so none is ever hidden. */}
       {buildings.map((b) => {
@@ -258,7 +307,9 @@ export function YardScene({
           </View>
         );
       })}
-      {children}
+      <View style={styles.overlay} pointerEvents="box-none">
+        {children}
+      </View>
     </View>
   );
 }
@@ -269,14 +320,12 @@ function BuildingSprite({
   left,
   bottom,
   bounceN,
-  onPress,
 }: {
   building: YardBuilding;
   size: number;
   left: number;
   bottom: number;
   bounceN: number;
-  onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const sparkle = useRef(new Animated.Value(0)).current;
@@ -297,11 +346,9 @@ function BuildingSprite({
   }, [bounceN, scale, sparkle]);
 
   return (
-    <View style={[styles.sprite, { left, bottom, width: size, height: size }]} pointerEvents="box-none">
+    <View style={[styles.sprite, { left, bottom, width: size, height: size }]} pointerEvents="none">
       <Animated.View style={{ transform: [{ scale }] }}>
-        <PressableScale onPress={onPress} accessibilityLabel={t('den.showUpgrade', { name: t(BUILDING_NAME_KEY[building.key]) })}>
-          <ArtImage art={buildingArt(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
-        </PressableScale>
+        <ArtImage art={buildingArt(ART_ID[building.key], artTierForLevel(building.level))} size={size} />
       </Animated.View>
       <Animated.Text
         pointerEvents="none"
@@ -327,7 +374,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.skyTint,
   },
   ground: { position: 'absolute' },
-  sprite: { position: 'absolute' },
+  sprite: { position: 'absolute', zIndex: 0 },
+  hit: { position: 'absolute', zIndex: 1 },
+  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 10 },
   badgeWrap: { position: 'absolute', width: BADGE_W, height: BADGE_H, alignItems: 'center' },
   sparkle: { position: 'absolute', top: 0, right: 8, fontSize: 24 },
 });

@@ -13,15 +13,44 @@ describe('yardLayout (stage 3, min yard height)', () => {
       }
     });
 
-    it(`puts the horizon above every building's tile base and the hill covers the yard bottom at width ${width}`, () => {
+    it(`covers the bottom 0.78H with a 2:1 hill that bleeds past both sides at width ${width}`, () => {
       const H = YARD_MIN_HEIGHT;
-      expect(L.ground.top + L.ground.height).toBeGreaterThanOrEqual(H - 0.001);
-      expect(L.ground.left).toBeLessThanOrEqual(-0.12 * width + 0.001);
-      expect(L.ground.horizonY).toBeLessThanOrEqual(0.4 * H + 0.001);
+      const g = L.ground;
+      expect(g.top + g.height).toBeCloseTo(H, 3);
+      expect(g.height).toBeGreaterThanOrEqual(0.78 * H - 0.001);
+      expect(g.width).toBeCloseTo(2 * g.height, 3);
+      expect(g.left).toBeCloseTo((width - g.width) / 2, 3);
+      expect(g.left).toBeLessThan(0);
+      expect(g.left + g.width).toBeGreaterThan(width);
+      expect(g.width).toBeGreaterThanOrEqual(1.25 * width - 0.001);
+    });
+
+    it(`puts the horizon near 0.42H and every tile base on the grass, inside the yard at width ${width}`, () => {
+      const H = YARD_MIN_HEIGHT;
+      expect(L.ground.horizonY).toBeGreaterThanOrEqual(0.38 * H);
+      expect(L.ground.horizonY).toBeLessThanOrEqual(0.46 * H);
       for (const box of Object.values(L.sprites)) {
         const baseFromTop = H - box.bottom - 0.14 * box.size;
         expect(baseFromTop).toBeGreaterThan(L.ground.horizonY);
         expect(baseFromTop).toBeLessThanOrEqual(H);
+      }
+    });
+
+    it(`keeps building hit boxes in their sprite's lower half and clear of Buddy at width ${width}`, () => {
+      for (const key of ['doghouse', 'bakery', 'sniffGarden'] as const) {
+        const hit = L.hits[key];
+        const sprite = L.sprites[key];
+        expect(hit.width).toBeGreaterThan(20);
+        expect(hit.bottom).toBeGreaterThanOrEqual(sprite.bottom - 0.001);
+        expect(hit.bottom + hit.height).toBeLessThanOrEqual(sprite.bottom + 0.5 * sprite.size + 0.001);
+        expect(hit.left).toBeGreaterThanOrEqual(sprite.left - 0.001);
+        expect(hit.left + hit.width).toBeLessThanOrEqual(sprite.left + sprite.size + 0.001);
+        const apart =
+          hit.left + hit.width <= L.buddy.left + 0.001 ||
+          hit.left >= L.buddy.left + L.buddy.size - 0.001 ||
+          hit.bottom + hit.height <= L.buddy.bottom + 0.001 ||
+          hit.bottom >= L.buddy.bottom + L.buddy.size - 0.001;
+        expect(apart).toBe(true);
       }
     });
 
