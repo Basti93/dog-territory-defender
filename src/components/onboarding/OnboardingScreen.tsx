@@ -30,8 +30,9 @@ export interface OnboardingScreenProps {
   buddyAppearance?: BuddyAppearance;
 }
 
-function Scene({ spec, appearance, width }: { spec: CardSpec; appearance: BuddyAppearance; width: number }) {
-  const box = Math.min(width - spacing.lg * 4, 300);
+function Scene({ spec, appearance, width, maxBox }: { spec: CardSpec; appearance: BuddyAppearance; width: number; maxBox: number }) {
+  // Fixed-size square: never taller than half the pager, so it cannot push the text card out of view.
+  const box = Math.max(120, Math.min(width - spacing.lg * 4, 300, maxBox));
   const buddy = <BuddyAvatar appearance={appearance} size={Math.round(box * 0.55)} mood={spec.mood} />;
   if (spec.scene === 'grass') {
     return (
@@ -63,6 +64,9 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
   const { width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
+  // iOS does not stretch a horizontal ScrollView's content container to the scroll view's height,
+  // so pages get an explicit measured height (0 until the first layout; jest never lays out).
+  const [pagerHeight, setPagerHeight] = useState(0);
   const appearance = buddyAppearance ?? defaultBuddyAppearance();
   const last = page === CARDS.length - 1;
 
@@ -88,10 +92,14 @@ export function OnboardingScreen({ onDone, buddyAppearance }: OnboardingScreenPr
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
         style={styles.pager}
+        onLayout={(e) => setPagerHeight(Math.round(e.nativeEvent.layout.height))}
+        contentContainerStyle={pagerHeight > 0 ? { height: pagerHeight } : undefined}
       >
         {CARDS.map((spec) => (
-          <View key={spec.titleKey} style={[styles.page, { width }]}>
-            <Scene spec={spec} appearance={appearance} width={width} />
+          <View key={spec.titleKey} style={[styles.page, { width }, pagerHeight > 0 && { height: pagerHeight }]}
+            testID="onboarding-page"
+          >
+            <Scene spec={spec} appearance={appearance} width={width} maxBox={pagerHeight > 0 ? pagerHeight * 0.5 : 300} />
             <Card style={styles.textCard}>
               <Text style={[textStyle('h1'), styles.center]}>{t(spec.titleKey)}</Text>
               <Text style={[textStyle('body'), styles.center, styles.body]}>{t(spec.bodyKey)}</Text>

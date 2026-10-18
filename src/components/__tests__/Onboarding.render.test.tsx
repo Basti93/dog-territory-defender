@@ -1,4 +1,5 @@
 import React from 'react';
+import { Dimensions } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { t } from '../../i18n';
@@ -25,6 +26,15 @@ describe('OnboardingScreen', () => {
       expect(screen.getByText(t(`onboarding.card${n}.title`))).toBeOnTheScreen();
       expect(screen.getByText(t(`onboarding.card${n}.body`))).toBeOnTheScreen();
     }
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('gives every page the explicit window width (iOS collapses percentage widths in a horizontal scroller)', async () => {
+    const view = await renderScreen(<OnboardingScreen onDone={jest.fn()} />);
+    const pages = screen.getAllByTestId('onboarding-page');
+    expect(pages).toHaveLength(3);
+    const { width } = Dimensions.get('window');
+    for (const pg of pages) expect(styleOf(pg).width).toBe(width);
     await unmountAndExpectNoTimers(view);
   });
 
