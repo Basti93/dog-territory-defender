@@ -171,11 +171,14 @@ ${MAP_THEME_PROBE_JS}
           const stats = homeRangeLayerGroup && homeRangeLayerGroup.hrStats;
           const fill = stats && stats.fillLayer;
           const el = fill && fill._el;
+          const mode = stats ? stats.mode : null;
           reportToRN('RANGE_RENDERED', {
             phase,
             cells: stats ? stats.cells : 0,
             bounds: stats ? stats.bounds : null,
             pane: stats ? stats.pane : null,
+            mode,
+            polygons: stats ? stats.polygons : 0,
             imageLoaded: !!el && el.width > 0 && el.height > 0,
             drawnPixels: fill ? fill.hrDrawnPixels : 0,
             zoom: map.getZoom(),

@@ -75,6 +75,23 @@ var HR_WILD_CONTOUR_THRESHOLD = ${WILD_CONTOUR_THRESHOLD};
 // on the paler HOT tiles. Muted layer (HR_MUTED_FILL_ALPHA) stays lower still.
 var HR_FILL_ALPHA = 0.55;
 var HR_FILL_ALPHA_WILD = 0.35;
+// Live-map fill mode. 'svg' (default): nested contour polygons drawn as
+// L.polygon in an explicit L.svg() renderer — the Android WebView does not
+// composite raster elements (<img>/<canvas>) inside Leaflet's transformed
+// overlay pane, but SVG vectors render fine. 'canvas': the previous
+// viewport-canvas layer (hrCreateCanvasFillLayer), kept to switch back.
+// PERF RISK: SVG path cost scales with ring vertex count; for Ranges above
+// ~5k cells watch pan/zoom smoothness. smoothFactor lets Leaflet simplify
+// rings per zoom; raise it (or drop to 'canvas') if it gets sluggish.
+var HR_LIVE_FILL_MODE = 'svg';
+// Three nested bands, drawn wild -> fresh. wildness is the LUT sample point
+// (1 = wild end #DCE8BE, 0 = fresh end #2ECC71); minFresh is the threshold on
+// the freshness field (1 - blurred wildness) masked to inside the outline.
+var HR_FILL_BANDS = [
+  { wildness: 1.0, opacity: 0.45, minFresh: null },
+  { wildness: 0.5, opacity: 0.5, minFresh: 0.3 },
+  { wildness: 0.0, opacity: 0.55, minFresh: 0.6 }
+];
 var HR_OUTLINE_WEIGHT = 2;
 var HR_OUTLINE_OPACITY = 0.8;
 var HR_OUTSIDE_SENTINEL = 255;
@@ -288,6 +305,120 @@ function hrLocalToLatLon(u, v, minIx, minIy) {
   return [lat, lon];
 }
 
+// ---- Contour segments -> closed rings (with holes) ----
+function hrChainRings(segments) {
+  function key(p) { return p[0].toFixed(3) + ',' + p[1].toFixed(3); }
+  var ends = {};
+  var i, k;
+  for (i = 0; i < segments.length; i++) {
+    for (var e = 0; e < 2; e++) {
+      k = key(segments[i][e]);
+      (ends[k] = ends[k] || []).push(i);
+    }
+  }
+  var used = new Array(segments.length);
+  var rings = [];
+  for (i = 0; i < segments.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    var ring = [segments[i][0], segments[i][1]];
+    var startKey = key(ring[0]);
+    var guard = segments.length + 2;
+    while (guard-- > 0) {
+      var tailKey = key(ring[ring.length - 1]);
+      if (tailKey === startKey) break;
+      var cands = ends[tailKey] || [];
+      var next = -1;
+      for (var c = 0; c < cands.length; c++) { if (!used[cands[c]]) { next = cands[c]; break; } }
+      if (next < 0) break;
+      used[next] = true;
+      ring.push(key(segments[next][0]) === tailKey ? segments[next][1] : segments[next][0]);
+    }
+    if (ring.length >= 3) rings.push(ring);
+  }
+  return rings;
+}
+
+function hrRingArea(ring) {
+  var a = 0;
+  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(a / 2);
+}
+
+function hrPointInRing(pt, ring) {
+  var inside = false;
+  for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    var xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+// Returns [[outer, hole, hole...], ...] by containment depth: even depth =
+// outer, odd = hole of its smallest containing ring.
+function hrRingsWithHoles(rings) {
+  var areas = rings.map(hrRingArea);
+  var parent = [];
+  var depth = [];
+  var i, j;
+  for (i = 0; i < rings.length; i++) {
+    var d = 0, best = -1;
+    for (j = 0; j < rings.length; j++) {
+      if (i === j || areas[j] <= areas[i]) continue;
+      if (hrPointInRing(rings[i][0], rings[j])) {
+        d++;
+        if (best < 0 || areas[j] < areas[best]) best = j;
+      }
+    }
+    depth.push(d);
+    parent.push(best);
+  }
+  var groups = {};
+  var order = [];
+  for (i = 0; i < rings.length; i++) {
+    if (depth[i] % 2 === 0) { groups[i] = [rings[i]]; order.push(i); }
+  }
+  for (i = 0; i < rings.length; i++) {
+    if (depth[i] % 2 === 1 && groups[parent[i]]) groups[parent[i]].push(rings[i]);
+  }
+  return order.map(function (o) { return groups[o]; });
+}
+
+/**
+ * Adds one L.polygon per outer ring (holes included) for each fill band, in
+ * the given SVG renderer, wild -> fresh. Returns the polygon count.
+ */
+function hrAddSvgFillPolygons(layerGroup, renderer, occBlurred, wildBlurred, w, h, minIx, minIy) {
+  var freshField = new Float32Array(w * h);
+  for (var i = 0; i < w * h; i++) {
+    var mask = Math.max(0, Math.min(1, (occBlurred[i] - HR_CONTOUR_THRESHOLD) * 2));
+    freshField[i] = (1 - wildBlurred[i]) * mask;
+  }
+  var count = 0;
+  for (var b = 0; b < HR_FILL_BANDS.length; b++) {
+    var band = HR_FILL_BANDS[b];
+    var segs = band.minFresh === null
+      ? hrMarchingSquaresSegments(occBlurred, w, h, HR_CONTOUR_THRESHOLD)
+      : hrMarchingSquaresSegments(freshField, w, h, band.minFresh);
+    var lut = HR_WILDNESS_COLOR_LUT[Math.round(band.wildness * 254)];
+    var color = 'rgb(' + lut[0] + ',' + lut[1] + ',' + lut[2] + ')';
+    var groups = hrRingsWithHoles(hrChainRings(segs));
+    for (var g = 0; g < groups.length; g++) {
+      var latlngs = groups[g].map(function (ring) {
+        return ring.map(function (pt) { return hrLocalToLatLon(pt[0], pt[1], minIx, minIy); });
+      });
+      L.polygon(latlngs, {
+        renderer: renderer, stroke: false, fillColor: color, fillOpacity: band.opacity,
+        fill: true, interactive: false, smoothFactor: 1
+      }).addTo(layerGroup);
+      count++;
+    }
+  }
+  return count;
+}
+
 /**
  * Draws a small offscreen raster canvas onto a viewport-sized <canvas> in the
  * overlay pane, scaled to the given lat/lng bounds and redrawn on
@@ -384,8 +515,10 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
   var wildBlurred = hrBlurWeighted(valueTimesWeight, occ, w, h, HR_BLUR_SIGMA_CELLS);
   var visitsBlurred = hrBlurField(visitsFloat, w, h, HR_BLUR_SIGMA_CELLS);
 
+  var canvas = null;
+  if (HR_LIVE_FILL_MODE === 'canvas') {
   // ---- fill: an offscreen canvas -> data URL -> Leaflet imageOverlay ----
-  var canvas = document.createElement('canvas');
+  canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   var ctx = canvas.getContext('2d');
@@ -419,6 +552,7 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
     }
   }
   ctx.putImageData(imageData, 0, 0);
+  }
 
   var midRow = minIy + Math.floor(h / 2);
   var dLon = hrDLonForRow(midRow);
@@ -428,11 +562,18 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
   var east = (minIx + w) * dLon;
 
   var layerGroup = L.layerGroup();
-  // Fill is a canvas layer, NOT L.imageOverlay: on the Android WebView the
-  // data-URL <img> overlay never painted (only the vector contour did).
-  var fillLayer = hrCreateCanvasFillLayer(canvas, L.latLngBounds([south, west], [north, east]));
-  fillLayer.addTo(layerGroup);
-  layerGroup.hrStats = { cells: w * h, bounds: [south, west, north, east], pane: 'overlayPane', fillLayer: fillLayer };
+  var fillLayer = null;
+  var polygonCount = 0;
+  if (HR_LIVE_FILL_MODE === 'canvas') {
+    fillLayer = hrCreateCanvasFillLayer(canvas, L.latLngBounds([south, west], [north, east]));
+    fillLayer.addTo(layerGroup);
+  } else {
+    // Explicit SVG renderer: vector fill is what the Android WebView composites.
+    var svgRenderer = L.svg();
+    layerGroup.addLayer(svgRenderer); // first, so it exists before the polygons; removed with the group
+    polygonCount = hrAddSvgFillPolygons(layerGroup, svgRenderer, occBlurred, wildBlurred, w, h, minIx, minIy);
+  }
+  layerGroup.hrStats = { cells: w * h, bounds: [south, west, north, east], pane: 'overlayPane', fillLayer: fillLayer, mode: HR_LIVE_FILL_MODE, polygons: polygonCount };
 
   // ---- Range outline: marching-squares 0.5-contour over the blurred
   // occupancy field, stroked on top of the fill for definition. ----

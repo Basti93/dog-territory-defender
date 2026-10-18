@@ -32,12 +32,19 @@ describe('live map HTML', () => {
     expect(() => new Function(m[1])).not.toThrow();
   });
 
-  it('draws the Range fill via a canvas layer on SHOW_HOME_RANGE and logs RANGE_RENDERED', () => {
+  it('draws the Range fill as SVG polygons by default (canvas path kept behind HR_LIVE_FILL_MODE) and logs RANGE_RENDERED', () => {
+    expect(mapHTML).toContain("var HR_LIVE_FILL_MODE = 'svg'");
+    expect(mapHTML).toContain('function hrAddSvgFillPolygons');
+    expect(mapHTML).toContain('L.svg()');
+    expect(mapHTML).toContain('L.polygon(latlngs');
+    expect(mapHTML).toContain('stroke: false');
+    // canvas fallback still present
     expect(mapHTML).toContain('function hrCreateCanvasFillLayer');
     expect(mapHTML).toContain('hrCreateCanvasFillLayer(canvas, L.latLngBounds(');
     const handler = mapHTML.slice(mapHTML.indexOf("type === 'SHOW_HOME_RANGE'"));
     expect(handler.indexOf('renderHomeRangeToMap(')).toBeGreaterThan(-1);
     expect(handler).toContain("reportToRN('RANGE_RENDERED'");
-    expect(handler).toContain('drawnPixels');
+    expect(handler).toContain('polygons: stats ? stats.polygons : 0');
+    expect(handler).toContain('mode,');
   });
 });
