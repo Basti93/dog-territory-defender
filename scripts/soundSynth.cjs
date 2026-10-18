@@ -160,22 +160,61 @@ function addWoodblock(out, startMs, freq, amp, decay, sr = SAMPLE_RATE) {
   }
 }
 
-/** One "wuff" pulse: band-passed noise + a low sine gliding 320 -> 180 Hz over 70 ms. */
-function addWuff(out, startMs, amp, seed) {
+/**
+ * One cartoon dog bark, added into `out` (formant synthesis, no samples).
+ * Source: sawtooth glottal pulses, f0 falling exponentially f0Start -> f0End,
+ * ~15% per-period jitter, plus a 15 ms aspirated noise burst (-12 dB) for the "w".
+ * Filter: three parallel resonant band-passes (F1 620 Hz Q8, F2 1150 Hz Q10,
+ * F3 2600 Hz Q12 at -10 dB) that all sweep down 15% over the bark ("wo-uff").
+ * Envelope: 8 ms attack, hold, then exponential-ish decay; tanh for chesty body.
+ */
+function addBark(out, startMs, f0Start, f0End, durMs, seed) {
   const start = count(startMs);
-  const n = count(70);
+  const n = count(durMs);
+  const rng = makeRng(seed);
   const noise = makeNoise(seed);
-  const raw = new Array(n);
-  for (let i = 0; i < n; i++) raw[i] = noise();
-  const band = biquad(raw, 'bandpass', 700, 1.5, SAMPLE_RATE);
+  const attack = 0.008;
+  const hold = durMs > 110 ? 0.04 : 0.028;
+  const decayLen = durMs / 1000 - attack - hold;
+  const formants = [
+    { f: 620, q: 8, g: 1 },
+    { f: 1150, q: 10, g: 0.8 },
+    { f: 2600, q: 12, g: dbToLinear(-10) },
+  ];
+  const st = formants.map(() => ({ x1: 0, x2: 0, y1: 0, y2: 0 }));
+  const noiseGain = dbToLinear(-12) * 0.577; // relative to sawtooth RMS
+  const burst = count(15);
   let phase = 0;
+  let jit = 1;
   for (let i = 0; i < n && start + i < out.length; i++) {
     const t = i / SAMPLE_RATE;
     const u = i / n;
-    const freq = 320 + (180 - 320) * u;
-    phase += (2 * Math.PI * freq) / SAMPLE_RATE;
-    const env = Math.min(1, t / 0.004) * Math.exp(-t * 28) * Math.min(1, (n - 1 - i) / 80);
-    out[start + i] += amp * env * (Math.sin(phase) * 0.8 + band[i] * 1.2);
+    const f0 = f0Start * Math.pow(f0End / f0Start, u) * jit;
+    phase += f0 / SAMPLE_RATE;
+    if (phase >= 1) {
+      phase -= 1;
+      jit = 1 + 0.15 * (rng() * 2 - 1); // new jitter every glottal period
+    }
+    let x = 1 - 2 * phase;
+    if (i < burst) x += noise() * noiseGain * 4 * (1 - i / burst);
+    const sweep = 1 - 0.15 * Math.min(1, u * 1.2);
+    let y = 0;
+    for (let k = 0; k < formants.length; k++) {
+      const fm = formants[k];
+      const w0 = (2 * Math.PI * fm.f * sweep) / SAMPLE_RATE;
+      const alpha = Math.sin(w0) / (2 * fm.q);
+      const a0 = 1 + alpha;
+      const a1 = (-2 * Math.cos(w0)) / a0;
+      const a2 = (1 - alpha) / a0;
+      const b0 = alpha / a0;
+      const z = st[k];
+      const v = b0 * x - b0 * z.x2 - a1 * z.y1 - a2 * z.y2;
+      z.x2 = z.x1; z.x1 = x; z.y2 = z.y1; z.y1 = v;
+      y += fm.g * v;
+    }
+    const env = t < attack ? t / attack : t < attack + hold ? 1 : Math.exp(-5 * ((t - attack - hold) / decayLen));
+    const fadeOut = Math.min(1, (n - 1 - i) / count(5));
+    out[start + i] += Math.tanh(3 * y * env) * fadeOut;
   }
 }
 
@@ -189,14 +228,25 @@ const cue = (ms, build, peakDb = -6) => () => {
 
 const tap = cue(35, (out) => addWoodblock(out, 0, 880, 0.6, 110), -14);
 
-function buddy(notes, seed) {
-  return cue(400, (out) => {
-    addWuff(out, 0, 0.9, seed);
-    addWuff(out, 90, 0.8, seed + 1);
-    addKalimba(out, 0, notes[0], 0.55, { decay: 9, durMs: 300 });
-    addKalimba(out, 90, notes[1], 0.55, { decay: 8, durMs: 310 });
-  });
-}
+// Dog barks (formant synth). Total lengths: 300 / 320 / 340 ms.
+const barkCue = (ms, build) => () => {
+  const out = silence(ms);
+  build(out);
+  return finalize(out, -4, SAMPLE_RATE, 4000);
+};
+const buddy1 = barkCue(300, (out) => {
+  addBark(out, 0, 230, 140, 130, 11);
+  addBark(out, 110, 230, 140, 130, 12);
+});
+const buddy2 = barkCue(320, (out) => {
+  addBark(out, 0, 260, 160, 130, 23);
+  addBark(out, 130, 200, 120, 130, 24);
+});
+const buddy3 = barkCue(340, (out) => {
+  addBark(out, 0, 240, 150, 90, 37);
+  addBark(out, 100, 240, 150, 90, 38);
+  addBark(out, 200, 240, 150, 90, 39);
+});
 
 const treat = cue(150, (out) => {
   // Glass ding: two pure partials, shimmer from a slow beat between detuned twins.
@@ -251,9 +301,9 @@ const sleepy = cue(450, (out) => {
 
 const SOUNDS = {
   tap,
-  'buddy-1': buddy([NOTE.G5, NOTE.E5], 11),
-  'buddy-2': buddy([NOTE.A5, NOTE.G5], 23),
-  'buddy-3': buddy([NOTE.E5, NOTE.C5], 37),
+  'buddy-1': buddy1,
+  'buddy-2': buddy2,
+  'buddy-3': buddy3,
   treat,
   upgrade,
   celebrate,

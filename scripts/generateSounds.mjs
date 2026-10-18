@@ -3,7 +3,7 @@
 //   node scripts/generateSounds.mjs --ambient  ambient-musicbox.wav, 60 s, 16 kHz mono 16-bit
 // The WAVs are checked in; rerun only when changing the sounds.
 import { createRequire } from 'node:module';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,7 +19,14 @@ if (process.argv.includes('--ambient')) {
   console.log(`ambient-musicbox.wav  ${wav.length} bytes`);
 } else {
   rmSync(join(outDir, 'bark.wav'), { force: true }); // replaced by buddy-1..3
+  // assets/sounds/keep.json lists names (e.g. "buddy-1") of hand-made files to leave untouched.
+  const keepPath = join(outDir, 'keep.json');
+  const keep = new Set(existsSync(keepPath) ? JSON.parse(readFileSync(keepPath, 'utf8')) : []);
   for (const [name, make] of Object.entries(SOUNDS)) {
+    if (keep.has(name)) {
+      console.log(`${name}.wav  kept (keep.json)`);
+      continue;
+    }
     const wav = encodeWav(make());
     writeFileSync(join(outDir, `${name}.wav`), wav);
     console.log(`${name}.wav  ${wav.length} bytes`);

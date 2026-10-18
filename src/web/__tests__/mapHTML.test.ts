@@ -31,4 +31,13 @@ describe('live map HTML', () => {
     const m = mapHTML.match(/<script>([\s\S]*)<\/script>\s*<\/body>/)!;
     expect(() => new Function(m[1])).not.toThrow();
   });
+
+  it('draws the Range fill via a canvas layer on SHOW_HOME_RANGE and logs RANGE_RENDERED', () => {
+    expect(mapHTML).toContain('function hrCreateCanvasFillLayer');
+    expect(mapHTML).toContain('hrCreateCanvasFillLayer(canvas, L.latLngBounds(');
+    const handler = mapHTML.slice(mapHTML.indexOf("type === 'SHOW_HOME_RANGE'"));
+    expect(handler.indexOf('renderHomeRangeToMap(')).toBeGreaterThan(-1);
+    expect(handler).toContain("reportToRN('RANGE_RENDERED'");
+    expect(handler).toContain('drawnPixels');
+  });
 });

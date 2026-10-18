@@ -2,9 +2,9 @@ const { SAMPLE_RATE, AMBIENT_SAMPLE_RATE, SOUNDS, encodeWav, ambientMusicBox } =
 
 const EXPECTED_MS: Record<string, number> = {
   tap: 35,
-  'buddy-1': 400,
-  'buddy-2': 400,
-  'buddy-3': 400,
+  'buddy-1': 300,
+  'buddy-2': 320,
+  'buddy-3': 340,
   treat: 150,
   upgrade: 400,
   celebrate: 800,
@@ -40,10 +40,37 @@ describe('WAV generator', () => {
       expect(samples.length).toBe(Math.round((ms / 1000) * SAMPLE_RATE));
       expect(encodeWav(samples).length).toBeLessThanOrEqual(60 * 1024);
       const peak = dbfs(peakOf(samples));
-      const target = name === 'tap' ? -14 : -6;
+      const target = name === 'tap' ? -14 : name.startsWith('buddy-') ? -4 : -6;
       expect(peak).toBeLessThanOrEqual(target + 0.01);
       expect(peak).toBeGreaterThan(target - 0.5);
       expect(Math.abs(samples[samples.length - 1])).toBeLessThan(0.01);
+    }
+  });
+
+  it('buddy barks are voiced, not drums: 500-1400 Hz energy beats <250 Hz by >= 6 dB, 250-450 ms', () => {
+    // Naive DFT power summed over 10 Hz-spaced probes (Hann-windowed).
+    const bandEnergy = (xs: number[], lo: number, hi: number) => {
+      let total = 0;
+      for (let f = lo; f <= hi; f += 10) {
+        let re = 0;
+        let im = 0;
+        for (let i = 0; i < xs.length; i++) {
+          const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (xs.length - 1));
+          const a = (2 * Math.PI * f * i) / SAMPLE_RATE;
+          re += xs[i] * w * Math.cos(a);
+          im -= xs[i] * w * Math.sin(a);
+        }
+        total += re * re + im * im;
+      }
+      return total;
+    };
+    for (const name of ['buddy-1', 'buddy-2', 'buddy-3']) {
+      const xs: number[] = SOUNDS[name]();
+      const ms = (xs.length / SAMPLE_RATE) * 1000;
+      expect(ms).toBeGreaterThanOrEqual(250);
+      expect(ms).toBeLessThanOrEqual(450);
+      const diff = 10 * Math.log10(bandEnergy(xs, 500, 1400) / bandEnergy(xs, 20, 250));
+      expect(diff).toBeGreaterThanOrEqual(6);
     }
   });
 

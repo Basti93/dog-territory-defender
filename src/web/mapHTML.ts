@@ -165,6 +165,26 @@ ${MAP_THEME_PROBE_JS}
           }, 100);
         }
 
+        // Diagnostics for the Debug Log: did the fill layer actually paint?
+        // Re-read after 600ms so tile/zoom-settled state is captured too.
+        const reportRangeRendered = (phase) => {
+          const stats = homeRangeLayerGroup && homeRangeLayerGroup.hrStats;
+          const fill = stats && stats.fillLayer;
+          const el = fill && fill._el;
+          reportToRN('RANGE_RENDERED', {
+            phase,
+            cells: stats ? stats.cells : 0,
+            bounds: stats ? stats.bounds : null,
+            pane: stats ? stats.pane : null,
+            imageLoaded: !!el && el.width > 0 && el.height > 0,
+            drawnPixels: fill ? fill.hrDrawnPixels : 0,
+            zoom: map.getZoom(),
+            mapSize: [map.getSize().x, map.getSize().y]
+          });
+        };
+        reportRangeRendered('immediate');
+        setTimeout(() => reportRangeRendered('settled'), 600);
+
         reportToRN('SHOW_HOME_RANGE_APPLIED', {
           hasRaster: !!raster,
           w: raster ? raster.w : 0,

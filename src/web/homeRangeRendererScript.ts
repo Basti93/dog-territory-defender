@@ -289,6 +289,67 @@ function hrLocalToLatLon(u, v, minIx, minIy) {
 }
 
 /**
+ * Draws a small offscreen raster canvas onto a viewport-sized <canvas> in the
+ * overlay pane, scaled to the given lat/lng bounds and redrawn on
+ * move/zoom/resize. Mirrors how Leaflet's own L.Canvas renderer positions
+ * itself (including its zoomanim transform), so it needs no <img>/data URL.
+ * layer.hrDrawnPixels (alpha > 0 pixel count of last draw) is for diagnostics.
+ */
+function hrCreateCanvasFillLayer(raster, bounds) {
+  var Layer = L.Layer.extend({
+    onAdd: function (map) {
+      this._map = map;
+      this._el = L.DomUtil.create('canvas', 'hr-fill-canvas leaflet-zoom-animated');
+      this._el.style.pointerEvents = 'none';
+      map.getPane('overlayPane').appendChild(this._el);
+      this.hrDrawnPixels = 0;
+      this._redraw();
+    },
+    onRemove: function () {
+      L.DomUtil.remove(this._el);
+    },
+    getEvents: function () {
+      return { move: this._redraw, moveend: this._redraw, zoomend: this._redraw, resize: this._redraw, viewreset: this._redraw, zoomanim: this._animateZoom };
+    },
+    _redraw: function () {
+      var map = this._map;
+      var size = map.getSize();
+      var el = this._el;
+      if (el.width !== size.x) el.width = size.x;
+      if (el.height !== size.y) el.height = size.y;
+      L.DomUtil.setPosition(el, map.containerPointToLayerPoint([0, 0]));
+      L.DomUtil.setTransform(el, map.containerPointToLayerPoint([0, 0]), 1);
+      var ctx = el.getContext('2d');
+      ctx.clearRect(0, 0, el.width, el.height);
+      if (size.x === 0 || size.y === 0) return;
+      var nw = map.latLngToContainerPoint(bounds.getNorthWest());
+      var se = map.latLngToContainerPoint(bounds.getSouthEast());
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(raster, nw.x, nw.y, se.x - nw.x, se.y - nw.y);
+      this.hrDrawnPixels = hrCountOpaque(ctx, el.width, el.height);
+    },
+    _animateZoom: function (e) {
+      var map = this._map;
+      var scale = map.getZoomScale(e.zoom);
+      var offset = map._latLngToNewLayerPoint(map.containerPointToLatLng([0, 0]), e.zoom, e.center);
+      L.DomUtil.setTransform(this._el, offset, scale);
+    }
+  });
+  return new Layer();
+}
+
+function hrCountOpaque(ctx, w, h) {
+  try {
+    var data = ctx.getImageData(0, 0, w, h).data;
+    var n = 0;
+    for (var k = 3; k < data.length; k += 16) { if (data[k] > 0) n++; }
+    return n;
+  } catch (err) {
+    return -1;
+  }
+}
+
+/**
  * Renders a Home Range raster payload ({origin, w, h, wild, visits}, all as
  * produced by src/web/homeRangeRaster.ts) onto the given Leaflet map,
  * replacing any previous Home Range layers. Returns the new layer group so
@@ -367,11 +428,11 @@ function renderHomeRangeToMap(map, payload, previousLayerGroup) {
   var east = (minIx + w) * dLon;
 
   var layerGroup = L.layerGroup();
-  var imageOverlay = L.imageOverlay(canvas.toDataURL(), [[south, west], [north, east]], {
-    opacity: 1,
-    interactive: false
-  });
-  imageOverlay.addTo(layerGroup);
+  // Fill is a canvas layer, NOT L.imageOverlay: on the Android WebView the
+  // data-URL <img> overlay never painted (only the vector contour did).
+  var fillLayer = hrCreateCanvasFillLayer(canvas, L.latLngBounds([south, west], [north, east]));
+  fillLayer.addTo(layerGroup);
+  layerGroup.hrStats = { cells: w * h, bounds: [south, west, north, east], pane: 'overlayPane', fillLayer: fillLayer };
 
   // ---- Range outline: marching-squares 0.5-contour over the blurred
   // occupancy field, stroked on top of the fill for definition. ----
