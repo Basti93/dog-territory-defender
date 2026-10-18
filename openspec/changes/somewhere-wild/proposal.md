@@ -32,9 +32,9 @@ Three tightly-coupled pieces — coupled because the marker and the card must ag
 - Never the Den screen, per `home-range-rewards/design.md`'s FLAG 2 resolution (never a Den percentage and a Fresh Ground signal on the same screen).
 - Copy's subject is always the place or the dog, never "you" — invitation, never reproach.
 
-## Phase
+## Scope
 
-Phase 1 — same posture as `home-range` itself: this extends the already-shipped-into-Phase-1 Home Range rebuild's own legibility, not new-phase content. No social, streak, or leaderboard surface is touched.
+Current slice: extends the Home Range rebuild's legibility; no social, streak, or leaderboard surface is touched.
 
 ## Open Questions
 

@@ -70,16 +70,16 @@ Where the relevant screen exists, the system SHALL implement: paw prints appeari
 - **WHEN** the player's territory overlaps a rival's
 - **THEN** the rival's territory SHALL show a subtle red outline while the player's own territory stays green, and tapping it SHALL offer a "defend" action
 
-### Requirement: Phase-Scoped Visual Delivery
-Visual and UI work SHALL be scoped to the current target phase only (per `game-phases`): the target phase SHALL be confirmed before building, only that phase's screens and components SHALL be added, existing design tokens and components SHALL be reused rather than rebuilt, and anything belonging to a later phase SHALL be recorded as a parked backlog note instead of being built early.
+### Requirement: Backlog-Scoped Visual Delivery
+Visual and UI work SHALL be scoped to what has been pulled from the backlog (`game-backlog`): only the pulled item's screens and components SHALL be added, existing design tokens and components SHALL be reused rather than rebuilt, and anything not yet pulled SHALL stay recorded in the backlog spec instead of being built early.
 
 #### Scenario: Visual update requested
 - **WHEN** a visual or UI update is requested for the prototype or the production app
-- **THEN** the target phase SHALL be confirmed first, only that phase's screens/components SHALL be added, and any later-phase idea SHALL be parked rather than built
+- **THEN** only the pulled item's screens/components SHALL be added, and any other idea SHALL be parked in the backlog rather than built
 
 ### Requirement: Success Criteria
 The visual design SHALL be considered successful when all of the following hold: a parent looking at the app says it makes the dog walk more fun, not stressful; the map remains the primary visual element with UI chrome fading into the background; claiming territory feels like "I made my mark on the neighborhood," not "I leveled up a metric"; and two people walking together can both play at once without feeling like competitors.
 
 #### Scenario: Design review against success criteria
-- **WHEN** a phase's visual design is reviewed
+- **WHEN** a visual design is reviewed
 - **THEN** it SHALL be checked against all four success criteria before being considered done

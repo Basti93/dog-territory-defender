@@ -8,7 +8,7 @@ This document assumes `proposal.md`'s scope as settled and answers the concrete 
 
 **Goals:** land the Doorstep as a presentation layer with zero new economy/mechanic logic — every number it shows must trace to a function that already exists and is already tested; keep the anti-guilt guardrail structurally enforced (the day-gap number that picks a greeting flavor must be architecturally incapable of being interpolated into a user-facing string); reuse the already-verified Home Range rendering math for the portrait rather than writing a second renderer.
 
-**Non-goals:** any new social/leaderboard data (Phase 3); any change to how treats/XP/achievements are computed; fixing `DenScreen.tsx`'s pre-existing XP progress bar (noted in `proposal.md`, out of scope); detecting or recovering an app-killed-mid-walk session (today, `appState.walk` is unpersisted React state and already resets to `null` on any relaunch — the Doorstep doesn't need to special-case this, it's pre-existing, unrelated behavior).
+**Non-goals:** any new social/leaderboard data (social layer, backlog); any change to how treats/XP/achievements are computed; fixing `DenScreen.tsx`'s pre-existing XP progress bar (noted in `proposal.md`, out of scope); detecting or recovering an app-killed-mid-walk session (today, `appState.walk` is unpersisted React state and already resets to `null` on any relaunch — the Doorstep doesn't need to special-case this, it's pre-existing, unrelated behavior).
 
 ## Decision 1 — `currentTitleForLevel`: a new function, not a reuse of `titleForLevel`
 
@@ -195,7 +195,7 @@ Tapping either row calls a new callback prop (`onOpenDebugLog` / `onOpenLogMisse
 
 ## Collect-tap scoping
 
-The fly/bounce animation itself is in-scope now: plain RN `Animated` (translate + fade the treats-line text/icon toward the footer counter's position) — no new dependency, matches the project's existing (SVG-based, no animation library) visual toolkit. **The sound is a separate, larger question**, flagged in `proposal.md`'s Open Questions rather than decided here: this codebase has never played a sound (no `expo-audio`/`expo-av` in `package.json`, no audio asset anywhere under `assets/`), despite `game-phases/spec.md`'s standing "audio-first" cross-cutting constraint. Adding the project's first audio dependency and sourcing a "ding" asset for one tap interaction is a real, if small, scope increase that deserves an explicit yes/no rather than a silent library add — recommended default (not decided here): ship the animation now, treat the sound as a fast-follow once an asset is sourced.
+The fly/bounce animation itself is in-scope now: plain RN `Animated` (translate + fade the treats-line text/icon toward the footer counter's position) — no new dependency, matches the project's existing (SVG-based, no animation library) visual toolkit. **The sound is a separate, larger question**, flagged in `proposal.md`'s Open Questions rather than decided here: this codebase has never played a sound (no `expo-audio`/`expo-av` in `package.json`, no audio asset anywhere under `assets/`), despite `game-backlog/spec.md`'s standing "audio-first" cross-cutting constraint. Adding the project's first audio dependency and sourcing a "ding" asset for one tap interaction is a real, if small, scope increase that deserves an explicit yes/no rather than a silent library add — recommended default (not decided here): ship the animation now, treat the sound as a fast-follow once an asset is sourced.
 
 ## Noted, not fixed here
 

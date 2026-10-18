@@ -28,7 +28,7 @@ Three session states (first-open-of-day, same-day re-open, long-absence) are der
 ## Two things the concept assumes that need a concrete answer (flagged, not silently resolved)
 
 - **The concept's example title, "Neighborhood Regular," matches no authored milestone title** (`src/economy/milestones.ts`'s `MILESTONE_TITLES` has "Neighborhood Explorer" at level 11 and "Trail Regular" at level 16 — no "Neighborhood Regular" anywhere, and level 12 itself isn't a milestone level at all). More importantly, `titleForLevel()` as it exists today only ever returns non-null on an *exact* milestone level — it was built purely to drive the one-away cliffhanger ("One more walk and he's a…"), never to answer "what title does Buddy currently hold at any level." The Doorstep needs the latter, which doesn't exist yet. See `design.md` Decision 1 for the new `currentTitleForLevel()` this adds, and its behavior at level 1 (no title yet) and past the 8th authored title.
-- **The "collect" tap's sound effect has no infrastructure to attach to.** No audio library (`expo-audio`/`expo-av`) and no sound assets exist anywhere in this codebase today, despite `game-phases/spec.md`'s cross-cutting "audio-first" constraint — this would be the first sound the app ever plays. See `design.md`'s "Collect-tap scoping" and this proposal's Open Questions — this needs a call before implementation, not a silent library add.
+- **The "collect" tap's sound effect has no infrastructure to attach to.** No audio library (`expo-audio`/`expo-av`) and no sound assets exist anywhere in this codebase today, despite `game-backlog/spec.md`'s cross-cutting "audio-first" constraint — this would be the first sound the app ever plays. See `design.md`'s "Collect-tap scoping" and this proposal's Open Questions — this needs a call before implementation, not a silent library add.
 
 ## Two existing requirements this concept sits in tension with
 
@@ -46,7 +46,7 @@ Three session states (first-open-of-day, same-day re-open, long-absence) are der
 - `visual-design` — adds The Doorstep as a sixth Key Screen Intent.
 
 ### Not modified
-- `game-phases` — nothing here introduces a new mechanic or crosses a phase boundary; every fact this screen shows is data an already-Phase-1-authorized capability already computes. No change needed.
+- `game-backlog` — nothing here introduces a new mechanic; every fact this screen shows is data an existing capability already computes. No change needed.
 
 ## Impact
 
@@ -57,9 +57,9 @@ Three session states (first-open-of-day, same-day re-open, long-absence) are der
 - No new database tables, no new persisted fields, no new repository, no new third-party dependency for the burger menu (RN's built-in `Modal`).
 - Possible new dependency: an audio library, if the collect-tap sound ships now rather than as a fast-follow (see Open Questions).
 
-## Phase
+## Scope
 
-**Phase 1.** Confirmed against `openspec/specs/game-phases/spec.md`'s Phase 1 scope: treats, Buddy's Level, the Home Range, personal stats/achievements, and the earned-trigger notification are all already-authorized Phase 1 capabilities. This screen touches none of Phase 2's streaks/recap-notification scope, none of Phase 3's social/leaderboard scope, and none of Phase 4's Pack/full-Den scope — it is a presentation layer over what Phase 1 already built. No `game-phases` text needs updating (see "Not modified" above).
+Current slice: a presentation layer over what the core loop already built (treats, Buddy's Level, Home Range, stats/achievements, earned-trigger notification); no backlog item is touched.
 
 ## Open Questions — resolved
 

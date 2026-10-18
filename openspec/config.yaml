@@ -13,10 +13,8 @@ context: |
   Spring-like, joyful tone. Cookie-clicker background loop (The Den). Anti-snowball social layer.
   Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript 5.9 strict. Local persistence via expo-sqlite
   (repository pattern, DynamoDB-shaped schema, AWS sync planned later — no cloud backend yet).
-  Phase 0 (Walking Skeleton) built; Phase 1 (Core Game Loop — treats economy + Den screen) in progress.
-  See openspec/specs/game-phases/spec.md. Phase-gated: never build a later phase's features early.
-  Default phase is Phase 1; ask only when a request clearly belongs to a later phase.
-  Two process tiers: game-design changes (mechanics, economy, phases) need an OpenSpec change; presentation work
+  Agile: work is pulled from the game backlog (openspec/specs/game-backlog/spec.md) by owner feedback and fun; no phase gates.
+  Two process tiers: game-design changes (mechanics, economy) need an OpenSpec change; presentation work
   (UI, art, copy, tuning) and bug fixes/refactors go straight to code (see CLAUDE.md).
   The main session orchestrates; implementation, research and review go to sonnet subagents.
   Never use aggressive language ("conquer", "destroy", "kill", "battle") — use "claim", "defend", "protect".

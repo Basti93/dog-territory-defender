@@ -8,17 +8,17 @@ The app works end to end (walk, Home Range, Den, Doorstep, Celebration) but stil
 
 `visual-design`'s "Delight Interaction Moments" already requires a tail-wag animation, a ticking XP counter and gentle confetti. None of those exist yet except a local confetti in `CelebrationScreen.tsx`. This change delivers them, plus the dog that owns them.
 
-## Phase classification
+## Scope
 
-**Phase 1 (Core Game Loop, in progress).** This change is **presentation only**: it adds **no mechanics, no economy numbers, no new persisted game state that affects rewards, and no new thresholds**. Everything the player sees animate is derived from state that already exists (`DoorstepSession.kind`, `DenEconomyState`, the celebration payload). The one new persisted record is cosmetic (Buddy's look).
+**Current slice.** This change is **presentation only**: it adds **no mechanics, no economy numbers, no new persisted game state that affects rewards, and no new thresholds**. Everything the player sees animate is derived from state that already exists (`DoorstepSession.kind`, `DenEconomyState`, the celebration payload). The one new persisted record is cosmetic (Buddy's look).
 
 Explicitly **parked** (do not build here):
-- Dog accessories, hats, cosmetics shop: Phase 4.
-- Pack companion dogs (a second, third dog on screen): Phase 4.
-- Seasonal art / season-themed coats and backdrops: Phase 2.
+- Dog accessories, hats, cosmetics shop: backlog (Long-term hooks).
+- Pack companion dogs (a second, third dog on screen): backlog (Long-term hooks).
+- Seasonal art / season-themed coats and backdrops: backlog (Repetition loop).
 - Sound and haptics: still a deliberate fast-follow (needs a native dependency; see `home-dashboard`'s resolved Open Question).
 - Letting the player upload a photo of their dog (see design Decision 1).
-- Real-time 3D Buddy (photo, then Meshy/Tripo, then GLB, then expo-gl/expo-three): possible later step; Phase 1 ships pre-rendered 3D sprites only (design Decision 12).
+- Real-time 3D Buddy (photo, then Meshy/Tripo, then GLB, then expo-gl/expo-three): possible later step; the current slice ships pre-rendered 3D sprites only (design Decision 12).
 
 ## What changes
 

@@ -54,11 +54,11 @@ The Den SHALL visually reflect the season and show idle life: the grass SHALL gr
 - **WHEN** passive treat generation fills the Doghouse's storage capacity while the player is away
 - **THEN** the system SHALL notify the player that treats are waiting when they return
 
-### Requirement: Phase 1 Minimum Den
-In Phase 1 of the phased build plan (`game-phases`), the Den SHALL expose only 3 buildings — Doghouse, Treat Bakery, Sniff Garden — with the remaining 7 buildings introduced no earlier than Phase 4.
+### Requirement: Minimum Den
+Until further buildings are pulled from the backlog (`game-backlog`, Long-term hooks), the Den SHALL expose only 3 buildings — Doghouse, Treat Bakery, Sniff Garden — with the remaining 7 buildings still in the backlog.
 
-#### Scenario: Phase 1 Den scope
-- **WHEN** the Den screen is built for Phase 1
+#### Scenario: Minimum Den scope
+- **WHEN** the Den screen is built with the minimum Den
 - **THEN** it SHALL show exactly the Doghouse, Treat Bakery, and Sniff Garden buildings and no others
 
 ### Requirement: Walk-Derived XP
@@ -69,7 +69,7 @@ The system SHALL award Den XP for every reward-eligible closed walk (see `walk-l
 - **THEN** the system SHALL award XP equal to a flat base plus an amount scaled by the walk's total distance plus a capped amount scaled by the walk's painted Home Range footprint, with no building-derived or treats-derived multiplier applied
 
 ### Requirement: Den Level Is Standalone and XP-Derived
-Den Level SHALL be derived only from a player's own lifetime accumulated XP (per Walk-Derived XP above), and SHALL NOT be derived from the sum, average, or presence of any Den building's level, so that Den Level never depends on the buildings it gates in later phases.
+Den Level SHALL be derived only from a player's own lifetime accumulated XP (per Walk-Derived XP above), and SHALL NOT be derived from the sum, average, or presence of any Den building's level, so that Den Level never depends on the buildings it gates once they are built.
 
 #### Scenario: Den Level independent of building levels
 - **WHEN** a player's Doghouse, Treat Bakery, and Sniff Garden levels change through upgrades
@@ -86,8 +86,8 @@ XP required to advance from Den Level N to N+1 SHALL grow geometrically, consist
 - **WHEN** a player's lifetime XP exceeds the cumulative XP required for Den Level 100
 - **THEN** the player's Den Level SHALL remain 100 and SHALL NOT increase further
 
-### Requirement: Phase 1 Level Payoff Is Buddy's Per-Walk Income Rate, Never a Capped Power Bonus
-In Phase 1, Buddy's Level (the player-facing name for Den Level) SHALL determine the flat treats payout awarded per walk, via a per-level curve that increases by a constant relative percentage at every level with no upper limit, displayed to the player as a concrete per-walk figure (e.g. "Buddy brings home N treats a walk"). This is an income effect, not a capped power bonus: it SHALL NOT be summed into the `anti-snowball` capability's `Hard Power Gap Soft-Cap` budget, and no capped percentage bonus anywhere in the game (building, Pack, or badge) SHALL ever be a function of Buddy's Level or of a player's treat balance. The Den Level readout and any level-up notice SHALL remain visually secondary to the walk's own territory-claimed outcome wherever both appear together, consistent with `visual-design`'s Success Criteria.
+### Requirement: Level Payoff Is Buddy's Per-Walk Income Rate, Never a Capped Power Bonus
+Buddy's Level (the player-facing name for Den Level) SHALL determine the flat treats payout awarded per walk, via a per-level curve that increases by a constant relative percentage at every level with no upper limit, displayed to the player as a concrete per-walk figure (e.g. "Buddy brings home N treats a walk"). This is an income effect, not a capped power bonus: it SHALL NOT be summed into the `anti-snowball` capability's `Hard Power Gap Soft-Cap` budget, and no capped percentage bonus anywhere in the game (building, Pack, or badge) SHALL ever be a function of Buddy's Level or of a player's treat balance. The Den Level readout and any level-up notice SHALL remain visually secondary to the walk's own territory-claimed outcome wherever both appear together, consistent with `visual-design`'s Success Criteria.
 
 #### Scenario: Level-up changes the walk's treat payout
 - **WHEN** Buddy's Level increases
@@ -102,7 +102,7 @@ In Phase 1, Buddy's Level (the player-facing name for Den Level) SHALL determine
 - **THEN** the post-walk celebration SHALL present the territory-claimed outcome as the primary moment, and the level-up notice SHALL be shown at or below the visual weight of the existing upgrade tease
 
 #### Scenario: No early unlock-ladder disclosure
-- **WHEN** a player views their Den Level in Phase 1
+- **WHEN** a player views their Den Level in the current game
 - **THEN** the system SHALL NOT display which building or feature unlocks at any future Den Level
 
 ### Requirement: Doghouse Storage Never Permanently Softlocks

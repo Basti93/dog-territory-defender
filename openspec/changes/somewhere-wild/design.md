@@ -8,7 +8,7 @@ Everything here builds on `home-range`'s already-shipped `src/utils/grid.ts`, `s
 
 **Goals:** make "there's a wilder patch nearby, and walking it pays more" legible without a new number anywhere; keep the marker and the card in agreement (same spot); degrade to nothing (not a broken/empty state) whenever the underlying data can't support a confident answer.
 
-**Non-goals:** re-tuning the Bloom's colour ramp or opacity (already shipped, already tuned); anything involving other players (Phase 3, explicitly deferred); a general-purpose reverse-geocoding service (this uses exactly one native API call, cached).
+**Non-goals:** re-tuning the Bloom's colour ramp or opacity (already shipped, already tuned); anything involving other players (social layer, backlog); a general-purpose reverse-geocoding service (this uses exactly one native API call, cached).
 
 ## Why one change, not a further split
 

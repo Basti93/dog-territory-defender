@@ -8,10 +8,10 @@
   ═══════════════════════════════════════════════════════════
   DOG TERRITORY DEFENDER — Visual Prototype
   ═══════════════════════════════════════════════════════════
-  Phase: 1 — Core Game Loop
+  Slice: core game loop
   Updated: 2026-04-24
 
-  ADDED IN THIS UPDATE (Phase 1):
+  ADDED IN THIS UPDATE (core loop):
   ─ Den screen: SVG garden scene + 3 buildings (Doghouse,
     Treat Bakery, Sniff Garden), each tappable with upgrade modal
   ─ Global treats state with passive tick (configurable rate)
@@ -30,13 +30,13 @@
     LeaderboardModal, LeaderboardScreen
 
   ═══════════════════════════════════════════════════════════
-  PARKED FOR LATER PHASES — DO NOT BUILD YET
-  ─ Phase 2: scent strength visualisation, seasonal map
+  BACKLOG IDEAS (not built yet) — see openspec/specs/game-backlog
+  ─ Repetition loop: scent strength visualisation, seasonal map
     variations beyond spring, evening recap / async events
-  ─ Phase 3: local leaderboard scoped to zip code,
+  ─ Social layer: local leaderboard scoped to zip code,
     rolling 7-day scoring, other players' live territories,
-    async PvP events
-  ─ Phase 4: full Den (10 buildings), Pack collection,
+    async events
+  ─ Long-term hooks: full Den (10 buildings), Pack collection,
     AI companion dogs, Beginner's Luck badge UI,
     seasonal resets, mentor relationship screen,
     7 additional Den buildings (Training Yard → Memorial Bench)
@@ -809,7 +809,7 @@ function CelebrationScreen({ walkData, onDone, tweaks, onTreatsEarned }) {
         </div>
       </div>
 
-      {/* Treat reward (Phase 1 addition) */}
+      {/* Treat reward (core loop addition) */}
       <div style={{
         width: '100%', background: '#F4F6F0', borderRadius: 14, padding: '12px 14px',
         animation: `treatPop 0.5s 0.8s ease-out both`, zIndex: 1,
@@ -1092,7 +1092,7 @@ function App() {
   const [tab, setTab] = useState('map');
   const [walkData, setWalkData] = useState(null);
 
-  // ── Treats state (Phase 1) ────────────────────────────────────────────────
+  // ── Treats state ────────────────────────────────────────────────
   const [treats, setTreats] = useState(() => tweaks.startingTreats || 50);
 
   // Den buildings — initial level depends on tweaks.denLevel preset
@@ -1227,7 +1227,7 @@ function App() {
           <TweakToggle label="Show Collectibles" value={tweaks.showCollectibles}
             onChange={v => setTweak('showCollectibles', v)}/>
         </TweakSection>
-        <TweakSection label="Den (Phase 1)">
+        <TweakSection label="Den">
           <TweakSlider label="Passive Rate (treats/sec)" value={tweaks.passiveTreatRate}
             min={0.1} max={5} step={0.1}
             onChange={v => setTweak('passiveTreatRate', v)}/>

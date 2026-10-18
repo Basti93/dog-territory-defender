@@ -42,7 +42,7 @@ Tapping a row in `WalkHistoryScreen.tsx` (the row itself is the tap target — D
 ### Not modified
 - `den-economy` — the manual-log route-refresh *mechanic* (its cap, its fixed multiplier, its inability to extend the Range) is unchanged; this change only adds a new field so a different screen can *display* which route was picked, after the fact. No economy rule changes.
 - `home-range`, `somewhere-wild`, `personal-stats` — nothing here changes how the Home Range, New Ground detection, or achievements are computed; this is a presentation layer over already-authorized data, same posture `home-dashboard` took.
-- `game-phases` — see Phase section below; no new mechanic, no phase boundary crossed.
+- `game-backlog` — no backlog item is pulled or changed here; no new mechanic.
 
 ## Impact
 
@@ -56,9 +56,9 @@ Tapping a row in `WalkHistoryScreen.tsx` (the row itself is the tap target — D
 - `src/utils/streetLookup.ts`: exports its existing private `resolveLabelForPoint` (or a one-line named wrapper around it — implementer's call) — no new geocoding logic.
 - No new database tables; no new repository; no new dependency.
 
-## Phase
+## Scope
 
-**Phase 1.** Confirmed against `openspec/specs/game-phases/spec.md`: walk history, the Home Range, treats, and New Ground are all already-authorized Phase 1 (and Phase-1-adjacent, already-shipped) capabilities. This screen touches none of Phase 2's streaks/seasonal scope, none of Phase 3's social/leaderboard scope, and none of Phase 4's Pack/full-Den scope — it is a presentation layer over data Phase 1 already computes and stores, same posture as `home-dashboard`. No `game-phases` text needs updating.
+Current slice: a presentation layer over data the app already computes and stores (walk history, Home Range, treats, New Ground); no backlog item (streaks, social, Pack) is touched.
 
 ## Explicit anti-scope (from the brief, restated so no implementer or future agent reopens these)
 
@@ -75,4 +75,4 @@ All four low-stakes, accepted at recommended defaults rather than escalated furt
 
 ## Source
 
-Concept: `game-master` subagent pass ("Walk Portrait"), provided verbatim to this scoping pass. Technical scoping, the gaps above, and the rendering/data-model decisions: `senior-app-architect`, grounded in this session's direct reads of `App.tsx`, `src/types.ts`, `src/storage/WalkRepository.ts`, `src/storage/HomeRangeRepository.ts`, `src/economy/walkRewards.ts`, `src/utils/manualWalkLog.ts`, `src/utils/streetLookup.ts`, `src/utils/grid.ts`, `src/web/mapHTML.ts`, `src/web/portraitHTML.ts`, `src/web/homeRangeRendererScript.ts`, `src/components/WalkHistoryScreen.tsx`, `src/components/LogMissedWalkScreen.tsx`, `src/components/TerritoryPortrait.tsx`, `openspec/specs/den-economy/spec.md`, `openspec/specs/walk-history/spec.md`, `openspec/specs/walk-storage/spec.md`, `openspec/specs/visual-design/spec.md`, `openspec/specs/game-phases/spec.md`, and the unarchived `home-dashboard`/`somewhere-wild` changes' `design.md`s.
+Concept: `game-master` subagent pass ("Walk Portrait"), provided verbatim to this scoping pass. Technical scoping, the gaps above, and the rendering/data-model decisions: `senior-app-architect`, grounded in this session's direct reads of `App.tsx`, `src/types.ts`, `src/storage/WalkRepository.ts`, `src/storage/HomeRangeRepository.ts`, `src/economy/walkRewards.ts`, `src/utils/manualWalkLog.ts`, `src/utils/streetLookup.ts`, `src/utils/grid.ts`, `src/web/mapHTML.ts`, `src/web/portraitHTML.ts`, `src/web/homeRangeRendererScript.ts`, `src/components/WalkHistoryScreen.tsx`, `src/components/LogMissedWalkScreen.tsx`, `src/components/TerritoryPortrait.tsx`, `openspec/specs/den-economy/spec.md`, `openspec/specs/walk-history/spec.md`, `openspec/specs/walk-storage/spec.md`, `openspec/specs/visual-design/spec.md`, `openspec/specs/game-backlog/spec.md`, and the unarchived `home-dashboard`/`somewhere-wild` changes' `design.md`s.

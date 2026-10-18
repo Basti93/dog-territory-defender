@@ -1,7 +1,7 @@
 ## 0. Sequencing and pre-flight
 
 - [x] 0.1 Read `design.md` in full, especially Decisions 3, 4, 7, and 10 — the schema migration shape, the reschedule-on-open-and-on-save scheduling mechanism, the single-slot ignore-reconciliation logic, and the durable-counter measurement approach are all assumed settled here, not open questions.
-- [x] 0.2 Confirm `proposal.md`'s two Open Questions (the Phase 2 pull-forward exception, and the accepted killed-app scheduling tradeoff) have the founder's/user's explicit sign-off before starting section 3 onward. Sections 1-2 (pure logic, no wiring) are safe to build regardless, since they have no user-facing effect until wired in.
+- [x] 0.2 Confirm `proposal.md`'s Open Questions (pulled from the backlog, and the accepted killed-app scheduling tradeoff) have the founder's/user's explicit sign-off before starting section 3 onward. Sections 1-2 (pure logic, no wiring) are safe to build regardless.
 
 ## 1. Pure decision logic — lowest risk, no native dependency, buildable first
 
@@ -50,9 +50,9 @@
 
 ## 7. Spec and README follow-up
 
-- [ ] 7.1 Confirm this change's `specs/walk-reminder/spec.md` and `specs/game-phases/spec.md` deltas are applied via `/opsx:apply` once section 8's manual verification passes — per `CLAUDE.md`'s rule against editing `openspec/specs/` directly. **Not run by `senior-app-developer`** — explicitly out of scope for this implementation pass per the handoff instructions; left for the user/a follow-up session to run once section 9's manual verification is done.
+- [ ] 7.1 Confirm this change's `specs/walk-reminder/spec.md` delta is applied via `/opsx:apply` once section 8's manual verification passes, per `CLAUDE.md`'s rule against editing `openspec/specs/` directly. **Not run by `senior-app-developer`.**
 - [x] 7.2 Updated `README.md`'s "Notifications" bullet to describe both notification types, added the `@react-native-community/datetimepicker` rebuild note alongside the existing `expo-notifications` one, and added `SettingsScreen.tsx`/`walkReminderDecision.ts`/`walkReminder.ts` to the Components/Notifications folder-map bullets.
-- [ ] 7.3 Flagged for the user (not silently edited): `openspec/config.yaml`'s context line ("Phase 1... in progress") stays accurate on its own terms even after this ships, since this feature is scoped as a named Phase 2 exception, not a completion of Phase 1 — no change needed there, but worth a conscious check at archive time.
+- [x] 7.3 Superseded: phase gating was removed by owner decision on 2026-10-18; `openspec/config.yaml` now points at `game-backlog`.
 
 ## 8. Automated coverage
 

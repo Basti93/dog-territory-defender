@@ -10,9 +10,9 @@ Neither has run `/opsx:apply` yet, so `openspec/specs/` does not yet contain a `
 
 ## Why
 
-The founder's original ask was to let a dog with two neighborhoods (home + a rarely-visited office, a parents' house, a second city) see them as two distinct, nameable places instead of one undifferentiated blob — and to give the Den a second, small, always-growing passive-income source tied to how much ground the player has claimed overall. The game-master's reframe: territories are never ranked "weak vs. strong" against each other (that's a snowball/competition frame this game explicitly avoids pre-Phase-3) — instead each territory earns exactly one flavor-of-character title ("The Everyday," "The Wild One," "The Far One") so a small second territory feels like its own place with its own personality, not a losing runner-up to the player's main one.
+The founder's original ask was to let a dog with two neighborhoods (home + a rarely-visited office, a parents' house, a second city) see them as two distinct, nameable places instead of one undifferentiated blob — and to give the Den a second, small, always-growing passive-income source tied to how much ground the player has claimed overall. The game-master's reframe: territories are never ranked "weak vs. strong" against each other (that's a snowball/competition frame this game explicitly avoids before any social layer) — instead each territory earns exactly one flavor-of-character title ("The Everyday," "The Wild One," "The Far One") so a small second territory feels like its own place with its own personality, not a losing runner-up to the player's main one.
 
-This is a presentation and light-structure layer over the Home Range grid Phase 1 already built (`home-range`), plus one additive passive-income term in the Den (`den-economy`) — it introduces no new phase-gated mechanic (no social layer, no leaderboard, no Pack).
+This is a presentation and light-structure layer over the Home Range grid the core loop already built (`home-range`), plus one additive passive-income term in the Den (`den-economy`) — it introduces no new backlog mechanic (no social layer, no leaderboard, no Pack).
 
 ## What Changes
 
@@ -43,7 +43,7 @@ The single persistent Home Range grid gains a partition: every cell belongs to e
 - `anti-snowball` — extends "Hard Power Gap Soft-Cap"'s existing exclusion list (Buddy's Level, `bloomMultiplier`) to also name `territoryRate`, for the identical reason: it's a function of walk geography and elapsed calendar time (via `worldMass`) and Buddy's Level's own already-excluded income curve, never a capped percentage bonus.
 
 ### Not modified
-- `game-phases` — see Phase section below; no phase-boundary crossing.
+- `game-backlog` — no backlog item is pulled or changed here.
 - `personal-stats` — per-territory `walksHere`/`treatsEarnedHere` are territory-scoped presentation counters owned by the new `territories` capability, not lifetime personal-stats achievements; nothing here changes what personal-stats tracks or how achievements unlock.
 - `pack-collection` — untouched; territories hold no Pack-related state.
 
@@ -57,11 +57,9 @@ The single persistent Home Range grid gains a partition: every cell belongs to e
 - `App.tsx`: the Finish Walk call site (`finishWalk`, currently around line 280) gains one call into `territoryCluster.ts`'s resolution function, using data (`rangeBefore`, `painted`) it already fetches — no new repository read added to the hot path beyond what Territory-metadata writes require.
 - No new external dependency, no new backend, no new permission.
 
-## Phase
+## Scope
 
-**Phase 1**, per the game-master's read — confirmed against `openspec/specs/game-phases/spec.md`'s Phase 1 scope, which already explicitly authorizes "a persistent Home Range grid... treats earned per walk plus passive treat generation per hour." Territories re-presents that same already-Phase-1 grid and adds one more additive passive-income term to that same already-Phase-1 mechanic; it introduces no leaderboard, no other-player data, no Pack, and no streak — all still correctly Phase 3/4-gated and untouched here.
-
-**Strategic caveat, recorded not blocking:** Phase 1's own acceptance test is "5 dog owners walk twice a day for 5 days" (`game-phases/spec.md`). A territory only auto-births when a walk lands 400m+ from an existing one — for most testers walking their own neighborhood twice a day for 5 days, that condition may simply never fire (most players will plausibly finish the whole 5-day window with exactly one territory, the same experience as before this change). **This feature will very likely not get a real multi-territory validation signal within Phase 1's 5-day tester window** — it's a legitimate long-tail feature for players who *already* walk in two separated places (a second home, a work district), which is a minority of any 5-day cohort. This isn't a reason to defer it (it's additive and harmless to the single-territory majority case, and the passive-income term pays out regardless of territory count), but it should be logged now rather than discovered as a surprised "why didn't we learn anything about this" note in the Phase 1 validation audit.
+Current slice: a presentation layer over the Home Range grid plus one additive passive-income term in the Den; no social layer, leaderboard, Pack or streak. Recorded caveat: a territory only auto-births when a walk lands 400m+ from an existing one, so most solo testers in a short window may never see a second territory; this is a long-tail feature for players who already walk in two separated places.
 
 ## Open Questions — need a call before implementation
 

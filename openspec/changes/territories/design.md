@@ -4,7 +4,7 @@
 
 **Goals:** give the grid a stable, sticky partition into named sub-regions that a fresh agent can reason about without re-deriving from scratch each read; keep the passive-income addition provably invariant to how many territories a player happens to have (the game-economist's explicit, non-negotiable correctness constraint); reuse every existing primitive (`wildness()`, `streetsKnown()`, `paintedCells()`, the repository/migration/singleton-flag conventions) rather than inventing parallel ones.
 
-**Non-goals:** any cross-player concept (Phase 3); re-tuning the passive-income formula's constants (game-economist-validated, verbatim); a general graph/clustering abstraction — the algorithm below is written procedurally, not as a reusable graph library, because there is exactly one caller.
+**Non-goals:** any cross-player concept (social layer, backlog); re-tuning the passive-income formula's constants (game-economist-validated, verbatim); a general graph/clustering abstraction — the algorithm below is written procedurally, not as a reusable graph library, because there is exactly one caller.
 
 ## Decision 1 — Territory membership lives on `Cell`, not in a computed-on-read graph
 

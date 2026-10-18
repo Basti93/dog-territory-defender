@@ -9,11 +9,11 @@ This file tells Claude (and any AI coding agent) how to collaborate on **Dog Ter
 - **Product:** Location-based mobile game for urban dog owners. Spring-like, joyful. Cookie-clicker background loop. Anti-snowball social layer.
 - **Source of truth for game design:** [openspec/](openspec/) (`openspec/config.yaml`, `openspec/specs/`).
 - **Status tracker and architecture:** [README.md](README.md) — check Project Status first; its Architecture section is authoritative.
-- **Master build plan:** [openspec/specs/game-phases/spec.md](openspec/specs/game-phases/spec.md) (5-phase lean-startup plan, phase-gating rule, per-phase validation). **Do not deviate from the phase-gated approach.**
+- **Agile backlog:** [openspec/specs/game-backlog/spec.md](openspec/specs/game-backlog/spec.md) (game ideas by theme, cross-cutting constraints, known stubs). Work is pulled from it by owner feedback and fun; no phase gates.
 - **Visual direction:** [openspec/specs/visual-design/spec.md](openspec/specs/visual-design/spec.md).
 - **Engagement mechanics:** [den-economy](openspec/specs/den-economy/spec.md) (The Den), [pack-collection](openspec/specs/pack-collection/spec.md) (The Pack), [anti-snowball](openspec/specs/anti-snowball/spec.md) (10 mechanisms). Numeric thresholds there are load-bearing; re-read before touching treats, Den, building levels, Pack, or anti-snowball.
 - **Decisions log:** `openspec/changes/archive/` (each change's `proposal.md` Why/Alternatives and `design.md` Decisions). Presentation decisions go in the open change's log, see Process tiers.
-- **Visual prototype:** [prototype/](prototype/) — clickable HTML demo, a design spec, not a starter codebase. Recreate its visuals and behavior in React Native; never import its React-Babel-standalone structure into `src/`. Deferred features are listed in the `PARKED FOR LATER PHASES` block atop `prototype/Dog Territory Defender.html`.
+- **Visual prototype:** [prototype/](prototype/) — clickable HTML demo, a design spec, not a starter codebase. Recreate its visuals and behavior in React Native; never import its React-Babel-standalone structure into `src/`. Deferred features are listed in the `BACKLOG IDEAS (not built yet)` block atop `prototype/Dog Territory Defender.html`.
 
 ---
 
@@ -41,15 +41,14 @@ Stack: Expo SDK 54, React Native 0.81, React 19, TypeScript 5.9. Dev client requ
 
 ## Process tiers
 
-Classify each request first. Phase gating applies to all tiers.
+Classify each request first.
 
-- **Tier A, game design** (mechanics, economy numbers, phase assignments, anti-snowball, Den/Pack rules, new capabilities with player-facing rules): OpenSpec change (`/opsx:explore` → `/opsx:propose` → `/opsx:apply` → `/opsx:archive`/`/opsx:sync`) is mandatory. Never edit `openspec/specs/` directly.
+- **Tier A, game design** (mechanics, economy numbers, anti-snowball, Den/Pack rules, new capabilities with player-facing rules): OpenSpec change (`/opsx:explore` → `/opsx:propose` → `/opsx:apply` → `/opsx:archive`/`/opsx:sync`) is mandatory. Never edit `openspec/specs/` directly.
 - **Tier B, presentation** (UI layout, animation, art, copy, tuning constants, icons, polish): straight to code. Append any decision worth remembering as a dated bullet to the "Decisions log (presentation)" section at the end of `openspec/changes/buddy-comes-alive/design.md` (the one place for these, for now; create the section on first use).
 - **Tier C, bug fixes, refactors, docs**: just do it, with `npm test` and `npx tsc --noEmit` green.
 
 A small numeric tweak that changes game balance is Tier A; log it in an open change. Never silently change a load-bearing threshold.
 
-**Phases:** Default phase is Phase 1 (in progress). Only ask when a request clearly belongs to a later phase; if out-of-phase, push back kindly and park it. Scope creep is how prototypes die.
 
 ## How sessions are run
 
@@ -70,11 +69,10 @@ The main Claude session (Fable/Opus) orchestrates only: analyses, briefs, integr
 
 ## Core responsibilities
 
-1. **No silent drift.** When a change alters the plan, update the doc in the same turn: phase assignment, mechanics, or tone rules via an OpenSpec change (Tier A); README status when a phase hypothesis is validated/invalidated; README folder map and `prototype/README.md` when files are added or renamed; tech/architecture decisions in the introducing change's `design.md`.
+1. **No silent drift.** When a change alters the plan, update the doc in the same turn: mechanics or tone rules via an OpenSpec change (Tier A); README status when it changes; README folder map and `prototype/README.md` when files are added or renamed; tech/architecture decisions in the introducing change's `design.md`.
 2. **Memorize durable decisions** to the memory system (user, project, feedback, reference types). The archive is the authoritative log; memory is the quick-recall cache and can be stale, so verify against files.
 3. **Don't guess, check.** Verify files with `ls`/Glob, read numeric thresholds from the source spec, and check the den/pack/anti-snowball specs before proposing a mechanic. When ambiguity arises, ask the user.
 4. **Prefer editing over creating** files; keep docs concise enough to read end-to-end.
-5. **After a phase is implemented,** run the "Per-Phase Validation Process" in the game-phases spec before advancing.
 
 ## Tone
 
@@ -85,13 +83,12 @@ The main Claude session (Fable/Opus) orchestrates only: analyses, briefs, integr
 
 ## Anti-patterns
 
-- Building later-phase features early
 - Editing `openspec/specs/` outside the OpenSpec flow
-- Forgetting README status after a phase completes
+- Forgetting README status after a notable slice ships
 - Aggressive/competitive language
 - Adding a native dependency without the owner's go-ahead
 - Creating a new `.md` file when an existing one could be extended
 
 ---
 
-**Remember:** The phased plan is sacred. The tone is spring. The dog is the star. The walk is the heartbeat.
+**Remember:** The backlog is a menu, not a gate. The tone is spring. The dog is the star. The walk is the heartbeat.

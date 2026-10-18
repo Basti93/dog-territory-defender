@@ -1,7 +1,7 @@
 # personal-stats Specification
 
 ## Purpose
-Defines the lifetime stat tracking and one-off personal achievement system that gives a solo player a highscore to chase without requiring other players (leaderboards) or calendar-based tracking (streaks). Achievements here are purely personal/cosmetic prestige in Phase 1; Phase 4's Trophy Hall (`den-economy`) is the only system permitted to attach a mechanical bonus to them.
+Defines the lifetime stat tracking and one-off personal achievement system that gives a solo player a highscore to chase without requiring other players (leaderboards) or calendar-based tracking (streaks). Achievements here are purely personal/cosmetic prestige today; the backlog's Trophy Hall (`den-economy`) is the only system permitted to attach a mechanical bonus to them.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ The system SHALL track, across the player's full history, at minimum: total walk
 - **WHEN** treats are earned through passive accrual while the player was away, not only through a walk reward
 - **THEN** total treats earned lifetime SHALL increase by the accrued amount, exactly as it would for a walk-earned reward
 
-### Requirement: Personal Achievements (Phase 1)
+### Requirement: Personal Achievements (current)
 The system SHALL support one-off lifetime-milestone achievements, each triggered by a single checkable threshold against lifetime stats or current Den building levels. Achievements SHALL NOT be triggered by consecutive-day streaks, time-of-day/calendar conditions, or any other player's data.
 
 #### Scenario: Achievement unlock check
@@ -24,7 +24,7 @@ The system SHALL support one-off lifetime-milestone achievements, each triggered
 - **THEN** that achievement SHALL be recorded as unlocked exactly once, with the timestamp of the triggering event, and SHALL NOT be re-evaluated or re-triggered afterward
 
 ### Requirement: No Mechanical Bonus from Personal-Stats Achievements
-Unlocking a Phase 1 personal-stats achievement SHALL NOT grant treats, XP, territory advantage, or any Den bonus. The achievement record SHALL exist solely as prestige data (name, unlock copy, unlock timestamp) for display purposes.
+Unlocking a personal-stats achievement SHALL NOT grant treats, XP, territory advantage, or any Den bonus. The achievement record SHALL exist solely as prestige data (name, unlock copy, unlock timestamp) for display purposes.
 
 #### Scenario: Achievement unlock has no side effect on gameplay
 - **WHEN** an achievement unlocks
@@ -41,9 +41,9 @@ Achievements triggered by closing a walk SHALL surface as part of the existing p
 - **WHEN** a Den building upgrade or passive treat accrual causes an achievement to unlock while the player is not actively closing a walk
 - **THEN** the Den screen SHALL display the unlock as an inline notice, consistent with how treat storage overflow is already communicated
 
-### Requirement: Trophy Hall Handoff (Phase 4)
-Achievements unlocked under this capability SHALL be the same badges Trophy Hall (`den-economy` building #8) displays starting Phase 4, using that capability's existing per-badge bonus figure. This capability SHALL NOT implement badge display selection, badge display limits, or any per-badge bonus percentage — those SHALL be built no earlier than Phase 4 as part of Trophy Hall.
+### Requirement: Trophy Hall Handoff (backlog)
+Achievements unlocked under this capability SHALL be the same badges Trophy Hall (`den-economy` building #8) displays once it is built (see `game-backlog`), using that capability's existing per-badge bonus figure. This capability SHALL NOT implement badge display selection, badge display limits, or any per-badge bonus percentage — those SHALL be built only when Trophy Hall is pulled from the backlog, as part of Trophy Hall.
 
 #### Scenario: Badge available for future display
-- **WHEN** Trophy Hall is built in Phase 4
+- **WHEN** Trophy Hall is built
 - **THEN** it SHALL be able to read every achievement unlocked under this capability by id and unlock timestamp, without this capability having implemented any display or bonus logic itself
