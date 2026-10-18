@@ -1,6 +1,7 @@
 import { FeedbackPrefsRepository } from '../storage/FeedbackPrefsRepository';
 import { createSqliteFeedbackPrefsRepository } from '../storage/sqliteFeedbackPrefsRepository';
 import { loadFeedbackPrefs } from './feedbackPrefs';
+import { preloadSounds } from './sounds';
 
 // App-wide singleton. Kept out of feedbackPrefs.ts so the (Jest-tested) prefs
 // store never imports expo-sqlite. Created lazily: the factory opens the
@@ -15,4 +16,5 @@ export function getFeedbackPrefsRepository(): FeedbackPrefsRepository {
 /** Call once at app start (non-blocking; sound/haptics stay on until it resolves). */
 export function loadFeedbackPrefsAtStartup(): void {
   loadFeedbackPrefs(getFeedbackPrefsRepository());
+  preloadSounds().catch(() => {}); // non-blocking; failures are logged inside
 }

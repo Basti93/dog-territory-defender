@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { ensureAudioMode } from '../feedback/sounds';
+import { log } from '../utils/log';
 
 /** Screens where the music box may play. 'celebration' is passed by App.tsx while the reward overlay is up. */
 export type AmbientScreen = string;
@@ -33,6 +34,27 @@ export function shouldPlayAmbient(state: AmbientState): boolean {
 export function startQuietTimer(onElapsed: () => void, afterMs: number = QUIET_AFTER_MS): () => void {
   const id = setTimeout(onElapsed, afterMs);
   return () => clearTimeout(id);
+}
+
+// Tiny store so the Settings sound test can show whether the music box is audible right now.
+let musicPlaying = false;
+const musicListeners = new Set<() => void>();
+function setMusicPlaying(v: boolean): void {
+  if (musicPlaying === v) return;
+  musicPlaying = v;
+  musicListeners.forEach((l) => l());
+}
+export function useMusicPlaying(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      musicListeners.add(l);
+      return () => {
+        musicListeners.delete(l);
+      };
+    },
+    () => musicPlaying,
+    () => musicPlaying
+  );
 }
 
 type AvSound = import('expo-av').Audio.Sound;
@@ -116,7 +138,8 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
           });
           soundRef.current = sound;
           return sound;
-        } catch {
+        } catch (e) {
+          log('music', { event: 'load-failed', error: e instanceof Error ? e.message : String(e) });
           return null;
         } finally {
           loadingRef.current = null;
@@ -138,10 +161,12 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
             await sound.setVolumeAsync(0);
             await sound.playAsync();
             playingRef.current = true;
+            setMusicPlaying(true);
           }
           fadeTo(sound, AMBIENT_VOLUME, FADE_IN_MS);
-        } catch {
-          // audio is a bonus; stay silent on failure
+        } catch (e) {
+          // audio is a bonus; stay silent on failure, but leave a trace
+          log('music', { event: 'play-failed', error: e instanceof Error ? e.message : String(e) });
         }
       });
     } else if (soundRef.current && playingRef.current) {
@@ -149,6 +174,7 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
       fadeTo(sound, 0, FADE_OUT_MS, () => {
         if (wantedRef.current) return;
         playingRef.current = false;
+        setMusicPlaying(false);
         sound.pauseAsync().catch(() => {});
       });
     }
@@ -159,6 +185,7 @@ export function useAmbientMusic({ screen, walkActive, enabled }: { screen: Ambie
     () => () => {
       unmountedRef.current = true;
       stopFade();
+      setMusicPlaying(false);
       soundRef.current?.unloadAsync().catch(() => {});
       soundRef.current = null;
     },

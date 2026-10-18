@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 
+import { log } from '../utils/log';
 import { getFeedbackPrefs, shouldPlay } from './feedbackPrefs';
 
 export type SoundName = 'tap' | 'treat' | 'upgrade' | 'celebrate' | 'buddy-1' | 'buddy-2' | 'buddy-3' | 'sleepy' | 'new-street' | 'reward-reached' | 'walk-done';
@@ -46,18 +47,34 @@ export function ensureAudioMode(): Promise<void> {
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
       audioModeSet = true;
-    })().finally(() => {
+    })()
+      .catch((e) => {
+        log('sound', { event: 'audio-mode-failed', error: errorMessage(e) });
+        throw e;
+      })
+      .finally(() => {
       audioModeInFlight = null;
     });
   }
   return audioModeInFlight;
 }
 
+const ALL_SOUNDS = Object.keys(SOURCES) as SoundName[];
+const MAX_LOAD_ATTEMPTS = 3;
+const loadAttempts: Partial<Record<SoundName, number>> = {};
+let preloadLogged = false;
+
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 // Loads whatever is not loaded yet. Called on every play until every sound is
 // in, so a sound (or the audio mode) that failed once is retried next time
-// instead of a partial map being cached as final. Silent switch wins on iOS.
+// instead of a partial map being cached as final. A sound that failed
+// MAX_LOAD_ATTEMPTS times is given up on so it cannot delay or spam every play.
+// Every failure goes to the Debug Log. Silent switch wins on iOS.
 function ensureLoaded(): Promise<void> {
-  const missing = (Object.keys(SOURCES) as SoundName[]).filter((name) => !loaded[name]);
+  const missing = ALL_SOUNDS.filter((name) => !loaded[name] && (loadAttempts[name] ?? 0) < MAX_LOAD_ATTEMPTS);
   if (audioModeSet && missing.length === 0) return Promise.resolve();
   if (!inFlight) {
     inFlight = (async () => {
@@ -65,21 +82,35 @@ function ensureLoaded(): Promise<void> {
       await ensureAudioMode();
       await Promise.all(
         missing.map(async (name) => {
+          loadAttempts[name] = (loadAttempts[name] ?? 0) + 1;
           try {
             const { sound } = await Audio.Sound.createAsync(SOURCES[name](), { shouldPlay: false });
             loaded[name] = sound;
-          } catch {
+          } catch (e) {
             // one broken sound must not silence the rest; retried on a later play
+            log('sound', { event: 'load-failed', sound: name, attempt: loadAttempts[name], error: errorMessage(e) });
           }
         })
       );
+      if (!preloadLogged && ALL_SOUNDS.every((n) => loaded[n] || (loadAttempts[n] ?? 0) >= MAX_LOAD_ATTEMPTS)) {
+        preloadLogged = true;
+        log('sound', { event: 'preload-complete', loaded: ALL_SOUNDS.filter((n) => loaded[n]).length, total: ALL_SOUNDS.length });
+      }
     })()
-      .catch(() => {})
+      .catch((e) => {
+        log('sound', { event: 'preload-failed', error: errorMessage(e) });
+      })
       .finally(() => {
         inFlight = null;
       });
   }
   return inFlight;
+}
+
+/** Loads every sound ahead of time (call at app start, non-blocking) so the first tap is audible. */
+export function preloadSounds(): Promise<void> {
+  if (Platform.OS === 'web') return Promise.resolve();
+  return ensureLoaded();
 }
 
 const BUDDY_SOUNDS = ['buddy-1', 'buddy-2', 'buddy-3'] as const;
@@ -99,10 +130,23 @@ export function playBuddy(): void {
   play(lastBuddySound);
 }
 
-/** Fire-and-forget. No-op when sound is off or on web; errors swallowed. */
+/**
+ * Fire-and-forget. No-op when sound is off or on web. Waits for the load to
+ * finish before replaying, so even the very first call is audible. Failures
+ * are written to the Debug Log, never thrown.
+ */
 export function play(name: SoundName): void {
   if (Platform.OS === 'web' || !shouldPlay(getFeedbackPrefs(), 'sound')) return;
   ensureLoaded()
-    .then(() => loaded[name]?.replayAsync())
-    .catch(() => {});
+    .then(() => {
+      const sound = loaded[name];
+      if (!sound) {
+        log('sound', { event: 'play-skipped-not-loaded', sound: name });
+        return undefined;
+      }
+      return sound.replayAsync();
+    })
+    .catch((e) => {
+      log('sound', { event: 'play-failed', sound: name, error: errorMessage(e) });
+    });
 }

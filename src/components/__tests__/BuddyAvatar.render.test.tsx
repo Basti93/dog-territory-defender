@@ -89,3 +89,16 @@ describe('BuddyAvatar', () => {
     }
   });
 });
+
+describe('BuddyAvatar tap sound', () => {
+  it('calls playBuddy on every tap', async () => {
+    const sounds = require('../../feedback/sounds');
+    const spy = jest.spyOn(sounds, 'playBuddy').mockImplementation(() => {});
+    const view = await renderScreen(<BuddyAvatar appearance={defaultBuddyAppearance()} size={SIZE} />);
+    await fireEvent.press(avatarRoot());
+    await fireEvent.press(avatarRoot());
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+    await unmountAndExpectNoTimers(view);
+  });
+});

@@ -1,15 +1,20 @@
 import React from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { t, useLocale } from '../i18n';
+import { useMusicPlaying } from '../app/useAmbientMusic';
 import { Card, palette, spacing, textStyle, tokens } from '../ui';
 import { getFeedbackPrefsRepository } from './feedbackRepository';
 import { updateFeedbackPrefs, useFeedbackPrefs } from './feedbackPrefs';
+import { play, SoundName } from './sounds';
+
+const TEST_SOUNDS: SoundName[] = ['tap', 'buddy-1', 'buddy-2', 'buddy-3', 'treat', 'upgrade', 'celebrate', 'new-street', 'reward-reached', 'walk-done', 'sleepy'];
 
 /** Drop into SettingsScreen: `<SoundSettingsCard />` (no props). */
 export function SoundSettingsCard() {
   useLocale();
   const prefs = useFeedbackPrefs();
+  const musicPlaying = useMusicPlaying();
 
   return (
     <Card tint="meadow">
@@ -50,6 +55,28 @@ export function SoundSettingsCard() {
           accessibilityLabel={t('settings.music.title')}
         />
       </View>
+      <View style={styles.second}>
+        <Text style={textStyle('h2')}>{t('settings.soundTest.title')}</Text>
+        <Text style={[textStyle('small'), styles.subtitle]}>
+          {prefs.sound ? t('settings.soundTest.subtitle') : t('settings.soundTest.off')}
+        </Text>
+        <View style={styles.chips}>
+          {TEST_SOUNDS.map((name) => (
+            <Pressable
+              key={name}
+              onPress={() => play(name)}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.soundTest.play', { name })}
+              style={styles.chip}
+            >
+              <Text style={textStyle('small')}>{name}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[textStyle('small'), styles.subtitle]}>
+          {musicPlaying ? t('settings.soundTest.musicOn') : t('settings.soundTest.musicOff')}
+        </Text>
+      </View>
     </Card>
   );
 }
@@ -58,5 +85,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   second: { marginTop: spacing.lg },
   rowText: { flex: 1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
+  chip: { backgroundColor: palette.meadowTint, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   subtitle: { color: palette.muted, marginTop: spacing.xs },
 });
