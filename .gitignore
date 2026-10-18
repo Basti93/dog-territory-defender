@@ -28,3 +28,4 @@ walk-log*.txt
 vertex.json
 *.serviceaccount.json
 testing/screenshots/
+__pycache__/

@@ -42,3 +42,9 @@ Extras (per coat): `markings-{patch,socks,mask}.png` are thin shells (blob inter
 body/head/legs as Holdout materials, so they are occluded correctly and stack exactly; `pose-lying.png` re-poses copies of the head/tail and
 builds a sphinx body; `front-legs-walk-{a,b}.png` swing the near leg about the shoulder. These are `nofit` so the canvas is unchanged. Golden
 review composites `_preview-golden-{markings-*,walk-a,walk-b,lying}.png` (alpha-stacked from the real PNGs, red line = groundY). Full run ~65 s.
+
+## Weird-streak art (2026-10-18)
+
+Building stages 4 and 5 (`doghouse|bakery|garden-4/5`, 512px, fill ~93%): treehouse observatory / orbital station, food-truck bakery / cosmic bone bakery, glowing greenhouse / floating garden. Same roof colours; stage 5 floats but keeps a grass tile base.
+Wild Extras props (`prop-*`, 256px, transparent, camera `PROP`): ufo, beam (separate soft cone), comet-bone, duck-party, squirrel-raincoat, mailbox, sock, gnome, cloud-tea, moon-cheese, firefly, lightbulb, question.
+New `assets.py` helpers: `glow()` emissive and `ghost()` translucent materials, `rod()`, `chain()` (smooth sphere tube), `star4()`; output sizes per asset live in `render_all.py:out_size`.
