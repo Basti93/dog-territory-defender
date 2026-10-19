@@ -8,6 +8,8 @@ import {
   NO_MOVEMENT_CELLS_BELOW,
   NO_MOVEMENT_MAX_DISTANCE_M,
   NO_MOVEMENT_RADIUS_M,
+  NO_MOVEMENT_ROUGH_RADIUS_M,
+  isPaintGrade,
   paintedCells,
 } from './grid';
 
@@ -84,17 +86,22 @@ export function walkDistanceMeters(walk: { startTime: number; locations: Locatio
 }
 
 /**
- * Did this tracked walk go anywhere? False when every fix lies within NO_MOVEMENT_RADIUS_M of the first fix (GPS jitter
+ * Did this tracked walk go anywhere? False when every fix lies within NO_MOVEMENT_RADIUS_M of the first (paint-grade) fix, or
+ * NO_MOVEMENT_ROUGH_RADIUS_M for a rough fix over PAINT_MAX_ACCURACY_M (GPS jitter
  * around one spot adds up to "distance" but is not a walk; known trade-off: laps inside a ~40 m dog run count as no
  * route either), or when it covered under NO_MOVEMENT_MAX_DISTANCE_M AND
  * painted under NO_MOVEMENT_CELLS_BELOW cells. Such a walk is never saved, rewarded or uploaded. Tracked walks only; a
  * manual log has no fixes by design and never asks this.
  */
 export function walkHasMovement(walk: { startTime: number; locations: Location[] }): boolean {
-  const [first] = walk.locations;
+  // Reference = the first paint-grade fix (a rough first fix may sit 45 m off); a walk of rough fixes only uses its first.
+  const first = walk.locations.find(isPaintGrade) ?? walk.locations[0];
   if (!first) return false;
+  // A rough fix (pocket, 30-50 m) needs the larger radius: a standing phone's rough fixes jitter beyond 40 m.
   const stayedNearStart = walk.locations.every(
-    (fix) => getDistance(first.latitude, first.longitude, fix.latitude, fix.longitude) < NO_MOVEMENT_RADIUS_M
+    (fix) =>
+      getDistance(first.latitude, first.longitude, fix.latitude, fix.longitude) <
+      (isPaintGrade(fix) ? NO_MOVEMENT_RADIUS_M : NO_MOVEMENT_ROUGH_RADIUS_M)
   );
   if (stayedNearStart) return false;
   return walkDistanceMeters(walk) >= NO_MOVEMENT_MAX_DISTANCE_M || paintedCells(walk.locations).size >= NO_MOVEMENT_CELLS_BELOW;

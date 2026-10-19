@@ -42,6 +42,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'liveSharePromptShown')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN liveSharePromptShown INTEGER NOT NULL DEFAULT 0');
     }
+    if (!columns.some((c) => c.name === 'batteryHintShown')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN batteryHintShown INTEGER NOT NULL DEFAULT 0');
+    }
     if (!columns.some((c) => c.name === 'shownPartnerWalks')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN shownPartnerWalks TEXT NOT NULL DEFAULT '[]'");
     }
@@ -198,6 +201,25 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
       await db.runAsync(
         `INSERT INTO app_settings (id, localePreference, liveSharePromptShown) VALUES (?, 'system', ?)
          ON CONFLICT(id) DO UPDATE SET liveSharePromptShown = excluded.liveSharePromptShown`,
+        SINGLETON_ID,
+        shown ? 1 : 0
+      );
+    },
+
+    async getBatteryHintShown(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ batteryHintShown: number }>(
+        'SELECT batteryHintShown FROM app_settings WHERE id = ?',
+        SINGLETON_ID
+      );
+      return row?.batteryHintShown === 1;
+    },
+
+    async saveBatteryHintShown(shown: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, batteryHintShown) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET batteryHintShown = excluded.batteryHintShown`,
         SINGLETON_ID,
         shown ? 1 : 0
       );

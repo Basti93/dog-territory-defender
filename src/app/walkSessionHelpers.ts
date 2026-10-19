@@ -1,5 +1,5 @@
 import { WalkCue, WalkCueTracker } from '../feedback/walkCues';
-import { newGroundCells, paintedCells } from '../utils/grid';
+import { newGroundCells, paintedCells, PAINT_MAX_ACCURACY_M } from '../utils/grid';
 import { AppState, Location as WalkLocation } from '../types';
 
 /**
@@ -43,6 +43,9 @@ export function resumeWalkCueState(state: WalkCueState, locations: WalkLocation[
  */
 export function applyLocationToCues(state: WalkCueState, location: WalkLocation, tracker: WalkCueTracker): WalkCue | null {
   if (!state.active || !state.last) return null;
+  // A fix too rough to paint from (30-50 m, pocket) neither paints nor becomes the path's new end: the next good fix
+  // continues from the last good one, so the cue count matches what finishing the walk will paint.
+  if (location.accuracy > PAINT_MAX_ACCURACY_M) return null;
   const added = paintedCells([state.last, location]);
   state.last = location;
   for (const c of added) state.painted.add(c);

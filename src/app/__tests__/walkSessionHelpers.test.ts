@@ -72,4 +72,16 @@ describe('walk cue state', () => {
     const expectedNew = newGroundCells(state.painted, known).size;
     expect(calls[0][1]).toBe(expectedNew);
   });
+
+  it('a fix too rough to paint from (30-50 m) neither paints nor moves the path end', () => {
+    const { tracker, calls } = fakeTracker();
+    const start = loc(52.5, 13.4);
+    const state = createWalkCueState();
+    startWalkCueState(state, start);
+    const before = new Set(state.painted);
+    expect(applyLocationToCues(state, { ...loc(52.5, 13.4004), accuracy: 45 }, tracker)).toBeNull();
+    expect(state.last).toBe(start);
+    expect(state.painted).toEqual(before);
+    expect(calls).toHaveLength(0);
+  });
 });

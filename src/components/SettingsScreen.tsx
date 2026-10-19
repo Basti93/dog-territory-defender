@@ -17,6 +17,7 @@ import { updateReminderSlot } from '../notifications/walkReminder';
 import { pickAndImportBackup, shareBackup } from '../storage/backupIO';
 import { formatDate, formatTime, LocalePreference, t, useLocale } from '../i18n';
 import { AutoFinishSwitch } from './AutoFinishSwitch';
+import { batteryHintApplies, openBatterySettings } from '../app/batteryHint';
 import { HouseholdCard } from './HouseholdCard';
 import type { SettingsRepository } from '../storage/SettingsRepository';
 import { LiveShareSwitch } from './LiveShareSwitch';
@@ -331,6 +332,13 @@ export function SettingsScreen({
           </View>
           <PaperHint>{t('settings.reminder.battery')}</PaperHint>
         </PaperSection>
+
+        {batteryHintApplies(Platform.OS) && (
+          <PaperSection title={t('battery.title')}>
+            <PaperHint>{t('battery.body')}</PaperHint>
+            <TextLink label={t('battery.open')} onPress={() => void openBatterySettings()} />
+          </PaperSection>
+        )}
 
         <PaperSection title={t('post.sounds')}>
           <SoundSettingsCard />

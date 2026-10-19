@@ -11,6 +11,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let autoFinishEnabled = true;
   let liveShareEnabled = false;
   let liveSharePromptShown = false;
+  let batteryHintShown = false;
   let shownPartnerWalkIds: string[] = [];
   return {
     async getSyncIdentity() {
@@ -54,6 +55,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveLiveShareEnabled(enabled) {
       liveShareEnabled = enabled === true;
+    },
+    async getBatteryHintShown() {
+      return batteryHintShown;
+    },
+    async saveBatteryHintShown(shown) {
+      batteryHintShown = shown === true;
     },
     async getLiveSharePromptShown() {
       return liveSharePromptShown;

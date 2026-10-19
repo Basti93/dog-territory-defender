@@ -1,16 +1,19 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import { Location as LocationType } from '../types';
 import { log } from './log';
 import { t } from '../i18n';
 
 const LOCATION_TASK_NAME = 'dog-territory-location-task';
 
-// Fixes worse than this are dropped before they ever reach the app — they'd
-// otherwise corrupt the trail, closure check, and territory area. See
-// docs/decisions/2026-08-22-gps-accuracy-aware-closure.md for why 30m.
-const MAX_ACCEPTABLE_ACCURACY_M = 30;
+// Fixes worse than this are dropped before they ever reach the app. 50 m (was 30 m): a phone in a trouser pocket reports
+// 30-50 m most of the time, and 30 m threw away most of a pocket walk. Everything but painting accepts them: trail,
+// distance, movement and auto-finish. The Home Range paints only from fixes within PAINT_MAX_ACCURACY_M (utils/grid.ts,
+// 30 m, the old threshold), so the map ground stays as precise as before. See docs/decisions/2026-08-22-gps-accuracy-aware-closure.md.
+export const MAX_ACCEPTABLE_ACCURACY_M = 50;
+/** A fix that reports no accuracy at all counts as the old limit: it is kept and may paint, as before. */
+const UNKNOWN_ACCURACY_M = 30;
 
 let currentSubscriber: ((location: LocationType) => void) | null = null;
 
@@ -62,11 +65,17 @@ function deliver(raw: LocationType): void {
 
 async function startForegroundFallback(reason: string): Promise<boolean> {
   if (fallbackSubscription || !currentSubscriber) return !!fallbackSubscription;
+  // A plain watcher cannot keep a walk going in the pocket, and the task is the real source on Android: never start a
+  // second source from the background there (it would only race the task's own delivery and restart).
+  if (Platform.OS === 'android' && AppState.currentState !== 'active') {
+    log('GPS_FALLBACK_SKIPPED', { reason, why: 'android-background' });
+    return false;
+  }
   try {
     fallbackSubscription = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.High, timeInterval: 1000, distanceInterval: 2 },
       (position) => {
-        const accuracy = position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M;
+        const accuracy = position.coords.accuracy ?? UNKNOWN_ACCURACY_M;
         if (!isAccurateEnough(accuracy)) return;
         deliver(toLocationType(position));
       }
@@ -95,7 +104,7 @@ function toLocationType(position: Location.LocationObject): LocationType {
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
     timestamp: position.timestamp,
-    accuracy: position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M,
+    accuracy: position.coords.accuracy ?? UNKNOWN_ACCURACY_M,
   };
 }
 
@@ -108,7 +117,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
   const { locations } = data as { locations: Location.LocationObject[] };
   locations.forEach((position) => {
-    const accuracy = position.coords.accuracy ?? MAX_ACCEPTABLE_ACCURACY_M;
+    const accuracy = position.coords.accuracy ?? UNKNOWN_ACCURACY_M;
     if (!isAccurateEnough(accuracy)) {
       log('GPS_FIX_REJECTED', { accuracy, lat: position.coords.latitude, lon: position.coords.longitude });
       return;
@@ -181,6 +190,7 @@ export async function startWatchingLocation(callback: (location: LocationType) =
       },
     });
     log('GPS_WATCH_STARTED');
+    await logForegroundServiceState();
     // Safety net: if the task delivers no accepted fix soon, also watch in the foreground.
     fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
     return true;
@@ -190,6 +200,24 @@ export async function startWatchingLocation(callback: (location: LocationType) =
     const ok = await startForegroundFallback('task-start-failed');
     if (!ok) currentSubscriber = null;
     return ok;
+  }
+}
+
+/**
+ * GPS_FG_SERVICE: did the Android foreground service (what keeps the process alive in the pocket) get its chance to start?
+ * expo-location only starts it while the app is in front ("Foreground location task cannot be started while the app is in
+ * the background!"), and it never starts it for a task re-created headless after the OS killed the process. There is no
+ * JS API for the service itself, so `started` is registration plus "app was in front"; the real check is
+ * `adb shell dumpsys activity services com.dogtd.mobile` (isForeground=true).
+ */
+async function logForegroundServiceState(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    const registered = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+    const appState = AppState.currentState;
+    log('GPS_FG_SERVICE', { started: registered && appState === 'active', registered, appState });
+  } catch (error) {
+    log('GPS_FG_SERVICE', { started: false, error: String(error) });
   }
 }
 

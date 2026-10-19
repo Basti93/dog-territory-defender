@@ -50,6 +50,9 @@ export interface SettingsRepository {
   /** The one-time "may {partner} see your walk live?" question was answered (either way). False until then. */
   getLiveSharePromptShown(): Promise<boolean>;
   saveLiveSharePromptShown(shown: boolean): Promise<void>;
+  /** Android only: the one-time "keep walks running in the pocket" battery hint was shown. False until then. */
+  getBatteryHintShown(): Promise<boolean>;
+  saveBatteryHintShown(shown: boolean): Promise<void>;
   /** Ids of partner walks whose mini homecoming already played (newest last, capped by the caller). Returns [] when nothing saved. */
   getShownPartnerWalkIds(): Promise<string[]>;
   saveShownPartnerWalkIds(ids: string[]): Promise<void>;

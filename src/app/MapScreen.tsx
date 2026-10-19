@@ -24,6 +24,8 @@ interface MapScreenProps {
   autoFinishEnabled: boolean;
   /** Minutes left in the back-home countdown; null until the home dwell has begun. */
   homeCountdownMin: number | null;
+  /** The GPS was quiet for a long while (battery saver, frozen app): say the walk is still on. */
+  gpsGapNote: boolean;
   dogName: string | null;
   treats: number | null;
   level: number | null;
@@ -125,6 +127,8 @@ export function MapScreen(p: MapScreenProps) {
           <Text style={[textStyle('min'), styles.statLabel]}>{t('stats.level')}</Text>
           <Text style={textStyle('body')}>{p.level !== null ? t('den.dogLevel', { dog: dogDisplayName(p.dogName), level: p.level }) : '…'}</Text>
         </View>
+
+        {isTracking && p.gpsGapNote && <Text style={[textStyle('hand'), styles.autoHint]}>{t('walk.gpsGap')}</Text>}
 
         {isTracking && p.autoFinishEnabled && (
           <Text style={[textStyle('hand'), styles.autoHint]}>

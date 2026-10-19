@@ -11,3 +11,5 @@
 - Changing `calculatePolygonArea`: filtering upstream improves its input.
 **Superseded:** the `canCloseWalk` loop-closure gate was deleted; reward eligibility is now ground covered (see `docs/specs/walk-lifecycle.md`). The 30m accuracy filter and `Location.accuracy` remain in `src/utils/gps.ts`.
 **Links:** `src/utils/gps.ts`, `docs/specs/walk-lifecycle.md`
+
+**Updated 2026-10-19:** the reject threshold is now 50m for trail, distance, movement and auto-finish; Home Range and corner cells still paint only from fixes of 30m or better (pocket fixes are 30-50m). See `docs/specs/walk-lifecycle.md` "GPS fix accuracy".

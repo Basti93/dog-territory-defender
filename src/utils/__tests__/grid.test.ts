@@ -10,6 +10,8 @@ import {
   cellKey,
   newGroundCells,
   paintedCells,
+  PAINT_MAX_ACCURACY_M,
+  walkedCells,
   splitTrailByNewGround,
   streetsKnown,
   wildness,
@@ -367,5 +369,39 @@ describe('real-data sanity check — replaying testing/*.gpx through paintedCell
 describe('CELL_M', () => {
   it('is 20 metres, per design.md Decision 1', () => {
     expect(CELL_M).toBe(20);
+  });
+});
+
+describe('paint accuracy split (trail accepts up to 50 m, painting only up to 30 m)', () => {
+  const fix = (ix: number, accuracy: number, t: number): Location => ({
+    latitude: LAT0,
+    longitude: LON0 + mToLon(ix * 8),
+    timestamp: 1_800_000_000_000 + t * 5000,
+    accuracy,
+  });
+  const straight = (accuracyOf: (i: number) => number): Location[] => Array.from({ length: 30 }, (_, i) => fix(i, accuracyOf(i), i));
+
+  it('uses 30 m, the old threshold', () => {
+    expect(PAINT_MAX_ACCURACY_M).toBe(30);
+  });
+
+  it('paints exactly as before when every fix is within 30 m', () => {
+    expect(paintedCells(straight(() => 30)).size).toBeGreaterThan(20);
+  });
+
+  it('paints nothing from fixes between 30 and 50 m', () => {
+    expect(paintedCells(straight(() => 45)).size).toBe(0);
+    expect(walkedCells(straight(() => 45)).size).toBe(0);
+  });
+
+  it('a pocket walk with some rough fixes paints from the good ones only (no cell comes from a rough fix)', () => {
+    const mixed = straight((i) => (i % 3 === 0 ? 20 : 45));
+    const goodOnly = mixed.filter((l) => l.accuracy <= PAINT_MAX_ACCURACY_M);
+    expect(paintedCells(mixed)).toEqual(paintedCells(goodOnly));
+  });
+
+  it('fixes without a usable accuracy still paint (older stored walks)', () => {
+    const legacy = straight(() => 5).map((l) => ({ ...l, accuracy: undefined as unknown as number }));
+    expect(paintedCells(legacy).size).toBe(paintedCells(straight(() => 5)).size);
   });
 });

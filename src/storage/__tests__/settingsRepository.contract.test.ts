@@ -84,3 +84,14 @@ describe('autoFinishEnabled (in-memory)', () => {
     expect(await repo.getShownPartnerWalkIds()).toEqual(['a', 'b']);
   });
 });
+
+describe('batteryHintShown (in-memory)', () => {
+  it('defaults to false and round-trips', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getBatteryHintShown()).toBe(false);
+    await repo.saveBatteryHintShown(true);
+    expect(await repo.getBatteryHintShown()).toBe(true);
+    await repo.saveBatteryHintShown(false);
+    expect(await repo.getBatteryHintShown()).toBe(false);
+  });
+});

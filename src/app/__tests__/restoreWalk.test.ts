@@ -16,6 +16,13 @@ function movingWalk(minutes: number): Walk {
   return walkOf(fixes);
 }
 
+/** Fixes every 4 minutes at `metres` north (plus 3 m jitter), from `fromMin` to `toMin`: the phone is delivering, and standing still. */
+const standingFixes = (metres: number, fromMin: number, toMin: number): Location[] => {
+  const out: Location[] = [];
+  for (let m = fromMin; m <= toMin; m += 4) out.push(fixAt(metres + (m % 8 === 0 ? 3 : 0), m * MIN));
+  return out;
+};
+
 describe('decideWalkRestore', () => {
   it('resumes a fresh walk, with the auto-finish state rebuilt from the stored fixes', () => {
     const walk = movingWalk(10);
@@ -57,30 +64,76 @@ describe('decideWalkRestore', () => {
     expect(decideWalkRestore(walkOf(fixes), T0 + RESTORE_MAX_AGE_MS + 5 * MIN, true)).toEqual({ kind: 'discard' });
   });
 
-  it('discards a walk the still rule would end when it never moved', () => {
-    const fixes = [fixAt(0, 0), fixAt(5, 2 * MIN)];
-    expect(decideWalkRestore(walkOf(fixes), T0 + 2 * MIN + STILL_MS + MIN, true)).toEqual({ kind: 'discard' });
+  it('discards a walk the still rule would end (fixes kept arriving, standing still) when it never moved', () => {
+    const fixes = standingFixes(5, 0, 24);
+    expect(decideWalkRestore(walkOf(fixes), T0 + 25 * MIN, true)).toEqual({ kind: 'discard' });
   });
 
   it('still resumes a fresh walk with no movement yet (the player may just have started)', () => {
     expect(decideWalkRestore(walkOf([fixAt(0, 0), fixAt(5, MIN)]), T0 + 2 * MIN, true).kind).toBe('resume');
   });
 
-  it('finishes when the dog stood still for the still limit', () => {
-    const fixes = [fixAt(0, 0), fixAt(100, 2 * MIN)];
-    const decision = decideWalkRestore(walkOf(fixes), T0 + 2 * MIN + STILL_MS + MIN, true);
+  it('finishes when the dog stood still for the still limit (fixes arrived the whole time)', () => {
+    const fixes = [fixAt(0, 0), fixAt(100, 2 * MIN), ...standingFixes(100, 6, 26)];
+    const decision = decideWalkRestore(walkOf(fixes), T0 + 27 * MIN, true);
     expect(decision).toEqual({ kind: 'finish', endedBy: 'auto-still', reason: 'still' });
   });
 
   it('never auto-finishes a fresh walk when auto-finish is switched off', () => {
-    const fixes = [fixAt(0, 0), fixAt(100, 2 * MIN)];
-    expect(decideWalkRestore(walkOf(fixes), T0 + 2 * MIN + STILL_MS + MIN, false).kind).toBe('resume');
+    const fixes = [fixAt(0, 0), fixAt(100, 2 * MIN), ...standingFixes(100, 6, 26)];
+    expect(decideWalkRestore(walkOf(fixes), T0 + 27 * MIN, false).kind).toBe('resume');
+  });
+
+  describe('a GPS gap (the fixes simply stopped) is resumed, never ended or discarded', () => {
+    it('a fresh walk that moved, silent for 40 minutes', () => {
+      const walk = movingWalk(10);
+      const lastFixAt = walk.locations[walk.locations.length - 1].timestamp;
+      expect(decideWalkRestore(walk, lastFixAt + 40 * MIN, true).kind).toBe('resume');
+    });
+
+    it('a fresh walk that never moved and went silent (the old rule discarded it)', () => {
+      const walk = walkOf([fixAt(0, 0), fixAt(5, MIN)]);
+      expect(decideWalkRestore(walk, T0 + 2 * 60 * MIN, true).kind).toBe('resume');
+    });
+
+    it('a start-only walk, an hour later', () => {
+      expect(decideWalkRestore(walkOf([fixAt(0, 0)]), T0 + 60 * MIN, true).kind).toBe('resume');
+    });
+
+    it('the resumed state carries the gap (lastFixAt is the newest stored fix, not "now")', () => {
+      const walk = movingWalk(10);
+      const lastFixAt = walk.locations[walk.locations.length - 1].timestamp;
+      const decision = decideWalkRestore(walk, lastFixAt + 40 * MIN, true);
+      expect(decision.kind === 'resume' && decision.autoFinish.lastFixAt).toBe(lastFixAt);
+    });
   });
 
   it('does not end a short walk early (under the minimum walk length)', () => {
     const fixes = [fixAt(0, 0), fixAt(200, MIN)];
     expect(AUTO_FINISH_MIN_WALK_MS).toBeGreaterThan(5 * MIN);
     expect(decideWalkRestore(walkOf(fixes), T0 + 5 * MIN, true).kind).toBe('resume');
+  });
+});
+
+describe('production case 2026-10-19: GPS died after 4 minutes, the player tapped the notification later', () => {
+  /** 84 fixes, one per 3 s for 4 minutes: out 200 m and back to 10 m from the start. */
+  const fourMinuteWalk = (): Walk => {
+    const fixes: Location[] = [];
+    for (let i = 0; i < 84; i++) {
+      const progress = i / 83;
+      fixes.push(fixAt(progress < 0.5 ? progress * 2 * 200 : 10 + (1 - progress) * 2 * 190, i * 3_000));
+    }
+    return walkOf(fixes);
+  };
+
+  it('resumes (map shown, no finish) when the app is opened 10+ minutes after the last fix, whether the last fix was at home or away', () => {
+    const walk = fourMinuteWalk();
+    const lastFixAt = walk.locations[walk.locations.length - 1].timestamp;
+    for (const gapMin of [10, 16, 30, 90]) {
+      expect(decideWalkRestore(walk, lastFixAt + gapMin * MIN, true).kind).toBe('resume');
+    }
+    const awayWalk = walkOf(walk.locations.slice(0, 40)); // last fix still 100+ m out, anchor moving: same story
+    expect(decideWalkRestore(awayWalk, T0 + 40 * 3_000 + 25 * MIN, true).kind).toBe('resume');
   });
 });
 

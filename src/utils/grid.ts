@@ -18,6 +18,22 @@ export const CELL_M = 20;
 /** A walk paints every cell whose centre lies within this of the walked path. */
 export const PAINT_RADIUS_M = 25;
 
+/**
+ * Home Range cells (and corner cells) are painted only from fixes at most this inaccurate. The trail, distance and
+ * movement accept fixes up to 50 m (utils/gps.ts) so a phone in a pocket still tracks the walk, but a 45 m fix would
+ * stamp cells up to 70 m from the real path. Fixes without a usable accuracy count as accurate (older stored walks).
+ */
+export const PAINT_MAX_ACCURACY_M = 30;
+
+/** A fix that reports no accuracy counts as accurate (older stored walks). */
+export function isPaintGrade(fix: Location): boolean {
+  return !(fix.accuracy > PAINT_MAX_ACCURACY_M);
+}
+
+function accurateForPaint(locations: Location[]): Location[] {
+  return locations.filter(isPaintGrade);
+}
+
 /** Resample the path this finely (metres) before stamping cells, so a long
  * GPS gap between fixes doesn't leave holes in the painted ribbon. */
 const SAMPLE_STEP_M = 5;
@@ -75,6 +91,12 @@ export const NO_MOVEMENT_MAX_DISTANCE_M = 50;
  * went anywhere, even if GPS noise summed up to more than NO_MOVEMENT_MAX_DISTANCE_M of "distance" (a phone left standing).
  */
 export const NO_MOVEMENT_RADIUS_M = 40;
+
+/**
+ * The same radius for a rough fix (accuracy above PAINT_MAX_ACCURACY_M, 30-50 m in a pocket): such a fix wanders 45 m
+ * around a phone that stands still, so it only proves movement beyond this. Measured from the first paint-grade fix.
+ */
+export const NO_MOVEMENT_ROUGH_RADIUS_M = 80;
 
 /**
  * The cell half of the no-movement rule. Measured with PAINT_RADIUS_M 25 and CELL_M 20: a walk that never leaves one
@@ -170,7 +192,8 @@ export function wildness(lastRefreshedMs: number, nowMs: number): number {
  * (section 4) and the one-time migration backfill (section 3); there is
  * exactly one implementation.
  */
-export function paintedCells(locations: Location[]): Set<CellId> {
+export function paintedCells(allLocations: Location[]): Set<CellId> {
+  const locations = accurateForPaint(allLocations);
   const cells = new Set<CellId>();
 
   const stamp = (lat: number, lon: number) => {
@@ -220,9 +243,9 @@ const WALKED_STEP_M = 10;
  * The cells the walked path itself runs through: no paint radius, same dropout and speed guards as `paintedCells`.
  * Corner detection uses it, so a street 40 m away does not count as passing a corner.
  */
-export function walkedCells(locations: Location[]): Set<CellId> {
+export function walkedCells(allLocations: Location[]): Set<CellId> {
   const cells = new Set<CellId>();
-  forEachPathPoint(locations, WALKED_STEP_M, (lat, lon) => {
+  forEachPathPoint(accurateForPaint(allLocations), WALKED_STEP_M, (lat, lon) => {
     const { ix, iy } = cellForLocation(lat, lon);
     cells.add(cellKey(ix, iy));
   });

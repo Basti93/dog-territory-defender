@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { t } from './src/i18n';
@@ -15,6 +15,9 @@ import { DiscardWalkPrompt } from './src/components/DiscardWalkPrompt';
 import { screenKey, useNavigation } from './src/app/navigation';
 import { useWalkSession } from './src/app/useWalkSession';
 import { useWalkRestore } from './src/app/useWalkRestore';
+import { createRestoreGate, startWalkWhenRestored } from './src/app/restoreGate';
+import { startAppDiagnostics } from './src/utils/appDiagnostics';
+import { useBatteryHint } from './src/app/batteryHint';
 import { useWalkEndFlow } from './src/app/useWalkEndFlow';
 import { activeWalkRecorder } from './src/app/activeWalkRuntime';
 import { useCelebration } from './src/app/useCelebration';
@@ -60,6 +63,9 @@ const cornerTools: CornerTools = {
   },
   namedByOther: (playerId) => syncEngine.cornerNamedBy(playerId),
 };
+
+// APP_LAUNCH / APP_STATE log lines. At module load, so a headless start (the OS relaunching the app for location fixes) counts too.
+startAppDiagnostics();
 
 // Keep the native splash up until the fonts gate opens, so no blank frame flashes.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -107,6 +113,11 @@ export default function App() {
   // Live presence: watch the household's walks while the app is in front (long-poll, stops in the background).
   usePresenceViewer(presenceViewer, syncEngine);
 
+  // Settled by useWalkRestore; "Gassi gehen" waits for it so a start can never overwrite a walk that is about to be restored.
+  const restoreGate = useRef(createRestoreGate()).current;
+  const [restoringWalk, setRestoringWalk] = useState(false);
+  const restoringNote = useMemo(() => (restoringWalk ? { key: -1, text: t('walk.restoring') } : null), [restoringWalk]);
+
   const walkSession = useWalkSession({
     repos,
     sync: syncEngine,
@@ -147,6 +158,8 @@ export default function App() {
     isTracking: walkSession.isTracking,
     presence: presenceSender,
   });
+  // The one-time Android hint about battery saver / battery optimisation (walks in the pocket). Waits for the live-share question and any homecoming.
+  useBatteryHint({ settings: repos.settingsRepository, isTracking: walkSession.isTracking, blocked: liveShare.visible || !!celebration });
   const firstLaunch = useFirstLaunch(repos, { dogName, setDogName }, walkSession.setError);
   useAmbientMusic({
     screen: celebration ? 'celebration' : screen,
@@ -189,6 +202,7 @@ export default function App() {
     getAutoFinishEnabled: () => repos.settingsRepository.getAutoFinishEnabled(),
     session: walkSession,
     openMap: () => nav.goTo('map'),
+    gate: restoreGate,
   });
 
   // The mini homecoming of a household partner ("Alex und Buddy sind zurück"): waits until nothing else is going on
@@ -322,15 +336,23 @@ export default function App() {
         onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
         onTreatsChanged={setTreats}
         onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
-        onStartWalk={() => {
-          nav.goTo('map');
-          // A running walk is never started again (the gate sign opens the map then); this is only a backstop.
-          if (!walkSession.isTracking) walkSession.startWalk();
-        }}
+        onStartWalk={() =>
+          void startWalkWhenRestored({
+            gate: restoreGate,
+            onWaiting: setRestoringWalk,
+            start: () => {
+              nav.goTo('map');
+              // A running walk is never started again (the gate sign opens the map then); this is only a backstop.
+              if (!walkSession.isTracking) walkSession.startWalk();
+            },
+            // The restore brought a walk back and already opened its live map: nothing to start.
+            onResumedInstead: () => nav.goTo('map'),
+          })
+        }
         updateCard={ota.showUpdateCard ? { onApply: ota.apply, onLater: ota.dismiss } : undefined}
         walkActive={walkSession.isTracking}
         onCancelWalk={walkEnd.requestCancelWalk}
-        flashNote={walkEnd.walkEndNote}
+        flashNote={restoringNote ?? walkEnd.walkEndNote}
         onOpenMap={() => nav.goTo('map')}
         onOpenHistory={() => nav.goTo('history')}
         onOpenSettings={() => nav.goTo('settings')}
@@ -491,6 +513,7 @@ export default function App() {
             error={walkSession.error}
             autoFinishEnabled={walkSession.autoFinishEnabled}
             homeCountdownMin={walkSession.homeCountdownMin}
+            gpsGapNote={walkSession.gpsGapNote}
             dogName={dogName}
             treats={treats}
             level={level}

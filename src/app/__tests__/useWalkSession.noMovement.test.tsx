@@ -180,14 +180,16 @@ describe('finish in flight', () => {
 });
 
 describe('the automatic ends apply the same rule', () => {
-  it('auto-finish (still for 20 minutes, never moved) discards quietly', async () => {
+  it('auto-finish (fixes kept arriving within 25 m for 20 minutes, never moved) discards quietly', async () => {
     jest.useFakeTimers();
     try {
       const { result, repos, sync, onRewards, emit } = await setup();
-      await act(async () => {
-        emit(fixAt(4, 1));
-        jest.advanceTimersByTime(21 * 60 * 1000);
-      });
+      for (let minute = 1; minute <= 21; minute++) {
+        await act(async () => {
+          emit(fixAt(minute % 2 === 0 ? 4 : 2, minute * 6));
+          jest.advanceTimersByTime(60 * 1000);
+        });
+      }
       await act(async () => {
         await Promise.resolve();
       });
@@ -195,6 +197,30 @@ describe('the automatic ends apply the same rule', () => {
       expect(await repos.walkRepository.getWalks()).toEqual([]);
       expect(sync.enqueueWalk).not.toHaveBeenCalled();
       expect(onRewards).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a GPS gap (no fixes at all) never auto-finishes the walk as "still": it runs on and says so', async () => {
+    jest.useFakeTimers();
+    try {
+      const { result, emit } = await setup();
+      await act(async () => {
+        emit(fixAt(100, 1));
+        jest.advanceTimersByTime(45 * 60 * 1000); // silence: frozen app, battery saver
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(result.current.isTracking).toBe(true);
+      expect(result.current.gpsGapNote).toBe(true);
+      // The first fix after the gap is not "still" either: the still clock restarts there.
+      await act(async () => {
+        emit(fixAt(101, 2));
+        jest.advanceTimersByTime(60 * 1000);
+      });
+      expect(result.current.isTracking).toBe(true);
     } finally {
       jest.useRealTimers();
     }

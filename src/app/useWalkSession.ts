@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState as RNAppState } from 'react-native';
 import * as Location from 'expo-location';
 import { play } from '../feedback/sounds';
 import { createWalkCueTracker } from '../feedback/walkCues';
@@ -17,6 +17,7 @@ import { finishTrackedWalk, FinishTrackedWalkDeps, WalkRewardsOutcome } from './
 import {
   AUTO_FINISH_TICK_MS,
   AutoFinishDecision,
+  GPS_GAP_NOTE_MS,
   AutoFinishState,
   evaluateAutoFinish,
   homeCountdownMinutes,
@@ -27,6 +28,9 @@ import { notifyAutoFinishedIfBackgrounded } from './autoFinishNotify';
 import { applyLocationToCues, createWalkCueState, resumeWalkCueState, startWalkCueState } from './walkSessionHelpers';
 import type { ActiveWalkRecorder } from './activeWalkRecorder';
 import { mergeNewerFixes } from './restoreWalk';
+
+/** How long the GPS-gap note stays on the live map once the app is in front. */
+const GPS_GAP_NOTE_SHOWN_MS = 20_000;
 
 /** What `finishWalk` did: `saved` (the normal path), `discarded` (no movement: nothing stored, like a cancel), `ignored` (already finishing). */
 export type FinishOutcome = 'saved' | 'discarded' | 'ignored';
@@ -72,14 +76,35 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const [autoFinishEnabled, setAutoFinishEnabled] = useState(false);
   const [homeCountdownMin, setHomeCountdownMin] = useState<number | null>(null);
 
+  // GPS gap bookkeeping (autoFinish.ts GPS_GAP_MS): logged once per gap; a long one leaves a calm note for the live map.
+  const gapLoggedRef = useRef(false);
+  const [gpsGapNote, setGpsGapNote] = useState(false);
+  const [appInFront, setAppInFront] = useState(RNAppState.currentState === 'active');
+  /** The walk ended or was taken over: forget the gap state of the walk before. */
+  const resetGapState = () => {
+    gapLoggedRef.current = false;
+    setGpsGapNote(false);
+  };
+
   /** Run one evaluation (fix or timer tick); finishes the walk when the rules say so. */
-  const runAutoFinish = (fix: { latitude: number; longitude: number } | null) => {
+  const runAutoFinish = (fix: { latitude: number; longitude: number; accuracy?: number } | null) => {
     const current = autoFinishRef.current;
     if (!current || !walkRef.current || finishingRef.current) return;
     const now = Date.now();
     const result = evaluateAutoFinish(current, fix, now);
     autoFinishRef.current = result.state;
     setHomeCountdownMin(homeCountdownMinutes(result.state, now));
+    // Absence of fixes is never "standing still": the walk just runs on. Say so in the log, and on the map when it was long.
+    const gapMs = result.gapMs ?? result.gapEndedMs;
+    if (result.gapMs !== null && !gapLoggedRef.current) {
+      gapLoggedRef.current = true;
+      log('WALK_GPS_GAP', { id: walkRef.current.id, minutes: Math.round(result.gapMs / 60000) });
+    }
+    if (result.gapEndedMs !== null) {
+      if (!gapLoggedRef.current) log('WALK_GPS_GAP', { id: walkRef.current.id, minutes: Math.round(result.gapEndedMs / 60000) });
+      gapLoggedRef.current = false;
+    }
+    if (gapMs !== null && gapMs >= GPS_GAP_NOTE_MS) setGpsGapNote(true);
     if (result.decision) {
       const decision: AutoFinishDecision = result.decision;
       const endedBy: WalkEndedBy = decision === 'home' ? 'auto-home' : 'auto-still';
@@ -96,6 +121,21 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     const timer = setInterval(() => runAutoFinishRef.current(null), AUTO_FINISH_TICK_MS);
     return () => clearInterval(timer);
   }, [appState.isTracking]);
+
+  // Coming back to the front after a freeze: judge the walk right away (a gap shows its note) instead of up to a minute later.
+  // The note itself fades after a while once the app is in front.
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener('change', (next) => {
+      setAppInFront(next === 'active');
+      if (next === 'active') runAutoFinishRef.current(null);
+    });
+    return () => subscription.remove();
+  }, []);
+  useEffect(() => {
+    if (!gpsGapNote || !appInFront) return;
+    const timer = setTimeout(() => setGpsGapNote(false), GPS_GAP_NOTE_SHOWN_MS);
+    return () => clearTimeout(timer);
+  }, [gpsGapNote, appInFront]);
 
   // Heartbeat timer (foreground). The GPS callback below also ticks, which is what keeps beats going wherever that
   // callback runs JS in the background; the sender itself decides whether 30 s have passed.
@@ -177,6 +217,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
       walkRef.current = newWalk; // before the watcher, so no early fix is dropped
       finishingRef.current = false;
+      resetGapState();
       const autoEnabled = await Promise.resolve()
         .then(() => repos.settingsRepository.getAutoFinishEnabled())
         .catch(() => true);
@@ -240,6 +281,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     finishingRef.current = true;
     autoFinishRef.current = null;
     setHomeCountdownMin(null);
+    resetGapState();
     await stopWatchingLocation();
 
     const walkToFinish = walkRef.current && endedBy ? { ...walkRef.current, endedBy } : walkRef.current;
@@ -303,6 +345,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     autoFinishRef.current = null;
     finishingRef.current = false;
     setHomeCountdownMin(null);
+    resetGapState();
     await stopWatchingLocation();
     if (walkRef.current) {
       void presence?.end(walkRef.current);
@@ -330,6 +373,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       resumeWalkCueState(walkCueState, restored.locations);
       cueTracker.onCells(walkCueState.painted.size, 0); // already-reached milestones must not ding again
       autoFinishRef.current = autoFinish;
+      resetGapState();
       setAutoFinishEnabled(autoFinish.enabled);
       setHomeCountdownMin(homeCountdownMinutes(autoFinish, Date.now()));
 
@@ -351,6 +395,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       loadCueRange(cancelled);
       setAppState((prev) => ({ ...prev, walk: resumed, isTracking: true }));
       presence?.start(resumed);
+      // A walk restored after a long silence: judge it now, so the GPS-gap note is there when the player looks.
+      runAutoFinishRef.current(null);
       return true;
     } finally {
       if (startTokenRef.current === token) startingRef.current = false;
@@ -382,6 +428,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     setError,
     autoFinishEnabled,
     homeCountdownMin,
+    /** The walk's GPS went quiet for a long while (battery saver, frozen app): the live map says it is still on. */
+    gpsGapNote,
     startWalk,
     finishWalk,
     cancelWalk,

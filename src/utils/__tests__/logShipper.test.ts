@@ -97,6 +97,18 @@ describe('ring buffer', () => {
   });
 });
 
+describe('sampling of per-fix events', () => {
+  it('ships 1 in N of GPS_UPDATE / GPS_FIX_REJECTED, the first always, and everything else in full', () => {
+    const { shipper, add } = setup();
+    add(100, 'GPS_UPDATE');
+    expect(shipper.pendingCount()).toBe(5);
+    add(30, 'GPS_FIX_REJECTED');
+    expect(shipper.pendingCount()).toBe(8);
+    add(3, 'WALK_START');
+    expect(shipper.pendingCount()).toBe(11);
+  });
+});
+
 describe('shipping', () => {
   it('flushes automatically at 25 pending entries, with consecutive seq numbers', async () => {
     const { sent, add, settle } = setup();

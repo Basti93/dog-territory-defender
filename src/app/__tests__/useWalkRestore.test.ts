@@ -108,4 +108,35 @@ describe('restoreActiveWalk', () => {
     expect(await run(MIN)).toBe('skipped');
     expect(openMap).not.toHaveBeenCalled();
   });
+
+  describe('WALK_RESTORE_CHECK: one line per launch, whatever the outcome', () => {
+    const checks = () => (log as jest.Mock).mock.calls.filter(([tag]) => tag === 'WALK_RESTORE_CHECK').map(([, data]) => data);
+
+    it('nothing stored', async () => {
+      const { repo, run } = await setup({ fixes: 5 });
+      await repo.clear();
+      await run(MIN);
+      expect(checks()).toEqual([expect.objectContaining({ found: false, points: 0, ageMin: null, decision: 'none' })]);
+    });
+
+    it('busy session (the line that was missing when a stored walk vanished)', async () => {
+      const { run } = await setup({ fixes: 30, busy: true });
+      await run(MIN);
+      expect(checks()).toEqual([expect.objectContaining({ found: true, points: 30, ageMin: 0, decision: 'busy' })]);
+    });
+
+    it('resume, finish and discard', async () => {
+      await (await setup({ fixes: 30 })).run(30 * 10_000 + MIN);
+      await (await setup({ fixes: 30 })).run(RESTORE_MAX_AGE_MS + 30 * 10_000);
+      await (await setup({ fixes: 1 })).run(RESTORE_MAX_AGE_MS + MIN);
+      expect(checks().map((c) => c.decision)).toEqual(['resume', 'finish', 'discard']);
+      expect(checks()[0]).toEqual(expect.objectContaining({ found: true, points: 30, ageMin: 1, ms: expect.any(Number) }));
+    });
+  });
+
+  it('a fresh walk whose fixes simply stopped for an hour is resumed, not discarded', async () => {
+    const { session, run } = await setup({ fixes: 3 });
+    expect(await run(60 * MIN)).toBe('resumed');
+    expect(session.resumeWalk).toHaveBeenCalledTimes(1);
+  });
 });

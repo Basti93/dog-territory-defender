@@ -25,6 +25,13 @@ export const SHIPPER_LIMITS = {
   maxBatchEntries: 200,
 } as const;
 
+/**
+ * Per-fix events are shipped 1 in N only (the local Debug Log keeps every line). The server refuses a device more than
+ * 2000 rows per rolling 24 h; at one GPS_UPDATE per second that was used up within the first walk of the day and every
+ * later log (WALK_*, GPS_GAP, RESTORE) was refused until the next morning.
+ */
+export const SAMPLED_EVENTS: Record<string, number> = { GPS_UPDATE: 20, GPS_FIX_REJECTED: 10 };
+
 // ------------------------------------------------------------------ redaction
 
 /** Keys that never leave the phone, at any depth (compared lowercase). Raw positions and secrets. */
@@ -142,6 +149,7 @@ export function createLogShipper(deps: LogShipperDeps): LogShipper {
   let sending = false;
   let nextAllowedAt = 0;
   let lastSentAt: number | null = null;
+  const sampledCounts = new Map<string, number>();
 
   function takeBatch(): BufferedEntry[] {
     const batch: BufferedEntry[] = [];
@@ -200,6 +208,12 @@ export function createLogShipper(deps: LogShipperDeps): LogShipper {
   return {
     append(event, payload, appState) {
       try {
+        const every = SAMPLED_EVENTS[event];
+        if (every) {
+          const seen = sampledCounts.get(event) ?? 0;
+          sampledCounts.set(event, seen + 1);
+          if (seen % every !== 0) return; // the first one always ships
+        }
         const entry: ApiLogEntry = { t: deps.now(), event, payload: redact(event, payload), appState };
         const bytes = utf8Length(JSON.stringify(entry));
         if (bytes > L.maxEntryBytes) return;

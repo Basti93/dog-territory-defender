@@ -9,7 +9,7 @@ import {
   walkHasMovement,
 } from '../geometry';
 import { Location } from '../../types';
-import { NO_MOVEMENT_CELLS_BELOW, NO_MOVEMENT_MAX_DISTANCE_M, NO_MOVEMENT_RADIUS_M, paintedCells } from '../grid';
+import { NO_MOVEMENT_CELLS_BELOW, NO_MOVEMENT_MAX_DISTANCE_M, NO_MOVEMENT_RADIUS_M, NO_MOVEMENT_ROUGH_RADIUS_M, paintedCells } from '../grid';
 
 function offsetLatitude(lat: number, meters: number): number {
   return lat + meters / 111320;
@@ -181,5 +181,34 @@ describe('walkHasMovement', () => {
 
   it('a teleport (a step the distance rule rejects) is not movement', () => {
     expect(walkHasMovement(walkOf(trail(2, 3000)))).toBe(false);
+  });
+
+  describe('rough fixes (30-50 m accuracy, phone in a pocket)', () => {
+    const rough = (locations: Location[]) => locations.map((l) => ({ ...l, accuracy: 45 }));
+    /** A standing phone: rough fixes wandering on a 30 m circle around one spot (up to 60 m from the first fix), one per 10 s. */
+    const standing = (): Location[] =>
+      Array.from({ length: 120 }, (_, i) => ({
+        latitude: 52.5 + (30 * Math.sin(i * 0.3)) / 111320,
+        longitude: 13.4 + (30 * Math.cos(i * 0.3)) / (111320 * Math.cos((52.5 * Math.PI) / 180)),
+        timestamp: T + i * 10_000,
+        accuracy: 45,
+      }));
+
+    it('a standing phone with rough jitter 60 m wide is no movement (it would be with the 40 m radius alone)', () => {
+      expect(NO_MOVEMENT_ROUGH_RADIUS_M).toBeGreaterThan(60);
+      expect(Math.max(...standing().map((f) => getDistance(standing()[0].latitude, standing()[0].longitude, f.latitude, f.longitude)))).toBeGreaterThan(NO_MOVEMENT_RADIUS_M);
+      expect(walkDistanceMeters(walkOf(standing()))).toBeGreaterThan(5 * NO_MOVEMENT_MAX_DISTANCE_M);
+      expect(walkHasMovement(walkOf(standing()))).toBe(false);
+    });
+
+    it('a pocket walk of rough fixes only is still movement once it gets well away', () => {
+      expect(walkHasMovement(walkOf(rough(trail(15, 10))))).toBe(true); // 140 m
+    });
+
+    it('a rough first fix does not become the reference: the first paint-grade fix does', () => {
+      const first = { ...trail(1, 0)[0], accuracy: 45 };
+      const walk = [first, ...trail(30, 0).slice(1).map((l) => ({ ...l, latitude: l.latitude + 30 / 111320 }))];
+      expect(walkHasMovement(walkOf(walk))).toBe(false); // everything within 40 m of the first paint-grade fix
+    });
   });
 });
