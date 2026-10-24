@@ -57,7 +57,7 @@ function seeded(seed: number): () => number {
   };
 }
 
-/** The Hof: cosy props around Buddy's mat. Everything stays behind him and clear of the bowl, pile and the mailbox path. */
+/** The Hof: cosy props around Buddy's mat. Everything stays behind him and clear of the bowl (centred under the mat), pile and the mailbox path. */
 export function hofDecor(width: number, yardH: number, feetY: number): DecorItem[] {
   const low = Math.min(yardH - 10, feetY + 70);
   const high = Math.max(70, feetY - 120);
@@ -71,11 +71,11 @@ export function hofDecor(width: number, yardH: number, feetY: number): DecorItem
     // beside the mat
     place('meadow-bush', width * 0.03, feetY - 6, 92),
     place('meadow-bush', width * 0.97, feetY - 8, 84, true),
-    // below the mat, above the bowl row
-    place('meadow-flowers', width * 0.17, low - 4, 66),
+    // below the mat: the bowl sits centred right under it, so these keep to the sides (x < 0.28 and x > 0.7)
+    place('meadow-flowers', width * 0.14, low - 4, 66),
     place('meadow-tuft', width * 0.8, low - 6, 58, true),
-    place('meadow-stones', width * 0.9, low + 2, 48),
-    place('meadow-tuft', width * 0.33, low + 6, 50),
+    place('meadow-stones', width * 0.92, low + 2, 48),
+    place('meadow-tuft', width * 0.24, low + 12, 46),
   ];
 }
 

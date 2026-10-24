@@ -26,7 +26,7 @@ export const FENCE_FOOT_PAD = 6;
 
 export const SKY_H = 260;
 export const VIERTEL_H = 440;
-/** Bench, bowl and mailbox live in this strip under the yard; its last ~60 pt hold the "down to the buildings" strip and the home-indicator inset. */
+/** Bench and mailbox live in this strip under the yard (the bowl sits higher, in the yard); its last ~60 pt hold the "down to the buildings" strip and the home-indicator inset. */
 export const BOTTOM_ROW_H = 232;
 export const MIN_YARD_H = 300;
 
@@ -226,7 +226,12 @@ export interface WorldYardLayout extends YardLayout {
   gateRise: number;
   /** Ground y (px from the yard top) of his feet at the resting spot: the decor is placed around it. */
   feetY: number;
+  /** Top (px from the yard top) of the treat bowl's box: just below the doormat, centred, so it sits in the yard and not in the bottom row. */
+  bowlTop: number;
 }
+
+/** Gap between the doormat's bottom edge and the bowl's box. */
+const BOWL_MAT_GAP = 4;
 
 /**
  * Hof geometry for the scene. It returns a `YardLayout` (what YardBuddy's walk geometry and the Wild Extras need) with Buddy
@@ -246,6 +251,7 @@ export function worldYardLayout(width: number, yardH: number): WorldYardLayout {
     doormat: { left: width / 2 - 70, top: top + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE) - 40, width: 140, height: 70 },
     gateRise: top - BUDDY_TOP_GAP + BUDDY_SIZE * 0.9 + buddyFeetInset(BUDDY_SIZE),
     feetY: top + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE),
+    bowlTop: top + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE) - 40 + 70 + BOWL_MAT_GAP,
   };
 }
 

@@ -32,3 +32,13 @@ A small collection that is not a power: each of the six neighbour dogs (Momo, Pf
 ## Neighbours on postcards
 
 A tracked walk's postcard shows up to two neighbour dogs that were out at the same time (their planned walk overlapped ours; stored per walk, at most 3, derived by the server at upload) next to our Buddy. No counts, no "you missed" copy: a card without a neighbour simply has Buddy alone. Buddy's line may mention the first dog met (`postcard.line.met.*`).
+
+## Buddys Spazier-Tagebuch (Album)
+
+One clay card above the postcards (`walks/walkDiary.ts`, `WalkDiaryCard`), derived on read from the household's stored tracked walks (partner walks included; bots and in-progress walks are not in the repository). Buddy's voice, no goals, streaks, deltas, days-since, rankings or cross-player comparison, no badge.
+- Manual logs are left out entirely: they have no fixes (no duration/distance) and their start time is only "today/yesterday".
+- Under 3 walks: only a teaser ("Noch 2 Runden, dann erzähl ich dir ..."). At the 3rd the card appears with the intro line, once (`DiarySeen` in settings).
+- Rows: typical walk (average, "ca. 35 Min · 2,1 km", minutes to 5, distance to 100 m), longest walk (soft month, "im Mai"), latest walk (duration only), total distance (labelled "aus getrackten Runden").
+- Time of day by local start hour: Morgen <11, Mittag 11-17, Abend 17-22, Nacht >=22 or <5. A row (average duration + distance) only with >=3 walks in it; no empty rows. Top bucket named positively; all within 10%: "Bei uns ist jede Tageszeit gut."
+- One sniff comment rotating with the walk count: sausage chain, football pitches, naps, longest walk. A new longest walk (by duration) drops a little confetti once.
+- Not the Stats screen: that one holds lifetime counters, records by distance and badges; the diary adds time and time of day.

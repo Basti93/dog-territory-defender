@@ -65,7 +65,7 @@ export function MapScreen(p: MapScreenProps) {
     wildSpot: p.wildSpot,
   });
   return (
-    <ScreenFrame fadeKey={null} safeArea>
+    <ScreenFrame fadeKey={null} safeArea treats={p.treats}>
       <StatusBar />
 
       {/* Map */}
@@ -121,9 +121,6 @@ export function MapScreen(p: MapScreenProps) {
 
           <Text style={[textStyle('min'), styles.statLabel]}>{t('app.points')}</Text>
           <Text style={textStyle('body')}>{walk?.locations.length || 0}</Text>
-
-          <Text style={[textStyle('min'), styles.statLabel]}>{t('den.treats')}</Text>
-          <Text style={textStyle('body')}>{p.treats !== null ? Math.floor(p.treats) : '…'}</Text>
 
           <Text style={[textStyle('min'), styles.statLabel]}>{t('stats.level')}</Text>
           <Text style={textStyle('body')}>{p.level !== null ? t('den.dogLevel', { dog: dogDisplayName(p.dogName), level: p.level }) : '…'}</Text>

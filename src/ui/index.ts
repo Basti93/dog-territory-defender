@@ -44,3 +44,5 @@ export { SpeechBubble } from './paper/SpeechBubble';
 export type { SpeechBubbleProps } from './paper/SpeechBubble';
 export { PaperSheet, PaperSection, PaperHeader, PaperRow, PaperHint, TextLink } from './paper/PaperList';
 export type { PaperRowProps } from './paper/PaperList';
+export { TopBar, TOP_BAR_H, TOP_BAR_CHIP_RIGHT } from './TopBar';
+export type { TopBarProps } from './TopBar';

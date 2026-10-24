@@ -1,4 +1,5 @@
 import { LocalePreference } from '../i18n/types';
+import type { DiarySeen } from '../walks/walkDiary';
 
 /** Household sync identity (multiplayer-sync). The token is stored unencrypted in SQLite: accepted for the 2-person test (design.md Decision 9). Never part of the Backup JSON. */
 export interface SyncIdentity {
@@ -62,6 +63,9 @@ export interface SettingsRepository {
   /** The last "Euer Boden: 0,4 → 0,5/Std." homecoming beat: local day and the rate it showed. Null until one was shown. */
   getIncomeBeatShown(): Promise<{ day: string; rate: number } | null>;
   saveIncomeBeatShown(shown: { day: string; rate: number }): Promise<void>;
+  /** What the Album's walk diary has already announced (intro line, longest walk seen). Never fails: returns the "nothing yet" value. */
+  getDiarySeen(): Promise<DiarySeen>;
+  saveDiarySeen(seen: DiarySeen): Promise<void>;
 }
 
 /** Defensive read of the stored shown-partner-walk list. */

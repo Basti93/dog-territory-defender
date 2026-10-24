@@ -449,7 +449,7 @@ export default function App() {
     case 'territories':
       return swipeable(
         'territories',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <TerritoriesScreen
             buddyAppearance={buddyAppearance}
             territoryRepository={repos.territoryRepository}
@@ -466,13 +466,14 @@ export default function App() {
       // It hosts the card's WebView, so screenKey('history') is null: never FadeSlideIn-wrapped.
       return swipeable(
         'history',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <AlbumScreen
             buddyAppearance={buddyAppearance}
             walkRepository={repos.walkRepository}
             homeRangeRepository={repos.homeRangeRepository}
             territoryRepository={repos.territoryRepository}
             cornerRepository={repos.cornerRepository}
+            settingsRepository={repos.settingsRepository}
             dogName={dogName}
             onWalkDeleted={(id) => void syncEngine.enqueueWalkDelete(id).catch(() => undefined)}
             onClose={() => {
@@ -485,14 +486,14 @@ export default function App() {
     case 'debugLog':
       return swipeable(
         'debugLog',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <DebugLogScreen notificationRepository={repos.notificationRepository} onClose={nav.close} />
         </ScreenFrame>
       );
     case 'settings':
       return swipeable(
         'settings',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <SettingsScreen
             notificationRepository={repos.notificationRepository}
             walkRepository={repos.walkRepository}
@@ -515,7 +516,7 @@ export default function App() {
     case 'stats':
       return swipeable(
         'stats',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <StatsScreen
             buddyAppearance={buddyAppearance}
             repository={repos.personalStatsRepository}
@@ -528,7 +529,7 @@ export default function App() {
     case 'logMissedWalk':
       return swipeable(
         'logMissedWalk',
-        <ScreenFrame fadeKey={fadeKey}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats}>
           <LogMissedWalkScreen
             onLog={manualLog.logMissedWalk}
             onClose={nav.close}

@@ -1,3 +1,4 @@
+import { DIARY_SEEN_NONE, DiarySeen, normalizeDiarySeen } from '../walks/walkDiary';
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
 import { normalizeLocalePreference, normalizeShownWalkIds, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
@@ -15,6 +16,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let dogPhotoConsent = false;
   let incomeBeatShown: { day: string; rate: number } | null = null;
   let shownPartnerWalkIds: string[] = [];
+  let diarySeen: DiarySeen = { ...DIARY_SEEN_NONE };
   return {
     async getSyncIdentity() {
       return syncIdentity ? { ...syncIdentity } : null;
@@ -81,6 +83,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveIncomeBeatShown(shown) {
       incomeBeatShown = { ...shown };
+    },
+    async getDiarySeen() {
+      return { ...diarySeen };
+    },
+    async saveDiarySeen(seen) {
+      diarySeen = normalizeDiarySeen(seen);
     },
     async getShownPartnerWalkIds() {
       return [...shownPartnerWalkIds];

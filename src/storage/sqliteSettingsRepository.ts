@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
+import { DiarySeen, normalizeDiarySeen } from '../walks/walkDiary';
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
 import { normalizeLocalePreference, normalizeShownWalkIds, normalizeSyncIdentity, SettingsRepository, SyncIdentity } from './SettingsRepository';
@@ -53,6 +54,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     }
     if (!columns.some((c) => c.name === 'incomeBeatShown')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN incomeBeatShown TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.some((c) => c.name === 'diarySeen')) {
+      await db.execAsync("ALTER TABLE app_settings ADD COLUMN diarySeen TEXT NOT NULL DEFAULT ''");
     }
     return db;
   });
@@ -261,6 +265,26 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET incomeBeatShown = excluded.incomeBeatShown`,
         SINGLETON_ID,
         `${shown.day}|${shown.rate}`
+      );
+    },
+
+    async getDiarySeen(): Promise<DiarySeen> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ diarySeen: string }>('SELECT diarySeen FROM app_settings WHERE id = ?', SINGLETON_ID);
+      try {
+        return normalizeDiarySeen(JSON.parse(row?.diarySeen || 'null'));
+      } catch {
+        return normalizeDiarySeen(null);
+      }
+    },
+
+    async saveDiarySeen(seen: DiarySeen): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, diarySeen) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET diarySeen = excluded.diarySeen`,
+        SINGLETON_ID,
+        JSON.stringify(normalizeDiarySeen(seen))
       );
     },
 

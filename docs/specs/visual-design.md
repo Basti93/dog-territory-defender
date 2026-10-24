@@ -39,3 +39,4 @@ Where the screen exists: paw prints briefly on map pull-to-refresh; bounce plus 
 ## Scope and success
 - Visual/UI work is scoped to items pulled from the backlog (`game-backlog`): add only the pulled item's screens/components, reuse existing tokens and components, park other ideas in the backlog instead of building early.
 - Success when all four hold: a parent says the app makes the dog walk more fun, not stressful; the map stays the primary visual element with chrome fading into the background; claiming territory feels like "I made my mark on the neighborhood," not "I leveled up a metric"; two people walking together can both play without feeling like competitors. Check every design review against all four.
+- **Top bar:** one shared status bar (cream wash, wood treat chip at the right with the count; optional left slot) at the top of every page after first launch; the Hof scene lays out below it. The treat bowl stands in the yard just under Buddy's doormat.

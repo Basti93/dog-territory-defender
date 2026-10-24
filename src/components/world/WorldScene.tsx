@@ -25,7 +25,7 @@ import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
 import type { TerritoryRepository } from '../../storage/TerritoryRepository';
 import type { WalkRepository } from '../../storage/WalkRepository';
-import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, TreatPop, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
+import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, TopBar, TOP_BAR_H, TreatPop, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
 import type { AwayStripLine, DoorstepSession } from '../doorstepSession';
@@ -36,7 +36,7 @@ import { YardButterflies } from '../den/YardButterflies';
 import { YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
 import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
-import { BURST_FLIGHT_MS, BURST_STAGGER_MS, bowlAtCap, burstSpriteCount } from './bakeryRules';
+import { BURST_FLIGHT_MS, BURST_STAGGER_MS, bowlAtCap, burstSpriteCount, formatRatePerHour } from './bakeryRules';
 import { useBackAction } from '../../app/backStack';
 import { BENCH_WALK_WINDOW } from '../../postcards/postcards';
 import { usePostcards } from '../../postcards/usePostcards';
@@ -44,7 +44,6 @@ import { BenchPostcards } from '../postcards/BenchPostcards';
 import { BuildingPanel } from './BuildingPanel';
 import { FenceBadges } from './FenceBadges';
 import { signStrip } from './fencePlan';
-import { TreatsPill } from './TreatsPill';
 import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
 import { PILE_H, PILE_W, StickPile } from './StickPile';
@@ -83,11 +82,8 @@ const VIERTEL_PARALLAX = 0.15;
 const YARD_PARALLAX = -0.06;
 const GATE_SWING_MS = 600;
 const BOWL_ZOOM_HOLD_MS = 2000;
-/** Treats pill beside the gate sign: edge gap, widest/narrowest, and the width reserved for the centred gate sign. */
-const PILL_EDGE = 8;
-const PILL_MAX_W = 96;
-const PILL_MIN_W = 60;
-const GATE_SIGN_ROOM = 200;
+/** The harvest flight lands on the shared top bar's treat chip: this far from the right edge (chip centre). */
+const BAR_CHIP_CENTER_FROM_RIGHT = 56;
 /** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides; also the buildings page's ground. */
 const GRASS_BASE = '#9BC995';
 /** The hill's bottom edge (measured on yard-ground-wide.png: ~#B9D7B6) as a mix of the meadow colour, so the buildings page fades out of it with no seam. */
@@ -282,8 +278,10 @@ export function WorldScene(props: WorldSceneProps) {
     refreshKey: (homeRangeRefreshKey ?? 0) + cornerEdits,
   });
 
-  const layout = useMemo(() => sceneLayout(height, width, insets.top, insets.bottom), [height, width, insets.top, insets.bottom]);
-  const buildings = useMemo(() => buildingsLayout(width, insets.top, layout.buildingsPageH), [width, insets.top, layout.buildingsPageH]);
+  // The shared top bar floats over every page: the scene lays out below it (the gate sign, hints and the "back" strip).
+  const topInset = insets.top + TOP_BAR_H;
+  const layout = useMemo(() => sceneLayout(height, width, topInset, insets.bottom), [height, width, topInset, insets.bottom]);
+  const buildings = useMemo(() => buildingsLayout(width, topInset, layout.buildingsPageH), [width, topInset, layout.buildingsPageH]);
   // Static meadow decor: computed once per window size, never per frame.
   const meadow = useMemo(() => meadowLayout(width, layout.buildingsH, buildings), [width, layout.buildingsH, buildings]);
   const yardDecor = useMemo(() => hofDecor(width, layout.yardH, worldYardLayout(width, layout.yardH).feetY), [width, layout.yardH]);
@@ -596,7 +594,8 @@ export function WorldScene(props: WorldSceneProps) {
   const pileCount = formatNumber(Math.floor(pileShown));
   // Ambient cookies drop in from the top of the Hof (behind the fence) into the bowl, off to the side of Buddy.
   const dropPoint = { x: width / 2 + 70, y: -30 };
-  const bowlPoint = { x: width / 2, y: layout.yardH + 54 };
+  const bowlWrapTop = yard.bowlTop - 4; // the bowl group's top in yard coordinates (its art box starts 4 below)
+  const bowlPoint = { x: width / 2, y: bowlWrapTop + 54 };
   // The harvest flight lives in the fence layer (it must pass over the Hof and land on the pill): same x, y measured from the fence layer's top.
   const flightFrom = { x: width / 2, y: layout.hofTop + bowlPoint.y };
   // The pile lies right of the doormat, just under Buddy's paws: clear of the bowl, the bench and the mailbox paths.
@@ -658,9 +657,8 @@ export function WorldScene(props: WorldSceneProps) {
   const skyShift = SKY_PARALLAX * startOffset;
   const gateBoxLeft = width / 2 - GATE_BOX / 2;
   const gateHitTop = layout.gateBoxTop + GATE_BOX * 0.36;
-  // The pill takes the space left of the (centred, ~200 pt) gate sign; on very narrow windows it is left out.
-  const pillW = Math.min(PILL_MAX_W, width / 2 - GATE_SIGN_ROOM / 2 - PILL_EDGE - 4);
-  const pillPoint = { x: PILL_EDGE + Math.max(pillW, PILL_MIN_W) / 2, y: layout.gateSignTop + 22 };
+  // Harvest target: the bar's treat chip (viewport coordinates == tail coordinates at the opening scroll position).
+  const pillPoint = { x: width - BAR_CHIP_CENTER_FROM_RIGHT, y: insets.top + TOP_BAR_H / 2 };
 
   return (
     <View style={[styles.root, { backgroundColor: sky.base }]}>
@@ -837,6 +835,22 @@ export function WorldScene(props: WorldSceneProps) {
               </WoodSign>
             </View>
 
+            <ArtDecor art={'prop-mailbox'} style={[styles.abs, { right: 14, top: -6, width: 130, height: 130 }]} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('world.postLabel')}
+              onPress={onOpenSettings}
+              style={[styles.abs, { right: 30, top: 0, width: 98, height: 110 }]}
+            />
+            <View pointerEvents="box-none" style={[styles.abs, { right: 14, top: 108, width: 130, alignItems: 'center' }]}>
+              <WoodSign size="small" onPress={onOpenSettings} accessibilityLabel={t('world.post')} textStyleOverride={SMALL_SIGN_TEXT}>
+                {t('world.post')}
+              </WoodSign>
+            </View>
+          </View>
+
+          {/* Treat bowl: in the yard just below Buddy's doormat. Tap harvests the pile; the sign shows larger for 2 s after a bowl zoom. */}
+          <View pointerEvents="box-none" style={[styles.abs, { left: 0, right: 0, top: bowlWrapTop, height: 150 }]}>
             <BowlFill pile={pileShown} room={projection.room} full={full} boxLeft={width / 2 - 60} boxTop={4} />
             <Pressable
               accessibilityRole="button"
@@ -852,19 +866,6 @@ export function WorldScene(props: WorldSceneProps) {
                 <BowlSignContent pile={pileShown} ratePerHour={homecoming ? 0 : projection.ratePerHour} />
               </WoodSign>
             </Animated.View>
-
-            <ArtDecor art={'prop-mailbox'} style={[styles.abs, { right: 14, top: -6, width: 130, height: 130 }]} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('world.postLabel')}
-              onPress={onOpenSettings}
-              style={[styles.abs, { right: 30, top: 0, width: 98, height: 110 }]}
-            />
-            <View pointerEvents="box-none" style={[styles.abs, { right: 14, top: 108, width: 130, alignItems: 'center' }]}>
-              <WoodSign size="small" onPress={onOpenSettings} accessibilityLabel={t('world.post')} textStyleOverride={SMALL_SIGN_TEXT}>
-                {t('world.post')}
-              </WoodSign>
-            </View>
           </View>
 
           {/* Treats dropping from the top of the Hof into the bowl while it still grows. */}
@@ -1019,19 +1020,6 @@ export function WorldScene(props: WorldSceneProps) {
             onPress={gateAction}
             style={[styles.abs, { left: gateBoxLeft, top: gateHitTop, width: GATE_BOX, height: GATE_BOX * 0.6 }]}
           />
-          {/* Treats counter: beside the gate sign, in the free corner between the hint band and the picket band. */}
-          {pillW >= PILL_MIN_W && (
-            <View pointerEvents="box-none" style={[styles.abs, { left: PILL_EDGE, top: layout.gateSignTop + 2 }]}>
-              <TreatsPill
-                shown={bankShown}
-                cap={cap}
-                full={full}
-                ratePerHour={walkActive || homecoming ? 0 : projection.ratePerHour}
-                width={pillW}
-                onPress={zoomBowl}
-              />
-            </View>
-          )}
           <View pointerEvents="box-none" style={[styles.abs, { left: 0, right: 0, top: layout.gateSignTop, alignItems: 'center' }]}>
             <WoodSign size="wide" onPress={gateAction} accessibilityLabel={walkActive ? t('walk.gateBackLabel') : t('world.gateLabel')}>
               <View style={styles.gateSignRow}>
@@ -1134,6 +1122,17 @@ export function WorldScene(props: WorldSceneProps) {
           <Cloud left={width - 150} top={skyShift + 112} w={96} night={sky.phase === 'night'} />
         </Animated.View>
       </Animated.ScrollView>
+
+      {/* The shared status bar: fixed over all three pages. The chip shows the bank only (the pile waits in the bowl). */}
+      <View pointerEvents="box-none" style={[styles.abs, { left: 0, right: 0, top: 0, zIndex: 4 }]}>
+        <TopBar
+          treats={bankShown}
+          full={full}
+          note={walkActive || homecoming || projection.ratePerHour <= 0 ? null : t('world.treatsRate', { rate: formatRatePerHour(projection.ratePerHour) })}
+          label={t('world.treatsPillLabel', { count: formatNumber(Math.floor(bankShown)), cap: formatNumber(cap) })}
+          onPressTreats={zoomBowl}
+        />
+      </View>
 
       {homecoming && homecomingCount !== null && (
         <Homecoming
