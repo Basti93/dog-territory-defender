@@ -219,7 +219,7 @@ export async function requestLocationPermission(): Promise<boolean> {
  */
 export async function startWatchingLocation(
   callback: (location: LocationType) => void,
-  options: { fresh?: boolean } = {}
+  options: { fresh?: boolean; resume?: boolean } = {}
 ): Promise<boolean> {
   currentSubscriber = callback;
   lastDeliveredTimestamp = 0;
@@ -228,6 +228,25 @@ export async function startWatchingLocation(
   clearDeferredStart();
   stopForegroundFallback();
   try {
+    // Resuming a walk whose task survived: the callback is re-attached. On Android in front the task is still started
+    // again: after a headless restart it runs WITHOUT its foreground service (2026-10-19), and a restart brings it back.
+    // From the background only the callback is re-attached; the service restart waits for the front (no "open the app" note).
+    if (options.resume && (await isTaskRunning())) {
+      if (Platform.OS === 'android' && AppState.currentState === 'active') {
+        log('GPS_WATCH_RESTART_FOR_SERVICE');
+      } else {
+        log('GPS_WATCH_REATTACHED');
+        if (Platform.OS === 'android') deferStartUntilFront(false);
+        fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
+        return true;
+      }
+    }
+    // Android would refuse the foreground service right now: do not make the doomed call, wait for the front instead.
+    if (Platform.OS === 'android' && AppState.currentState !== 'active') {
+      deferStartUntilFront();
+      fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
+      return true;
+    }
     await startLocationTask();
     // Safety net: if the task delivers no accepted fix soon, also watch in the foreground.
     fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
@@ -245,6 +264,14 @@ export async function startWatchingLocation(
     const ok = await startForegroundFallback('task-start-failed');
     if (!ok) currentSubscriber = null;
     return ok;
+  }
+}
+
+async function isTaskRunning(): Promise<boolean> {
+  try {
+    return await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+  } catch {
+    return false;
   }
 }
 
@@ -277,11 +304,11 @@ function clearDeferredStart(): void {
   appStateSubscription = null;
 }
 
-function deferStartUntilFront(): void {
+function deferStartUntilFront(notify = true): void {
   clearDeferredStart();
   startPending = true;
   log('GPS_WATCH_DEFERRED', { why: 'android-background-start' });
-  void notifyOpenApp();
+  if (notify) void notifyOpenApp();
   let tries = 0;
   let starting = false;
   const tryStart = () => {

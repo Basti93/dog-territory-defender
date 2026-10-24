@@ -98,6 +98,103 @@ describe('useWalkSession GPS fixes', () => {
     });
     expect(result.current.walk?.locations.length).toBe(2);
   });
+
+  it('starts the location task before the initial fix resolves (foreground service while the app is in front)', async () => {
+    const order: string[] = [];
+    mocked.startWatchingLocation.mockImplementation(async () => {
+      order.push('task');
+      return true;
+    });
+    mocked.getInitialLocation.mockImplementation(async () => {
+      order.push('fix');
+      return fix(0);
+    });
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.startWalk();
+    });
+    expect(order).toEqual(['task', 'fix']);
+  });
+
+  it('drops buffered fixes older than the initial fix and stops the task when no start position comes', async () => {
+    let emit: (l: Location) => void = () => undefined;
+    mocked.startWatchingLocation.mockImplementation(async (cb) => {
+      emit = cb;
+      return true;
+    });
+    mocked.getInitialLocation.mockImplementation(async () => {
+      emit({ ...fix(0), timestamp: -5 }); // older than the start point
+      return fix(0);
+    });
+    const { result } = await setup();
+    await act(async () => {
+      await result.current.startWalk();
+    });
+    expect(result.current.walk?.locations.length).toBe(1);
+
+    mocked.getInitialLocation.mockResolvedValue(null);
+    mocked.requestLocationPermission.mockResolvedValue(false);
+    const second = await setup();
+    await act(async () => {
+      await second.result.current.startWalk();
+    });
+    expect(mocked.stopWatchingLocation).toHaveBeenCalled();
+    expect(second.result.current.isTracking).toBe(false);
+  });
+});
+
+describe('useWalkSession start ownership and early fixes', () => {
+  it('persists fixes that arrived before the walk row existed, after clearing any old stored walk', async () => {
+    const calls: string[] = [];
+    const activeWalk = {
+      begin: jest.fn(async () => void calls.push('begin')),
+      addFix: jest.fn(() => void calls.push('addFix')),
+      end: jest.fn(async () => void calls.push('end')),
+      load: jest.fn().mockResolvedValue(null),
+      flush: jest.fn(),
+    };
+    mocked.startWatchingLocation.mockImplementation(async (cb) => {
+      calls.push('task');
+      cb(fix(1));
+      return true;
+    });
+    const hook = await renderHook(() =>
+      useWalkSession({ repos, dogName: 'Rex', onRangeChanged: jest.fn(), onRewards: jest.fn(), activeWalk: activeWalk as never })
+    );
+    await act(async () => {
+      await hook.result.current.startWalk();
+    });
+    expect(calls.indexOf('end')).toBeLessThan(calls.indexOf('task'));
+    expect(calls.indexOf('begin')).toBeLessThan(calls.indexOf('addFix'));
+    expect(activeWalk.addFix).toHaveBeenCalledWith(fix(1));
+  });
+
+  it('a cancelled start does not stop or restart the task a newer start owns', async () => {
+    mocked.startWatchingLocation.mockResolvedValue(true);
+    let releaseFirst: (l: Location | null) => void = () => undefined;
+    mocked.getInitialLocation
+      .mockImplementationOnce(() => new Promise((resolve) => (releaseFirst = resolve)))
+      .mockResolvedValue(fix(0));
+    const { result } = await setup();
+    let first: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = result.current.startWalk();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await result.current.cancelWalk();
+      await result.current.startWalk();
+    });
+    const stops = mocked.stopWatchingLocation.mock.calls.length;
+    const starts = mocked.startWatchingLocation.mock.calls.length;
+    await act(async () => {
+      releaseFirst(null); // the old start finds no position; it must not retry or stop the new start's task
+      await first;
+    });
+    expect(mocked.stopWatchingLocation.mock.calls.length).toBe(stops);
+    expect(mocked.startWatchingLocation.mock.calls.length).toBe(starts);
+    expect(result.current.isTracking).toBe(true);
+  });
 });
 
 describe('useWalkSession auto-finish', () => {

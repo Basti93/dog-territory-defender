@@ -45,7 +45,12 @@ describe('a walk started while the app is in the background (Android)', () => {
   });
 
   it('keeps the walk, asks calmly to open the app, and starts the task once the app is in front', async () => {
-    location.startLocationUpdatesAsync.mockRejectedValueOnce(BACKGROUND_ERROR);
+    // Safety net: the app was in front when the call began but is gone when Android answers.
+    (AppState as { currentState: string }).currentState = 'active';
+    location.startLocationUpdatesAsync.mockImplementationOnce(async () => {
+      (AppState as { currentState: string }).currentState = 'background';
+      throw BACKGROUND_ERROR;
+    });
     expect(await startWatchingLocation(jest.fn())).toBe(true);
     expect(scheduleInfoNotification).toHaveBeenCalledTimes(1);
     expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
@@ -57,7 +62,54 @@ describe('a walk started while the app is in the background (Android)', () => {
     expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(2);
   });
 
+  it('goes straight to the deferred start without calling the doomed foreground-service start', async () => {
+    expect(await startWatchingLocation(jest.fn())).toBe(true);
+    expect(location.startLocationUpdatesAsync).not.toHaveBeenCalled();
+    expect(scheduleInfoNotification).toHaveBeenCalledTimes(1);
+
+    location.startLocationUpdatesAsync.mockResolvedValueOnce(undefined);
+    (AppState as { currentState: string }).currentState = 'active';
+    listener?.('active');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('resuming with the task still running only re-attaches the callback, also from the background', async () => {
+    location.hasStartedLocationUpdatesAsync.mockResolvedValueOnce(true);
+    expect(await startWatchingLocation(jest.fn(), { resume: true })).toBe(true);
+    expect(location.startLocationUpdatesAsync).not.toHaveBeenCalled();
+    expect(scheduleInfoNotification).not.toHaveBeenCalled();
+  });
+
+  it('resuming in front with the task running restarts it, to bring the foreground service back', async () => {
+    (AppState as { currentState: string }).currentState = 'active';
+    location.hasStartedLocationUpdatesAsync.mockResolvedValueOnce(true);
+    location.startLocationUpdatesAsync.mockResolvedValueOnce(undefined);
+    expect(await startWatchingLocation(jest.fn(), { resume: true })).toBe(true);
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('resuming from the background with the task running restarts the service once in front, without a note', async () => {
+    location.hasStartedLocationUpdatesAsync.mockResolvedValueOnce(true);
+    await startWatchingLocation(jest.fn(), { resume: true });
+    location.startLocationUpdatesAsync.mockResolvedValueOnce(undefined);
+    (AppState as { currentState: string }).currentState = 'active';
+    listener?.('active');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+    expect(scheduleInfoNotification).not.toHaveBeenCalled();
+  });
+
+  it('resuming without a running task in the foreground starts it', async () => {
+    (AppState as { currentState: string }).currentState = 'active';
+    location.hasStartedLocationUpdatesAsync.mockResolvedValueOnce(false);
+    location.startLocationUpdatesAsync.mockResolvedValueOnce(undefined);
+    expect(await startWatchingLocation(jest.fn(), { resume: true })).toBe(true);
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+  });
+
   it('still reports other start failures as failures', async () => {
+    (AppState as { currentState: string }).currentState = 'active';
     location.startLocationUpdatesAsync.mockRejectedValueOnce(new Error('permission denied'));
     location.watchPositionAsync.mockRejectedValueOnce(new Error('nope'));
     expect(await startWatchingLocation(jest.fn())).toBe(false);

@@ -66,6 +66,9 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const walkRef = useRef<Walk | null>(null);
   const startingRef = useRef(false);
   const startTokenRef = useRef(0);
+  // Token of the start/resume that last started the location task. A start that was cancelled must not stop or restart the
+  // task once a newer start owns it (cancel resets startingRef, so a new start can run while the old one still awaits).
+  const taskOwnerRef = useRef(0);
   const cueTracker = useRef(createWalkCueTracker({ now: Date.now, minCells: MIN_CELLS_FOR_REWARD })).current;
   const walkCueState = useRef(createWalkCueState()).current;
 
@@ -240,6 +243,19 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     };
   };
 
+  /** Resolves once the app is 'active' (max ~2 s): right after a system dialog it can still report 'inactive'. */
+  const waitUntilActive = () =>
+    new Promise<void>((resolve) => {
+      if (RNAppState.currentState === 'active') return resolve();
+      const done = () => {
+        sub.remove();
+        clearTimeout(timer);
+        resolve();
+      };
+      const sub = RNAppState.addEventListener('change', (state) => state === 'active' && done());
+      const timer = setTimeout(done, 2000);
+    });
+
   const startWalk = async () => {
     // Double-tap guard + cancel guard: cancelWalk bumps startTokenRef, so any
     // async step below that resumes after a cancel bails out.
@@ -248,14 +264,32 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     const token = ++startTokenRef.current;
     const cancelled = () => startTokenRef.current !== token;
     try {
+      // The location task (Android foreground service) starts FIRST, straight after the tap while the app is still in
+      // front: a player who locks the phone during the seconds below would otherwise get "Foreground service cannot be
+      // started when the application is in the background". Fixes that arrive before the walk exists are buffered.
+      taskOwnerRef.current = token;
+      const ownsTask = () => taskOwnerRef.current === token;
+      // Forget a walk left in the store before the task delivers anything, so early fixes can never attach to an old walk id.
+      void activeWalk?.end();
+      const buffered: WalkLocation[] = [];
+      let liveHandler: ((location: WalkLocation) => void) | null = null;
+      const onFix = (location: WalkLocation) => (liveHandler ? liveHandler(location) : void buffered.push(location));
+      const watchStart = startWatchingLocation(onFix, { fresh: true });
       let initialLoc = await getInitialLocation();
+      let watching = await watchStart;
       if (!initialLoc) {
-        // Permission may simply not have been granted yet: ask once, then retry.
+        // Permission may simply not have been granted yet: ask once, then retry both.
         await requestLocationPermission();
-        initialLoc = await getInitialLocation();
+        await waitUntilActive(); // coming back from the permission dialog the app is briefly not 'active': do not defer then
+        initialLoc = cancelled() ? null : await getInitialLocation();
+        if (initialLoc && !watching && !cancelled() && ownsTask()) watching = await startWatchingLocation(onFix, { fresh: true });
       }
-      if (cancelled()) return;
+      if (cancelled()) {
+        if (ownsTask()) await stopWatchingLocation(); // cancelWalk may have stopped before the task finished starting
+        return;
+      }
       if (!initialLoc) {
+        await stopWatchingLocation();
         Alert.alert(t('app.errorTitle'), t('app.noInitialLocation'));
         return;
       }
@@ -275,8 +309,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       cueTracker.reset();
       startWalkCueState(walkCueState, initialLoc);
 
-      // Start watching location first (foreground-service-backed, gps.ts manages the subscription internally)
-      walkRef.current = newWalk; // before the watcher, so no early fix is dropped
+      walkRef.current = newWalk;
       finishingRef.current = false;
       resetGapState();
       const autoEnabled = await Promise.resolve()
@@ -285,19 +318,28 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       autoFinishRef.current = startAutoFinish(initialLoc, newWalk.startTime, autoEnabled);
       setAutoFinishEnabled(autoEnabled);
       setHomeCountdownMin(null);
-      await activeWalk?.begin(newWalk); // before the watcher: the first stored fix must find the walk row
-      const watching = await startWatchingLocation(makeFixHandler(), { fresh: true });
+      await activeWalk?.begin(newWalk); // the first stored fix must find the walk row
+      if (!cancelled()) {
+        // Hand over to the live handler in one synchronous step, so no fix slips between buffer and walk.
+        const handler = makeFixHandler();
+        const early = buffered.filter((f) => f.timestamp > initialLoc.timestamp);
+        early.forEach((f) => activeWalk?.addFix(f)); // the recorder saw them before the walk row existed and ignored them
+        early.forEach(handler);
+        liveHandler = handler;
+      }
       if (!watching) {
         // Previously swallowed: the walk then "tracked" with only its first point.
         log('WALK_WATCH_FAILED', { id: newWalk.id });
         setError(t('app.watchFailed'));
       }
       if (cancelled()) {
-        // cancelWalk ran while the watcher was starting; it may have stopped nothing yet.
-        walkRef.current = null;
-        await stopWatchingLocation();
+        // cancelWalk ran during the async steps; it may have stopped nothing yet.
+        if (ownsTask()) {
+          walkRef.current = null;
+          await stopWatchingLocation();
+        }
         // begin() above may have stored the walk after cancelWalk's own clear: drop it, or a relaunch would "restore" a cancelled walk.
-        void activeWalk?.end();
+        if (ownsTask()) void activeWalk?.end();
         return;
       }
 
@@ -323,6 +365,13 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       checkAndScheduleWalkReminder({ walkRepository, notificationRepository }, Date.now(), [newWalk]).catch((err) =>
         log('WALK_REMINDER_CHECK_ERROR', { error: String(err) })
       );
+    } catch (error) {
+      // begin/startAutoFinish threw: no half-started walk with a running task.
+      if (taskOwnerRef.current === token && !cancelled()) {
+        walkRef.current = null;
+        await stopWatchingLocation().catch(() => undefined);
+      }
+      throw error;
     } finally {
       if (startTokenRef.current === token) startingRef.current = false;
     }
@@ -431,6 +480,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     const token = ++startTokenRef.current;
     const cancelled = () => startTokenRef.current !== token;
     try {
+      taskOwnerRef.current = token;
       walkRef.current = restored;
       finishingRef.current = false;
       cueTracker.reset();
@@ -441,8 +491,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       setAutoFinishEnabled(autoFinish.enabled);
       setHomeCountdownMin(homeCountdownMinutes(autoFinish, Date.now()));
 
-      // (Re)starts the location task: restarting a running one is harmless, and it re-attaches this session's callback.
-      const watching = await startWatchingLocation(makeFixHandler());
+      // Re-attaches this session's callback; starts the location task only if it is not already running (and defers it when in the background).
+      const watching = await startWatchingLocation(makeFixHandler(), { resume: true });
       if (!watching) {
         log('WALK_WATCH_FAILED', { id: restored.id });
         setError(t('app.watchFailed'));
