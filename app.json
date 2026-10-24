@@ -76,7 +76,6 @@
           "microphonePermission": false
         }
       ],
-      "expo-image-manipulator",
       [
         "expo-audio",
         {
