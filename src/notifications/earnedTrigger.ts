@@ -52,6 +52,6 @@ export async function checkAndScheduleEarnedTriggerNotification(deps: EarnedTrig
     return;
   }
 
-  await scheduleOverflowNotification(bucket, overflowNotificationBody(denState.treats));
+  await scheduleOverflowNotification(bucket, overflowNotificationBody(denState.treats + denState.pile));
   await notificationRepository.saveState({ ...clearedBookkeeping, overflowSurfaced: true, learnedTimeOfDayBucket: bucket });
 }

@@ -36,7 +36,20 @@ export interface DenEconomyState {
    * permanently on the Doorstep and Den screens.
    */
   territoryIncomeRevealed: boolean;
+  /**
+   * Treats the Bakery/territories have baked but the player has not harvested yet (the heap at the bowl). Never expires.
+   * `treats` is the bank; the invariant is treats + pile <= storage cap. lastTickAt = "pile settled up to here".
+   */
+  pile: number;
+  /** Household-local day key of the latest rewarded Buddy tap and how many were rewarded on it. Re-derived against today's key, never read alone (like manualLogDayKey). Server-owned: the household shares one counter. */
+  tapDayKey: string | null;
+  tapCount: number;
 }
+
+/** Rewarded Buddy taps per household day (docs/specs/den-economy.md "Buddy tap bonus"). */
+export const BUDDY_TAPS_PER_DAY = 30;
+/** One rewarded tap gives 1..3 treats. */
+export const BUDDY_TAP_MAX_TREATS = 3;
 
 export type UpgradeError = 'insufficient-treats' | 'max-level';
 
@@ -57,6 +70,9 @@ export function defaultDenEconomyState(now: number): DenEconomyState {
     routeRefreshDayKey: null,
     territoriesBackfillComplete: false,
     territoryIncomeRevealed: false,
+    pile: 0,
+    tapDayKey: null,
+    tapCount: 0,
   };
 }
 
@@ -131,12 +147,37 @@ export function applyPassiveAccrual(
   const territoryRateValue = computeTerritoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), state.level);
   const earned = elapsedHours * (passiveTreatsPerHour(state.bakeryLevel, state.level) + territoryRateValue);
 
+  // Same earned amount and cap as before, but it lands in the pile; bank + pile never exceed the cap.
   return {
     ...state,
-    treats: Math.min(cap, state.treats + earned),
+    pile: Math.min(state.pile + earned, Math.max(0, cap - state.treats)),
     lastTickAt: now,
     territoryIncomeRevealed: state.territoryIncomeRevealed || territoryRateValue >= TERRITORY_INCOME_DISPLAY_FLOOR,
   };
+}
+
+/** Moves the whole pile into the bank. Total (bank + pile) is unchanged, so the cap invariant holds. */
+export function harvestPile(state: DenEconomyState): DenEconomyState {
+  if (state.pile <= 0) return state;
+  return { ...state, treats: state.treats + state.pile, pile: 0 };
+}
+
+export interface BuddyTapResult {
+  state: DenEconomyState;
+  /** Treats credited (0 = capped day or full bank: Buddy still reacts, the tap was not used up). */
+  credited: number;
+}
+
+/**
+ * One tap on Buddy. `roll` is the 1..3 treats the caller rolled. Gives nothing (and uses up no tap) when today's
+ * 30 are spent or bank + pile has no room. Server twin: applyBuddyTaps in server/src/economy/denTransitions.ts.
+ */
+export function applyBuddyTap(state: DenEconomyState, todayKey: string, roll: number): BuddyTapResult {
+  const used = state.tapDayKey === todayKey ? state.tapCount : 0;
+  const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
+  const gain = Math.min(Math.max(1, Math.floor(roll)), BUDDY_TAP_MAX_TREATS, Math.floor(cap - state.treats - state.pile));
+  if (used >= BUDDY_TAPS_PER_DAY || gain < 1) return { state, credited: 0 };
+  return { state: { ...state, treats: state.treats + gain, tapDayKey: todayKey, tapCount: used + 1 }, credited: gain };
 }
 
 export interface AwardWalkTreatsResult {
@@ -166,8 +207,10 @@ export function awardWalkTreats(
   const cap = storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel);
   const fullPayout = buddyTreatsPerWalk(state.level, state.sniffGardenLevel);
   const treatsAwarded = Math.round(fullPayout * multiplier * bloomMultiplier);
+  // The walk ends by emptying the pile into the bank first; the reward is then clamped to the cap as it always was.
+  const banked = harvestPile(state);
   return {
-    state: { ...state, treats: Math.min(cap, state.treats + treatsAwarded) },
+    state: { ...banked, treats: Math.min(cap, banked.treats + treatsAwarded) },
     treatsAwarded,
   };
 }
@@ -228,11 +271,13 @@ export function getUpgradeTease(state: DenEconomyState): UpgradeTease | null {
     return null;
   }
 
-  const affordableNow = upgradable.filter((x) => state.treats >= x.cost);
+  // Upgrading banks the pile first, so a waiting pile counts as affordable.
+  const available = state.treats + state.pile;
+  const affordableNow = upgradable.filter((x) => available >= x.cost);
   const pool = affordableNow.length > 0 ? affordableNow : upgradable;
   const cheapest = pool.slice().sort((a, b) => a.cost - b.cost)[0];
 
-  return { building: cheapest.building, cost: cheapest.cost, affordable: state.treats >= cheapest.cost };
+  return { building: cheapest.building, cost: cheapest.cost, affordable: available >= cheapest.cost };
 }
 
 export function upgradeBuilding(
@@ -246,14 +291,16 @@ export function upgradeBuilding(
     return { error: 'max-level' };
   }
 
+  // The pile counts: it is banked first, so the player never sees "not enough" while cookies wait.
+  const banked = harvestPile(state);
   const cost = upgradeCost(building, currentLevel + 1);
-  if (state.treats < cost) {
+  if (banked.treats < cost) {
     return { error: 'insufficient-treats' };
   }
 
   return {
-    ...state,
-    treats: state.treats - cost,
+    ...banked,
+    treats: banked.treats - cost,
     [key]: currentLevel + 1,
   };
 }

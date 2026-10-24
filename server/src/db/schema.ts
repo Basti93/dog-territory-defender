@@ -169,6 +169,9 @@ export const denState = pgTable('den_state', {
   xp: doublePrecision('xp').notNull().default(0),
   level: integer('level').notNull().default(1),
   territoryIncomeRevealed: boolean('territory_income_revealed').notNull().default(false),
+  pile: doublePrecision('pile').notNull().default(0),
+  tapDayKey: text('tap_day_key'),
+  tapCount: integer('tap_count').notNull().default(0),
   rev: integer('rev').notNull().default(0),
   updatedAt: ms('updated_at').notNull(),
 });

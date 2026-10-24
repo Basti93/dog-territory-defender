@@ -23,6 +23,9 @@ interface DenEconomyRow {
   routeRefreshDayKey: string | null;
   territoriesBackfillComplete: number;
   territoryIncomeRevealed: number;
+  pile: number;
+  tapDayKey: string | null;
+  tapCount: number;
 }
 
 function rowToState(row: DenEconomyRow): DenEconomyState {
@@ -42,6 +45,9 @@ function rowToState(row: DenEconomyRow): DenEconomyState {
     routeRefreshDayKey: row.routeRefreshDayKey,
     territoriesBackfillComplete: row.territoriesBackfillComplete === 1,
     territoryIncomeRevealed: row.territoryIncomeRevealed === 1,
+    pile: row.pile ?? 0,
+    tapDayKey: row.tapDayKey ?? null,
+    tapCount: row.tapCount ?? 0,
   };
 }
 
@@ -77,7 +83,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         manualLogCountToday INTEGER NOT NULL DEFAULT 0,
         routeRefreshDayKey TEXT,
         territoriesBackfillComplete INTEGER NOT NULL DEFAULT 0,
-        territoryIncomeRevealed INTEGER NOT NULL DEFAULT 0
+        territoryIncomeRevealed INTEGER NOT NULL DEFAULT 0,
+        pile REAL NOT NULL DEFAULT 0,
+        tapDayKey TEXT,
+        tapCount INTEGER NOT NULL DEFAULT 0
       );
     `);
     // Migration for rows created before xp/level existed (e.g. an already-installed app).
@@ -108,6 +117,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     // once, and no territory-income line has ever been revealed.
     await addColumnIfMissing(db, 'den_economy', 'territoriesBackfillComplete INTEGER NOT NULL DEFAULT 0');
     await addColumnIfMissing(db, 'den_economy', 'territoryIncomeRevealed INTEGER NOT NULL DEFAULT 0');
+    // Harvest pile and Buddy tap counter (docs/specs/den-economy.md): an existing install starts with an empty pile.
+    await addColumnIfMissing(db, 'den_economy', 'pile REAL NOT NULL DEFAULT 0');
+    await addColumnIfMissing(db, 'den_economy', 'tapDayKey TEXT');
+    await addColumnIfMissing(db, 'den_economy', 'tapCount INTEGER NOT NULL DEFAULT 0');
     return db;
   });
 
@@ -140,8 +153,8 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
     async saveState(state: DenEconomyState): Promise<void> {
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete, manualLogDayKey, manualLogCountToday, routeRefreshDayKey, territoriesBackfillComplete, territoryIncomeRevealed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO den_economy (id, treats, doghouseLevel, bakeryLevel, sniffGardenLevel, lastTickAt, xp, level, dogName, cliffhangerShownForLevel, homeRangeBackfillComplete, manualLogDayKey, manualLogCountToday, routeRefreshDayKey, territoriesBackfillComplete, territoryIncomeRevealed, pile, tapDayKey, tapCount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            treats = excluded.treats,
            doghouseLevel = excluded.doghouseLevel,
@@ -157,7 +170,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
            manualLogCountToday = excluded.manualLogCountToday,
            routeRefreshDayKey = excluded.routeRefreshDayKey,
            territoriesBackfillComplete = excluded.territoriesBackfillComplete,
-           territoryIncomeRevealed = excluded.territoryIncomeRevealed`,
+           territoryIncomeRevealed = excluded.territoryIncomeRevealed,
+           pile = excluded.pile,
+           tapDayKey = excluded.tapDayKey,
+           tapCount = excluded.tapCount`,
         SINGLETON_ID,
         state.treats,
         state.doghouseLevel,
@@ -173,7 +189,10 @@ export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAM
         state.manualLogCountToday,
         state.routeRefreshDayKey,
         state.territoriesBackfillComplete ? 1 : 0,
-        state.territoryIncomeRevealed ? 1 : 0
+        state.territoryIncomeRevealed ? 1 : 0,
+        state.pile,
+        state.tapDayKey,
+        state.tapCount
       );
     },
   };

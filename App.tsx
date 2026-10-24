@@ -5,7 +5,8 @@ import { t } from './src/i18n';
 
 
 import { repos } from './src/app/repositories';
-import { loadHouseholdLines, onPartnerWalks, partnerHomecoming, presenceSender, presenceViewer, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
+import { buddyTapBatcher, householdDayKey, loadHouseholdLines, onPartnerWalks, partnerHomecoming, presenceSender, presenceViewer, syncEngine, syncOnLaunch } from './src/app/syncRuntime';
+import { harvestCommand } from './src/sync/outbox';
 import { useSync } from './src/sync/useSync';
 import { usePresenceViewer } from './src/sync/usePresenceViewer';
 import { usePartnerHomecoming } from './src/sync/usePartnerHomecoming';
@@ -81,6 +82,8 @@ export default function App() {
   const [homeRangeRefreshKey, setHomeRangeRefreshKey] = useState(0);
   const bumpRangeRefresh = () => setHomeRangeRefreshKey((k) => k + 1);
   const [treats, setTreats] = useState<number | null>(null);
+  // Baked but not yet harvested (the heap at the bowl); `treats` is the bank.
+  const [pile, setPile] = useState<number | null>(null);
   const [level, setLevel] = useState<number | null>(null);
   // "Somewhere Wild": the marker and the card are both driven from this single
   // piece of state, so they always agree on the same spot.
@@ -98,6 +101,7 @@ export default function App() {
   useSync(syncEngine, {
     onDenChanged: (state) => {
       setTreats(state.treats);
+      setPile(state.pile);
       setLevel(state.level);
       if (state.dogName) setDogName(state.dogName);
     },
@@ -127,6 +131,7 @@ export default function App() {
     onRangeChanged: bumpRangeRefresh,
     onRewards: (outcome) => {
       setTreats(outcome.treats);
+      setPile(0); // a walk banks the pile first
       setLevel(outcome.level);
       // Wild Extras: remembered in memory until the Den next opens (never played over the walk or celebration).
       queueWalkTrigger(
@@ -174,6 +179,7 @@ export default function App() {
     onRangeChanged: bumpRangeRefresh,
     onLogged: (outcome) => {
       setTreats(outcome.treats);
+      setPile(0);
       setLevel(outcome.level);
       // Every dismiss of Log a Missed Walk returns to the Doorstep; the
       // celebration renders on top of it and always wins (see below).
@@ -186,6 +192,7 @@ export default function App() {
     repos,
     applyFirstLaunch: firstLaunch.applyLoaded,
     setTreats,
+    setPile,
     setLevel,
     openDen: () => nav.goTo('den'),
     openDoorstep: nav.goDoorstep,
@@ -316,6 +323,7 @@ export default function App() {
       <WorldScene
         dogName={dogName}
         treats={treats ?? 0}
+        pile={pile ?? undefined}
         level={level ?? 1}
         pendingDenAchievements={launch.pendingDenAchievements}
         session={launch.doorstepSession}
@@ -335,6 +343,10 @@ export default function App() {
         onBuddyGreetingStarted={launch.onBuddyGreetingStarted}
         onAcknowledgePendingAchievements={launch.clearPendingDenAchievements}
         onTreatsChanged={setTreats}
+        onPileChanged={setPile}
+        onHarvested={(at) => void syncEngine.enqueueCommand(harvestCommand(at))}
+        onBuddyTap={(paid) => buddyTapBatcher.add(paid)}
+        getDayKey={householdDayKey}
         onUpgraded={(building) => void syncEngine.enqueueCommand({ kind: 'den.upgrade', building })}
         onStartWalk={() =>
           void startWalkWhenRestored({

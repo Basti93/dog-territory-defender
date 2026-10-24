@@ -31,7 +31,7 @@ import type { NeighbourhoodActions } from './neighbourhood';
 import { pickPartnerName } from './partnerName';
 import { createStatsSync } from './statsSync';
 import { getNeighbourhood, resetNeighbourhood, setNeighbourhood, setNeighbourLines } from './neighbourhoodStore';
-import { enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
+import { buddyTapsCommand, enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
 export interface SyncEngineDeps {
@@ -121,6 +121,13 @@ export interface SyncEngine extends NeighbourhoodActions {
   renameCorner(cornerId: string, name: string): Promise<boolean>;
   /** The display name of the member who wrote a corner's name when that is NOT this player; null for the own name, an unknown writer or when not joined. */
   cornerNamedBy(playerId: string | null): Promise<string | null>;
+  /**
+   * One rewarded Buddy tap paid `treats`: persisted at once by coalescing into the single unsent `den.buddyTaps` row
+   * (or a new row while a sync is running or the row was already tried). No-op when not joined. Does not start a sync.
+   */
+  addBuddyTap(treats: number): Promise<void>;
+  /** The household's IANA timezone from the latest snapshot, or undefined (not joined / not synced yet). */
+  householdTimezone(): Promise<string | undefined>;
   /** Queues `walk.delete` for a walk deleted from History (no-op when not joined). The server keeps the walk's cells. */
   enqueueWalkDelete(walkId: string): Promise<void>;
   /**
@@ -128,6 +135,13 @@ export interface SyncEngine extends NeighbourhoodActions {
    * `foreground`: the app just came to the front, so a changed stats copy goes up now instead of waiting out its 60 s spacing.
    */
   syncNow(options?: { force?: boolean; foreground?: boolean }): Promise<void>;
+}
+
+/** Commands an older server may not know yet (additive API): a 400 drops them instead of retrying. */
+function isOptionalDenCommand(item: { kind: string; payload: unknown }): boolean {
+  if (item.kind !== 'command') return false;
+  const kind = (item.payload as CommandBody).kind;
+  return kind === 'den.harvest' || kind === 'den.buddyTaps';
 }
 
 /** Safety cap on pages per run; the rest arrives on the next sync. */
@@ -159,6 +173,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
   const listeners = new Set<() => void>();
   let callbacks: SyncCallbacks = {};
   let inFlight: Promise<void> | null = null;
+  let buddyTapQueue: Promise<void> = Promise.resolve();
   let runAgain = false;
   let busy = false;
   let unauthorized = false;
@@ -247,6 +262,12 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           notify();
           return false;
         }
+        if (isOptionalDenCommand(item) && err.status === 400 && err.code === 'bad_request') {
+          // An older server does not know den.harvest / den.buddyTaps (schema 400 'bad_request'; a 404 household is a normal failure): the local result stands, the next pull corrects it. Drop the row.
+          await deps.sync.remove(item.id);
+          log('SYNC_COMMAND_DROPPED', { kind: (item.payload as CommandBody).kind, status: err.status });
+          continue;
+        }
         const plan = planFailure(item.attempts, err.retryable, now());
         await deps.sync.recordFailure(item.id, err.message, plan.nextAttemptAt, plan.deadAt);
         log('SYNC_PUSH_FAILED', { id: item.id, kind: item.kind, error: err.message, dead: plan.deadAt !== null });
@@ -296,6 +317,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
         lastTickAt: den.lastTickAt,
         xp: den.xp,
         level: den.level,
+        pile: den.pile,
       },
       dog: { name: den.dogName, appearance: appearance as Record<string, unknown> },
     };
@@ -569,6 +591,30 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       await enqueueEconomyCommand(deps.sync, command, now());
       notify();
       void syncNow();
+    },
+
+    addBuddyTap(treats) {
+      const run = async () => {
+        const identity = await deps.settings.getSyncIdentity();
+        if (!identity) return;
+        if (!inFlight) {
+          const open = (await deps.sync.getPending()).find(
+            (i) => i.kind === 'command' && i.attempts === 0 && (i.payload as CommandBody).kind === 'den.buddyTaps'
+          );
+          if (open) {
+            const p = open.payload as Extract<CommandBody, { kind: 'den.buddyTaps' }>;
+            await deps.sync.updatePayload(open.id, buddyTapsCommand(p.taps + 1, p.treats + treats));
+            return;
+          }
+        }
+        await enqueueEconomyCommand(deps.sync, buddyTapsCommand(1, treats), now());
+      };
+      buddyTapQueue = buddyTapQueue.then(run, run);
+      return buddyTapQueue;
+    },
+
+    async householdTimezone() {
+      return (await deps.sync.getState()).householdTimezone;
     },
 
     async enqueueWalk(walk, territoryNameHint) {

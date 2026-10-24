@@ -203,7 +203,7 @@ export async function awardWalkRewards(
 
   const personalStats = await personalStatsRepository.getState();
   const walkResult = recordWalkClosed(personalStats, walk, cellsPainted);
-  const treatsResult = recordTreatsEarned(walkResult.stats, treatsAwarded);
+  const treatsResult = recordTreatsEarned(walkResult.stats, treatsAwarded + denState.pile); // the walk also banked the pile (harvest-first), which counts as earned
   const newlyUnlockedAchievements = [...walkResult.newlyUnlocked, ...treatsResult.newlyUnlocked];
   await personalStatsRepository.saveState(treatsResult.stats);
   if (newlyUnlockedAchievements.length > 0) {

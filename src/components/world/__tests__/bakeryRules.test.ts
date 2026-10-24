@@ -3,7 +3,7 @@ import { BALANCE } from '../../../economy/balanceConfig';
 import { DenEconomyState } from '../../../economy/denEconomy';
 import { passiveTreatsPerHour, storageCap } from '../../../economy/formulas';
 import { formatNumber, setLocale } from '../../../i18n';
-import { MAX_EMIT_MS, MIN_EMIT_MS, bakeryEmitIntervalMs, bowlAtCap, bowlFillLevel, burstSpriteCount, projectedTreats } from '../bakeryRules';
+import { MAX_EMIT_MS, MIN_EMIT_MS, bakeryEmitIntervalMs, bowlAtCap, bowlFillLevel, burstSpriteCount, projectedPile } from '../bakeryRules';
 
 describe('bowlFillLevel', () => {
   it('is 0 when empty and 5 when full', () => {
@@ -23,16 +23,20 @@ describe('bowlFillLevel', () => {
   });
 });
 
-describe('bowlAtCap / projectedTreats', () => {
+describe('bowlAtCap / projectedPile', () => {
   it('detects the cap', () => {
     expect(bowlAtCap(200, 200)).toBe(true);
     expect(bowlAtCap(199.9, 200)).toBe(false);
     expect(bowlAtCap(5, 0)).toBe(false);
   });
-  it('adds the session gain but never beyond the cap', () => {
-    expect(projectedTreats(10, 2.5, 200)).toBe(12.5);
-    expect(projectedTreats(199, 5, 200)).toBe(200);
-    expect(projectedTreats(10, -3, 200)).toBe(10);
+  it('adds what was baked since the watermark to the settled pile', () => {
+    const HOUR = 3_600_000;
+    expect(projectedPile(2, 0, 2 * HOUR, 3, 10, 200)).toBe(8);
+    expect(projectedPile(2, 5 * HOUR, 0, 3, 10, 200)).toBe(2); // a clock behind the watermark adds nothing
+  });
+  it('never grows past the room next to the bank', () => {
+    expect(projectedPile(0, 0, 10 * 3_600_000, 50, 190, 200)).toBe(10);
+    expect(projectedPile(0, 0, 3_600_000, 5, 250, 200)).toBe(0);
   });
 });
 
@@ -74,5 +78,12 @@ describe('nextEffectLabel', () => {
   });
   it('is null at max level', () => {
     expect(nextEffectLabel('bakery', { ...base, bakeryLevel: BALANCE.maxBuildingLevel })).toBeNull();
+  });
+});
+
+describe('bowlAtCap float tolerance', () => {
+  it('counts a sum that misses the cap by float dust as full', () => {
+    expect(bowlAtCap(0.1 + 0.2 + 199.7, 200)).toBe(true);
+    expect(bowlAtCap(199.99, 200)).toBe(false);
   });
 });

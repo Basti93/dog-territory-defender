@@ -6,8 +6,8 @@ import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { corners, dogs, economyCommands, gifts, households, players, walks } from '../db/schema';
 import { canonicalJson } from '../lib/canonicalJson';
-import { sameLocalDay } from '../lib/time';
-import { applyPassiveAccrual, upgradeBuilding } from '../economy/denTransitions';
+import { dayKeyInZone, sameLocalDay } from '../lib/time';
+import { applyBuddyTaps, giftRoom, applyPassiveAccrual, harvestAt, upgradeBuilding } from '../economy/denTransitions';
 import { appendEvent, currentSeq, type EventBus } from './events';
 import { denFromRow, dogFromRow, lockDen, saveDen, stripRev, worldMass } from './state';
 import type { AuthCtx } from './walks';
@@ -88,6 +88,22 @@ export async function runCommand(
         await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den });
         break;
       }
+      case 'den.harvest': {
+        // `at` is when the player tapped (maybe offline): never before the watermark, never in the future.
+        const at = Math.min(now, Math.max(den.lastTickAt, Math.round(cmd.at)));
+        const harvested = harvestAt(stripRev(den), at, await worldMass(dbx, hid));
+        den = await saveDen(dbx, hid, denRow.rev, harvested, now);
+        await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den });
+        break;
+      }
+      case 'den.buddyTaps': {
+        // Phones credited their taps locally; this trims to the household day's 30 and to the cap. Never an error.
+        const accrued = applyPassiveAccrual(stripRev(den), now, await worldMass(dbx, hid));
+        const next = applyBuddyTaps(accrued, dayKeyInZone(now, timezone), cmd.taps, cmd.treats);
+        den = await saveDen(dbx, hid, denRow.rev, next, now);
+        await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den });
+        break;
+      }
       case 'dog.update': {
         const patch: Partial<typeof dogs.$inferInsert> = { updatedAt: now };
         if (cmd.name !== undefined) patch.name = cmd.name;
@@ -154,7 +170,7 @@ export async function runCommand(
           await dbx.update(gifts).set({ openedAt: now, openedByPlayerId: auth.playerId }).where(eq(gifts.id, gift.id));
           if (gift.sprinkleTreats) {
             const accrued = applyPassiveAccrual(stripRev(den), now, await worldMass(dbx, hid));
-            den = await saveDen(dbx, hid, denRow.rev, { ...accrued, treats: accrued.treats + gift.sprinkleTreats }, now);
+            den = await saveDen(dbx, hid, denRow.rev, { ...accrued, treats: Math.max(accrued.treats, Math.min(accrued.treats + gift.sprinkleTreats, giftRoom(accrued))) }, now);
             await appendEvent(dbx, hid, 'den.updated', auth.playerId, { den });
           }
         }

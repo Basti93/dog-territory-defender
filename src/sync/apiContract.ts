@@ -167,6 +167,11 @@ export interface ApiDenState {
   xp: number;
   level: number;
   territoryIncomeRevealed: boolean;
+  /** Baked but not yet harvested treats (the heap at the bowl); absent from an older server = 0. bank + pile <= storage cap. */
+  pile?: number;
+  /** Household-local day key of the latest rewarded Buddy tap and the rewarded count on that day; absent = none yet. */
+  tapDayKey?: string | null;
+  tapCount?: number;
   /** Increments on every mutation; clients replace local Den state when this is newer. */
   rev: number;
 }
@@ -431,6 +436,16 @@ export type CommandBody =
   | { kind: 'den.upgrade'; building: BuildingKey }
   /** Applies passive accrual to the stored Den state (the "collect" tap). Always ok. */
   | { kind: 'den.claim' }
+  /**
+   * The "harvest" tap: settles passive income up to `at` (clamped to [lastTickAt, server now], so an offline tap is
+   * honest), moves the pile into the bank and keeps `at` as the new accrual watermark. Always ok.
+   */
+  | { kind: 'den.harvest'; at: number }
+  /**
+   * Buddy tap bonus, batched: `taps` taps the phone already credited with `treats` in total (1..3 each). The server
+   * trims to 30 rewarded taps per household day and to the storage cap; it never fails.
+   */
+  | { kind: 'den.buddyTaps'; taps: number; treats: number }
   | { kind: 'dog.update'; name?: string | null; appearance?: Record<string, unknown> }
   /**
    * Walks are soft-deleted; the cells they painted STAY (the Range never shrinks, so a delete cannot
@@ -663,6 +678,8 @@ export interface ImportDen {
   lastTickAt: number;
   xp: number;
   level: number;
+  /** Unharvested pile of the founding phone (absent = 0). */
+  pile?: number;
 }
 
 export interface ImportRequest {

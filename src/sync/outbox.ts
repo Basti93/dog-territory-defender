@@ -60,3 +60,11 @@ export function renameCommand(name: string): CommandBody {
 export function upgradeCommand(building: BuildingKey): CommandBody {
   return { kind: 'den.upgrade', building };
 }
+
+export function harvestCommand(at: number): CommandBody {
+  return { kind: 'den.harvest', at: Math.round(at) };
+}
+
+export function buddyTapsCommand(taps: number, treats: number): CommandBody {
+  return { kind: 'den.buddyTaps', taps, treats };
+}

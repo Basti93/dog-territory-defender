@@ -12,6 +12,8 @@ import {
   getUpgradeTease,
   recordManualLogUsage,
   reconcileBuddyLevelCatchUp,
+  applyBuddyTap,
+  harvestPile,
   upgradeBuilding,
 } from '../denEconomy';
 import { setLocale } from '../../i18n';
@@ -53,7 +55,8 @@ describe('applyPassiveAccrual', () => {
     const state = defaultDenEconomyState(NOW);
     const after = applyPassiveAccrual(state, NOW + 3 * HOUR);
     // bakeryLevel 1, buddyLevel 1 -> 1 treat/hour, 3 hours elapsed
-    expect(after.treats).toBe(state.treats + 3);
+    expect(after.treats).toBe(state.treats); // the bank is untouched, the bakery fills the pile
+    expect(after.pile).toBe(3);
     expect(after.lastTickAt).toBe(NOW + 3 * HOUR);
   });
 
@@ -61,7 +64,9 @@ describe('applyPassiveAccrual', () => {
     const cap = storageCap(1, 1, 1, 1);
     const state = { ...defaultDenEconomyState(NOW), treats: cap - 0.5, bakeryLevel: 1 };
     const after = applyPassiveAccrual(state, NOW + 10 * HOUR);
-    expect(after.treats).toBe(cap);
+    expect(after.treats).toBe(cap - 0.5);
+    expect(after.pile).toBeCloseTo(0.5, 9); // bank + pile never pass the cap
+    expect(after.treats + after.pile).toBeCloseTo(cap, 9);
   });
 
   // docs/decisions/territories.md Decision 6 — territoryRate is an
@@ -73,13 +78,13 @@ describe('applyPassiveAccrual', () => {
 
     const after = applyPassiveAccrual(state, NOW + 1 * HOUR, worldMass);
 
-    expect(after.treats).toBeCloseTo(state.treats + 1 + expectedTerritoryRate, 6);
+    expect(after.pile).toBeCloseTo(1 + expectedTerritoryRate, 6);
   });
 
   it('defaults to zero worldMass (no territory-income contribution) when the caller omits it — existing callers keep working unchanged', () => {
     const state = defaultDenEconomyState(NOW);
     const after = applyPassiveAccrual(state, NOW + 3 * HOUR);
-    expect(after.treats).toBe(state.treats + 3);
+    expect(after.pile).toBe(3);
   });
 
   // docs/decisions/territories.md Decision 6 — the one-off reveal
@@ -345,5 +350,72 @@ describe('evaluateManualLogQuota / recordManualLogUsage', () => {
     const state = defaultDenEconomyState(NOW);
     const after = recordManualLogUsage(state, NOW, false);
     expect(canOfferRouteRefreshToday(after, NOW)).toBe(true);
+  });
+});
+
+describe('harvest pile', () => {
+  it('harvestPile moves the whole pile into the bank and leaves the total alone', () => {
+    const state = { ...defaultDenEconomyState(NOW), treats: 10, pile: 7.5 };
+    const after = harvestPile(state);
+    expect(after.treats).toBe(17.5);
+    expect(after.pile).toBe(0);
+  });
+
+  it('bank + pile after accrual equals what bank-only accrual gave before (same totals)', () => {
+    const state = defaultDenEconomyState(NOW);
+    const after = applyPassiveAccrual(state, NOW + 5 * HOUR);
+    expect(after.treats + after.pile).toBe(state.treats + 5);
+  });
+
+  it('a walk reward banks the pile first, then clamps to the cap', () => {
+    const cap = storageCap(1, 1, 1, 1);
+    const state = { ...defaultDenEconomyState(NOW), treats: cap - 10, pile: 10 };
+    const { state: after } = awardWalkTreats(state);
+    expect(after.pile).toBe(0);
+    expect(after.treats).toBe(cap);
+  });
+
+  it('an upgrade banks the pile first, so a waiting pile pays for it', () => {
+    const state = { ...defaultDenEconomyState(NOW), doghouseLevel: 20, treats: 0, pile: 500 };
+    const result = upgradeBuilding(state, 'bakery');
+    expect('error' in result).toBe(false);
+    if (!('error' in result)) {
+      expect(result.pile).toBe(0);
+      expect(result.bakeryLevel).toBe(2);
+    }
+    expect(getUpgradeTease(state)?.affordable).toBe(true);
+  });
+});
+
+describe('applyBuddyTap', () => {
+  const DAY1 = '2026-10-24';
+  const roomy = { ...defaultDenEconomyState(NOW), doghouseLevel: 20, treats: 0 };
+
+  it('pays the roll into the bank and counts the tap', () => {
+    const r = applyBuddyTap(roomy, DAY1, 2);
+    expect(r.credited).toBe(2);
+    expect(r.state.treats).toBe(2);
+    expect(r.state.tapCount).toBe(1);
+    expect(r.state.tapDayKey).toBe(DAY1);
+  });
+
+  it('stops after 30 rewarded taps in a day and starts over the next day', () => {
+    let state = roomy;
+    for (let i = 0; i < 30; i++) state = applyBuddyTap(state, DAY1, 1).state;
+    expect(state.tapCount).toBe(30);
+    expect(applyBuddyTap(state, DAY1, 3)).toEqual({ state, credited: 0 });
+    expect(applyBuddyTap(state, '2026-10-25', 3).credited).toBe(3);
+  });
+
+  it('gives nothing and costs no tap when bank + pile fill the cap', () => {
+    const cap = storageCap(1, 1, 1, 1);
+    const full = { ...defaultDenEconomyState(NOW), treats: cap - 5, pile: 5 };
+    expect(applyBuddyTap(full, DAY1, 3)).toEqual({ state: full, credited: 0 });
+  });
+
+  it('trims to the room left under the cap', () => {
+    const cap = storageCap(1, 1, 1, 1);
+    const nearly = { ...defaultDenEconomyState(NOW), treats: cap - 1 };
+    expect(applyBuddyTap(nearly, DAY1, 3).credited).toBe(1);
   });
 });

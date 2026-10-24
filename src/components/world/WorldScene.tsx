@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { BuildingKey } from '../../economy/balanceConfig';
 import { dogDisplayName, getBuildingLevel } from '../../economy/denEconomy';
 import { currentTitleForLevel } from '../../economy/milestones';
 import { AchievementId } from '../../economy/personalStats';
+import * as haptics from '../../feedback/haptics';
 import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
 import type { NeighbourNote } from '../../sync/householdEvents';
@@ -24,7 +25,7 @@ import type { DenEconomyRepository } from '../../storage/DenEconomyRepository';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
 import type { TerritoryRepository } from '../../storage/TerritoryRepository';
 import type { WalkRepository } from '../../storage/WalkRepository';
-import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
+import { ArtImage, DecorImage, PaperNote, SpeechBubble, TextLink, TreatPop, WoodSign, material, mix, palette, radii, spacing, stitch, textStyle, tokens } from '../../ui';
 import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
 import type { AwayStripLine, DoorstepSession } from '../doorstepSession';
@@ -35,7 +36,7 @@ import { YardButterflies } from '../den/YardButterflies';
 import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
 import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
-import { bowlAtCap, chimneyAnchor } from './bakeryRules';
+import { BURST_FLIGHT_MS, BURST_STAGGER_MS, bowlAtCap, burstSpriteCount, chimneyAnchor } from './bakeryRules';
 import { useBackAction } from '../../app/backStack';
 import { BENCH_WALK_WINDOW } from '../../postcards/postcards';
 import { usePostcards } from '../../postcards/usePostcards';
@@ -93,7 +94,10 @@ const FENCE_LAYER_ROOM = 170;
 
 export interface WorldSceneProps {
   dogName: string | null;
+  /** The bank (the pill's number). */
   treats: number;
+  /** The unharvested pile at the bowl (App's live value); omitted = the stored one. */
+  pile?: number;
   level: number;
   pendingDenAchievements: AchievementId[];
   /** Resolved once per launch by App.tsx; the scene shows its loading view until it is set. */
@@ -112,6 +116,13 @@ export interface WorldSceneProps {
   onBuddyGreetingStarted?: () => void;
   onAcknowledgePendingAchievements?: () => void;
   onTreatsChanged: (treats: number) => void;
+  onPileChanged?: (pile: number) => void;
+  /** Household sync: a harvest was saved locally at this time (ms). */
+  onHarvested?: (at: number) => void;
+  /** Household sync: one rewarded Buddy tap paid this many treats (App batches them). */
+  onBuddyTap?: (treats: number) => void;
+  /** Day key for the Buddy tap counter in the household timezone (App passes the synced one). */
+  getDayKey?: (now: number) => Promise<string>;
   /** Household sync: called after an upgrade was saved locally. */
   onUpgraded?: (building: BuildingKey) => void;
   onStartWalk: () => void;
@@ -130,7 +141,7 @@ export interface WorldSceneProps {
   /** The `den` screen alias (notification taps): scroll to the yard and open the next-upgrade panel. */
   openDenPanel?: boolean;
   onDenPanelHandled?: () => void;
-  /** Treats the bakery accrued since the previous app open (App's launch routine; not re-derived). > 0 plays the welcome-back burst once per launch. */
+  /** Treats that landed in the pile since the previous app open (App's launch routine; not re-derived). >= 1 plays the soft welcome-back pop and line once per launch. */
   accruedDelta?: number;
   /** Current global territory income, treats/hour (App's launch routine); shown on the fence sign once revealed. */
   territoryIncomeRate?: number;
@@ -194,13 +205,13 @@ export function pickSceneNotes(
 let sleepyYawnPlayed = false;
 /** Sessions (one object per app launch, from App.tsx) whose welcome-back burst already played. */
 const welcomeBackPlayed = new WeakSet<DoorstepSession>();
-const WELCOME_BURST_MS = 1500;
 const BUDDY_GREETING_MS = 3000;
 
 export function WorldScene(props: WorldSceneProps) {
   const {
     dogName,
     treats,
+    pile,
     level,
     pendingDenAchievements,
     session,
@@ -218,6 +229,10 @@ export function WorldScene(props: WorldSceneProps) {
     onBuddyGreetingStarted,
     onAcknowledgePendingAchievements,
     onTreatsChanged,
+    onPileChanged,
+    onHarvested,
+    onBuddyTap,
+    getDayKey,
     onUpgraded,
     onStartWalk,
     updateCard,
@@ -283,13 +298,20 @@ export function WorldScene(props: WorldSceneProps) {
   }, [layout.startOffset]);
 
   // ---- Den state / upgrades (shared with the legacy DenScreen via useDen) ----
+  const getWorldMass = useCallback(() => homeRangeRepository.getWorldMass(), [homeRangeRepository]);
   const wildExtra = useWildExtra({ settingsRepository, sessionKind: session?.kind ?? 'fresh-open' });
   const den = useDen({
     repository: denEconomyRepository,
     personalStatsRepository,
     liveTreats: treats,
     liveLevel: level,
+    livePile: pile,
     onTreatsChanged,
+    onPileChanged,
+    getWorldMass,
+    onHarvested,
+    onBuddyTap,
+    getDayKey,
     onUpgraded,
     onUpgradeApplied: wildExtra.playLevelUp,
   });
@@ -440,28 +462,48 @@ export function WorldScene(props: WorldSceneProps) {
     ]).start();
   };
 
-  // ---- Bakery life: live bowl number, treats flying chimney -> bowl, welcome-back burst ----
+  // ---- Bakery life: the pile at the bowl, the harvest, treats flying chimney -> bowl ----
   // Nothing moves during a walk, the Homecoming, the gate beat or while the Viertel is in view.
   const projecting = ready && !walkActive && !homecoming;
   const flightsOn = projecting && !leaving && !isUp;
   const projection = useBowlProjection({ state: den.state, extraRate: territoryIncomeRate, active: projecting });
-  // First Hof view of the launch: if the bakery accrued something while the app was closed, roll it in once.
+  // First Hof view of the launch: if the bakery baked something while the app was closed, the bowl pops softly once and Buddy says so.
   const [welcome, setWelcome] = useState<{ n: number } | null>(null);
-  const [burst, setBurst] = useState<{ key: number; count: number } | null>(null);
   useLayoutEffect(() => {
     if (!projecting || !session || welcome || welcomeBackPlayed.has(session)) return;
     const n = Math.floor(accruedDelta);
     if (n < 1) return;
     welcomeBackPlayed.add(session);
     setWelcome({ n });
-    setBurst({ key: 1, count: n });
+    zoomBowl();
   }, [projecting, session, welcome, accruedDelta]);
-  const burstRunning = !!burst;
+
+  // Harvest juice: treats fly bowl -> pill, the pill's number stays on the old bank until they land, then "+N" pops and the pill bumps.
+  const [harvestBurst, setHarvestBurst] = useState<{ key: number; count: number } | null>(null);
+  const [heldBank, setHeldBank] = useState<number | null>(null);
+  const [landedPop, setLandedPop] = useState<{ n: number; amount: number } | null>(null);
+  const harvestedN = den.harvested?.n ?? 0;
   useEffect(() => {
-    if (!burstRunning) return;
-    const timer = setTimeout(() => setBurst(null), WELCOME_BURST_MS);
+    const h = den.harvested;
+    if (!h || h.n === 0) return;
+    setHarvestBurst({ key: h.n, count: h.amount });
+    play('treat');
+    haptics.success();
+    if (h.bankBefore !== undefined) setHeldBank(h.bankBefore);
+    const flightMs = BURST_FLIGHT_MS + BURST_STAGGER_MS * (burstSpriteCount(h.amount) - 1) + 100;
+    const timer = setTimeout(() => {
+      setHeldBank(null);
+      setLandedPop({ n: h.n, amount: h.amount });
+    }, flightMs);
     return () => clearTimeout(timer);
-  }, [burstRunning]);
+    // One run per harvest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [harvestedN]);
+  // The bowl tap: collect what is baked; with nothing to collect it just shows the sign larger, as before.
+  const harvest = async () => {
+    const amount = await den.handleHarvest();
+    if (amount < 1) zoomBowl();
+  };
 
   // ---- Notes (away strip, household, OTA card) ----
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set());
@@ -506,8 +548,10 @@ export function WorldScene(props: WorldSceneProps) {
   const statusCount = [showsTerritorySign, !!coopText, !!partnerWalk].filter(Boolean).length;
   const strip = signStrip({ width, fenceBottom: layout.fenceBottom, hasTitle: !!title, statusCount });
   const cap = projection.cap;
-  const shownTreats = projection.projected;
-  const treatCount = formatNumber(Math.floor(shownTreats));
+  const pileShown = projection.pile;
+  const bankShown = heldBank ?? state.treats;
+  const full = bowlAtCap(state.treats + pileShown, cap);
+  const pileCount = formatNumber(Math.floor(pileShown));
   const chimneySprite = yard.sprites.bakery;
   const chimney = chimneyAnchor(artTierForLevel(levels.bakery));
   const chimneyPoint = {
@@ -515,6 +559,8 @@ export function WorldScene(props: WorldSceneProps) {
     y: layout.yardH - chimneySprite.bottom - chimneySprite.size + chimneySprite.size * chimney.fy,
   };
   const bowlPoint = { x: width / 2, y: layout.yardH + 54 };
+  // The harvest flight lives in the fence layer (it must pass over the Hof and land on the pill): same x, y measured from the fence layer's top.
+  const flightFrom = { x: width / 2, y: layout.hofTop + bowlPoint.y };
   const extraEl = wildExtra.active ? (
     <YardExtras id={wildExtra.active} layout={yard} width={width} height={layout.yardH} onDone={wildExtra.onDone} />
   ) : null;
@@ -534,6 +580,7 @@ export function WorldScene(props: WorldSceneProps) {
   const gateHitTop = layout.gateBoxTop + GATE_BOX * 0.36;
   // The pill takes the space left of the (centred, ~200 pt) gate sign; on very narrow windows it is left out.
   const pillW = Math.min(PILL_MAX_W, width / 2 - GATE_SIGN_ROOM / 2 - PILL_EDGE - 4);
+  const pillPoint = { x: PILL_EDGE + Math.max(pillW, PILL_MIN_W) / 2, y: layout.gateSignTop + 22 };
 
   return (
     <View style={[styles.root, { backgroundColor: sky.base }]}>
@@ -595,8 +642,16 @@ export function WorldScene(props: WorldSceneProps) {
                 geometry={geometry}
                 butterflies={gardenStage3}
                 tap={tap}
+                onPress={() => void den.handleBuddyTap()}
               />
             </View>
+            {/* The small bonus pop above Buddy when his tap paid 1-3 treats. */}
+            <TreatPop
+              amount={den.buddyPop?.amount ?? 0}
+              trigger={den.buddyPop?.n}
+              emoji={null}
+              style={{ position: 'absolute', left: geometry.baseCx - 12, bottom: geometry.bottom + geometry.size * 0.85, zIndex: 7 }}
+            />
             {extraBehind && extraEl}
             <BuildingSprite
               building={{ key: 'doghouse', level: levels.doghouse }}
@@ -629,7 +684,7 @@ export function WorldScene(props: WorldSceneProps) {
                 ) : null;
               })()}
             {/* A slow sparkle beside that pennant: this building could grow. Only the affordable one, and only while the scene is calm. */}
-            {den.cheapestAffordable && flightsOn && !burst && (
+            {den.cheapestAffordable && flightsOn && (
               <UpgradeSparkle left={yard.world[den.cheapestAffordable.building].pennantLeft + 32} bottom={yard.world[den.cheapestAffordable.building].pennantBottom + 4} />
             )}
             {/* A small sign under every building. */}
@@ -759,11 +814,11 @@ export function WorldScene(props: WorldSceneProps) {
               </WoodSign>
             </View>
 
-            <BowlFill treats={shownTreats} cap={cap} boxLeft={width / 2 - 60} boxTop={4} />
+            <BowlFill pile={pileShown} room={projection.room} full={full} boxLeft={width / 2 - 60} boxTop={4} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('world.bowlLabel', { count: treatCount, cap: formatNumber(cap) })}
-              onPress={zoomBowl}
+              accessibilityLabel={pileShown >= 1 ? t('world.bowlLabel', { count: pileCount }) : t('world.bowlLabelEmpty')}
+              onPress={() => void harvest()}
               style={[styles.abs, { left: width / 2 - 60, top: 30, width: 120, height: 70 }]}
             />
             <Animated.View
@@ -771,12 +826,7 @@ export function WorldScene(props: WorldSceneProps) {
               style={[styles.abs, { left: width / 2 - 115, top: 96, width: 230, alignItems: 'center', transform: [{ scale: bowlScale }] }]}
             >
               <WoodSign size="medium" textStyleOverride={SMALL_SIGN_TEXT}>
-                <BowlSignContent
-                  shown={shownTreats}
-                  cap={cap}
-                  ratePerHour={homecoming ? 0 : projection.ratePerHour}
-                  welcomeFrom={welcome ? Math.max(0, Math.floor(state.treats - welcome.n)) : null}
-                />
+                <BowlSignContent pile={pileShown} ratePerHour={homecoming ? 0 : projection.ratePerHour} />
               </WoodSign>
             </Animated.View>
 
@@ -807,7 +857,7 @@ export function WorldScene(props: WorldSceneProps) {
 
           {/* Treats flying from the bakery chimney into the bowl. */}
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 6 }]}>
-            <TreatFlights active={flightsOn} ratePerHour={projection.ratePerHour} atCap={bowlAtCap(shownTreats, cap)} from={chimneyPoint} to={bowlPoint} burst={burst} />
+            <TreatFlights active={flightsOn} ratePerHour={projection.ratePerHour} atCap={full} from={chimneyPoint} to={bowlPoint} burst={null} />
           </View>
 
           {selected && (
@@ -870,10 +920,10 @@ export function WorldScene(props: WorldSceneProps) {
           {pillW >= PILL_MIN_W && (
             <View pointerEvents="box-none" style={[styles.abs, { left: PILL_EDGE, top: layout.gateSignTop + 2 }]}>
               <TreatsPill
-                shown={shownTreats}
+                shown={bankShown}
                 cap={cap}
+                full={full}
                 ratePerHour={walkActive || homecoming ? 0 : projection.ratePerHour}
-                welcomeFrom={welcome ? Math.max(0, Math.floor(state.treats - welcome.n)) : null}
                 width={pillW}
                 onPress={zoomBowl}
               />
@@ -923,6 +973,16 @@ export function WorldScene(props: WorldSceneProps) {
               {partnerWalk && <StatusSign text={t('world.partnerOut', { name: partnerWalk.name, dog })} testID="partner-sign" />}
             </View>
           )}
+          {/* Harvest: treats fly from the bowl up to the pill, then "+N" pops on it. */}
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 6 }]}>
+            <TreatFlights active={projecting} ratePerHour={0} atCap from={flightFrom} to={pillPoint} burst={harvestBurst} />
+            <TreatPop
+              amount={landedPop?.amount ?? 0}
+              trigger={landedPop?.n}
+              emoji={null}
+              style={{ position: 'absolute', left: pillPoint.x - 10, top: pillPoint.y + 14 }}
+            />
+          </View>
           <Pressable
             onPress={scrollToViertel}
             accessibilityRole="button"

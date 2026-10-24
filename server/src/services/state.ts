@@ -15,6 +15,9 @@ export function denFromRow(row: typeof denState.$inferSelect): ApiDenState {
     xp: row.xp,
     level: row.level,
     territoryIncomeRevealed: row.territoryIncomeRevealed,
+    pile: row.pile,
+    tapDayKey: row.tapDayKey,
+    tapCount: row.tapCount,
     rev: row.rev,
   };
 }
@@ -62,8 +65,8 @@ export const walkMetaFromRow = (r: Omit<typeof walks.$inferSelect, 'route' | 'ge
 });
 
 export function stripRev(den: ApiDenState): DenState {
-  const { rev: _rev, ...rest } = den;
-  return rest;
+  const { rev: _rev, pile, tapDayKey, tapCount, ...rest } = den;
+  return { ...rest, pile: pile ?? 0, tapDayKey: tapDayKey ?? null, tapCount: tapCount ?? 0 };
 }
 
 /** Global ungrouped world mass (territoryEconomy split-invariance rule): one aggregate over the whole cells table. */

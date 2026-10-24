@@ -50,6 +50,15 @@ export const CommandSchema = Type.Object(
     command: Type.Union([
       Type.Object({ kind: Type.Literal('den.upgrade'), building: Building }, { additionalProperties: false }),
       Type.Object({ kind: Type.Literal('den.claim') }, { additionalProperties: false }),
+      Type.Object({ kind: Type.Literal('den.harvest'), at: Type.Number({ minimum: 0 }) }, { additionalProperties: false }),
+      Type.Object(
+        {
+          kind: Type.Literal('den.buddyTaps'),
+          taps: Type.Integer({ minimum: 1, maximum: 1000 }),
+          treats: Type.Integer({ minimum: 1, maximum: 3000 }),
+        },
+        { additionalProperties: false }
+      ),
       Type.Object(
         {
           kind: Type.Literal('dog.update'),
@@ -183,6 +192,7 @@ export const ImportSchema = Type.Object(
         lastTickAt: Type.Number({ minimum: 0 }),
         xp: Type.Number({ minimum: 0, maximum: 1e12 }),
         level: Level,
+        pile: Type.Optional(Type.Number({ minimum: 0, maximum: 1e12 })),
       },
       { additionalProperties: false }
     ),

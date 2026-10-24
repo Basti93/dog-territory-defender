@@ -57,6 +57,13 @@
       "when": 1792361306379,
       "tag": "0007_player_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792839273507,
+      "tag": "0008_harvest_pile",
+      "breakpoints": true
     }
   ]
 }

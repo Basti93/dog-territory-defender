@@ -91,6 +91,9 @@ export async function importHousehold(
         xp,
         level,
         territoryIncomeRevealed: denRow.territoryIncomeRevealed,
+        pile: Math.max(0, req.den.pile ?? 0),
+        tapDayKey: denRow.tapDayKey,
+        tapCount: denRow.tapCount,
       },
       now
     );

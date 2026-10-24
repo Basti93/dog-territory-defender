@@ -45,6 +45,8 @@ export interface SyncState {
   neighbourLines?: NeighbourLineEntry[];
   /** The server answered 426 to a write: this app is older than the server accepts. Cleared by the next accepted write. Absent in older state. */
   needsUpdate?: boolean;
+  /** The household's IANA timezone from the latest snapshot: the Buddy tap day rolls over there, like on the server. */
+  householdTimezone?: string;
 }
 
 /** A neighbour line from the event feed (Track B): an i18n key plus params, never copy. */
@@ -67,6 +69,8 @@ export interface SyncRepository {
   enqueue(item: NewOutboxItem): Promise<void>;
   /** Live (not dead) items, oldest first. */
   getPending(): Promise<OutboxItem[]>;
+  /** Replaces the payload of a still-unsent item (Buddy taps coalesce into one row). */
+  updatePayload(id: string, payload: unknown): Promise<void>;
   /** Acknowledged by the server: removes the item. */
   remove(id: string): Promise<void>;
   /** Records a failed attempt (attempts + 1). `deadAt` non-null dead-letters the item. */

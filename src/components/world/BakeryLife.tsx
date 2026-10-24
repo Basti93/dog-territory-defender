@@ -5,16 +5,15 @@ import { artOr } from '../../art/artAssets';
 import { DenEconomyState } from '../../economy/denEconomy';
 import { passiveTreatsPerHour, storageCap } from '../../economy/formulas';
 import { formatNumber, t } from '../../i18n';
-import { AnimatedNumber, DecorImage, material, textStyle, tokens } from '../../ui';
+import { DecorImage, material, textStyle, tokens } from '../../ui';
 import {
   BURST_FLIGHT_MS,
   BURST_STAGGER_MS,
   bakeryEmitIntervalMs,
-  bowlAtCap,
   bowlFillLevel,
   burstSpriteCount,
   formatRatePerHour,
-  projectedTreats,
+  projectedPile,
 } from './bakeryRules';
 
 // Presentation-only decor that makes the cookie-clicker loop visible in the world scene: treats flying
@@ -36,34 +35,24 @@ export interface Point {
 }
 
 /**
- * Treats the bowl shows: the stored value plus what the bakery/territories accrue while the scene is
- * visible (the same linear projection applyPassiveAccrual uses, capped like it). Display only; at the next
- * launch the real accrual from the unchanged lastTickAt credits the same amount. setState at 4 Hz at most,
- * and only when the whole number changes.
+ * The pile the bowl shows: the settled pile plus what the bakery/territories baked since `lastTickAt` (see projectedPile).
+ * Display only; harvesting settles the real amount. setState at 4 Hz at most, and only when the whole number changes.
  */
 export function useBowlProjection({ state, extraRate, active }: { state: DenEconomyState | null; extraRate: number; active: boolean }) {
-  const gain = useRef(0);
-  const lastAt = useRef(Date.now());
-  const lastShown = useRef(0);
   const [, bump] = useState(0);
-  const treats = state?.treats ?? 0;
+  const lastShown = useRef(0);
+  const bank = state?.treats ?? 0;
   const cap = state ? storageCap(state.doghouseLevel, state.level, state.bakeryLevel, state.sniffGardenLevel) : 0;
   const ratePerHour = state ? passiveTreatsPerHour(state.bakeryLevel, state.level) + extraRate : 0;
-  const latest = useRef({ treats, cap, ratePerHour });
-  latest.current = { treats, cap, ratePerHour };
+  const latest = useRef({ pile: 0, lastTickAt: 0, ratePerHour, bank, cap });
+  latest.current = { pile: state?.pile ?? 0, lastTickAt: state?.lastTickAt ?? Date.now(), ratePerHour, bank, cap };
   const hasState = !!state;
 
   useEffect(() => {
     if (!active || !hasState) return;
-    lastAt.current = Date.now();
     const id = setInterval(() => {
-      const now = Date.now();
-      const hours = (now - lastAt.current) / 3_600_000;
-      lastAt.current = now;
       const l = latest.current;
-      // Stop banking once full, so spending later does not release hours of "invisible" gain.
-      gain.current = Math.min(gain.current + hours * l.ratePerHour, Math.max(0, l.cap - l.treats));
-      const shown = Math.floor(projectedTreats(l.treats, gain.current, l.cap));
+      const shown = Math.floor(projectedPile(l.pile, l.lastTickAt, Date.now(), l.ratePerHour, l.bank, l.cap));
       if (shown !== lastShown.current) {
         lastShown.current = shown;
         bump((n) => n + 1);
@@ -72,9 +61,10 @@ export function useBowlProjection({ state, extraRate, active }: { state: DenEcon
     return () => clearInterval(id);
   }, [active, hasState]);
 
-  const projected = projectedTreats(treats, gain.current, cap);
-  lastShown.current = Math.floor(projected);
-  return { projected, cap, ratePerHour };
+  const l = latest.current;
+  const pile = projectedPile(l.pile, l.lastTickAt, Date.now(), l.ratePerHour, l.bank, l.cap);
+  lastShown.current = Math.floor(pile);
+  return { pile, bank, cap, room: Math.max(0, cap - bank), ratePerHour };
 }
 
 interface FlightSpec {
@@ -196,16 +186,19 @@ const PILE_SPOTS: { x: number; y: number; r: number }[] = [
 ];
 const PILE_SPRITE = 22;
 
-/** The bowl and its pile: bowl-empty when empty, bowl otherwise, plus 2..5 overlay treats as it fills; a bone on the grass at cap. */
-export function BowlFill({ treats, cap, boxLeft, boxTop }: { treats: number; cap: number; boxLeft: number; boxTop: number }) {
-  const level = bowlFillLevel(treats, cap);
+/**
+ * The bowl and its pile: bowl-empty when there is nothing to harvest, bowl otherwise, plus 2..5 overlay treats as the pile
+ * fills the room left next to the bank; a bone on the grass when bank + pile are at the Doghouse's cap.
+ */
+export function BowlFill({ pile, room, full, boxLeft, boxTop }: { pile: number; room: number; full: boolean; boxLeft: number; boxTop: number }) {
+  const level = bowlFillLevel(pile, room);
   const bowl = artOr(level === 0 ? 'bowl-empty' : 'bowl', null);
   const treat = artOr('icon-treat', null);
-  const pile = level >= 2 && treat ? PILE_SPOTS.slice(0, level) : [];
+  const heap = level >= 2 && treat ? PILE_SPOTS.slice(0, level) : [];
   return (
     <>
       {bowl ? <DecorImage source={bowl} resizeMode="contain" style={{ position: 'absolute', left: boxLeft, top: boxTop, width: 120, height: 120 }} /> : null}
-      {pile.map((spot, i) => (
+      {heap.map((spot, i) => (
         <View
           key={i}
           testID={`bowl-pile-${i}`}
@@ -215,7 +208,7 @@ export function BowlFill({ treats, cap, boxLeft, boxTop }: { treats: number; cap
           <DecorImage source={treat!} resizeMode="contain" style={styles.fill} />
         </View>
       ))}
-      {bowlAtCap(treats, cap) && treat ? (
+      {full && treat ? (
         <View
           testID="bowl-bone"
           pointerEvents="none"
@@ -228,29 +221,14 @@ export function BowlFill({ treats, cap, boxLeft, boxTop }: { treats: number; cap
   );
 }
 
-/** The bowl sign's content: live count ("N of CAP treats") and the small hourly rate under it. */
-export function BowlSignContent({
-  shown,
-  cap,
-  ratePerHour,
-  welcomeFrom,
-}: {
-  shown: number;
-  cap: number;
-  ratePerHour: number;
-  /** Welcome-back: the number counts up from here once, remounting the ticker. */
-  welcomeFrom: number | null;
-}) {
+/** The bowl sign's content: what waits to be harvested ("N bereit"), or a soft "baking" line while the pile is empty, plus the hourly rate. */
+export function BowlSignContent({ pile, ratePerHour }: { pile: number; ratePerHour: number }) {
+  const count = Math.floor(pile);
   return (
     <View style={styles.signBody}>
-      <AnimatedNumber
-        key={welcomeFrom === null ? 'live' : 'welcome'}
-        from={welcomeFrom ?? undefined}
-        value={Math.floor(shown)}
-        duration={900}
-        format={(n) => t('world.bowlSign', { count: formatNumber(Math.floor(n)), cap: formatNumber(cap) })}
-        style={[textStyle('sign'), styles.ink]}
-      />
+      <Text style={[textStyle('sign'), styles.ink]}>
+        {count >= 1 ? t('world.bowlSignReady', { count: formatNumber(count) }) : t('world.bowlSignBaking')}
+      </Text>
       {ratePerHour > 0 ? <Text style={[textStyle('small'), styles.muted]}>{t('world.ratePerHour', { rate: formatRatePerHour(ratePerHour) })}</Text> : null}
     </View>
   );

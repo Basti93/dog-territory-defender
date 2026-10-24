@@ -2,31 +2,30 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatNumber, t } from '../../i18n';
 import { AnimatedNumber, ArtImage, material, mix, radii, textStyle, tokens } from '../../ui';
-import { bowlAtCap, formatRatePerHour } from './bakeryRules';
+import { formatRatePerHour } from './bakeryRules';
 
 /**
- * Always-visible treats counter in the Hof (top-left beside the gate sign): treat icon, big count, tiny "+x/h".
- * At the cap it says "voll" in a warm chip (never a nag). The number counts up like the bowl sign and the pill
- * bumps whenever the count grows. Tapping it zooms the bowl.
+ * Always-visible treats counter in the Hof (top-left beside the gate sign): treat icon, big count (the bank only; the
+ * pile waits in the bowl), tiny "+x/h". When bank + pile fill the Doghouse it says "voll" in a warm chip (never a nag).
+ * The number counts up and the pill bumps whenever the count grows (harvest arrival, Buddy bonus). Tapping it zooms the bowl.
  */
 export function TreatsPill({
   shown,
   cap,
+  full,
   ratePerHour,
-  welcomeFrom,
   width,
   onPress,
 }: {
   shown: number;
   cap: number;
+  /** Bank + pile have reached the cap. */
+  full: boolean;
   ratePerHour: number;
-  /** Welcome-back: count up from here once (remounts the ticker, same as the bowl sign). */
-  welcomeFrom: number | null;
   width: number;
   onPress: () => void;
 }) {
   const count = Math.floor(shown);
-  const full = bowlAtCap(shown, cap);
   const bump = useRef(new Animated.Value(1)).current;
   const previous = useRef(count);
   useEffect(() => {
@@ -52,8 +51,6 @@ export function TreatsPill({
         <View style={styles.row}>
           <ArtImage art="icon-treat" size={18} />
           <AnimatedNumber
-            key={welcomeFrom === null ? 'live' : 'welcome'}
-            from={welcomeFrom ?? undefined}
             value={count}
             duration={900}
             format={(n) => formatNumber(Math.floor(n))}

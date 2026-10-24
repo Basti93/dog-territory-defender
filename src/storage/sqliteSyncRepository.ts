@@ -71,6 +71,10 @@ export function createSqliteSyncRepository(dbName: string = DEFAULT_DB_NAME): Sy
       const rows = await db.getAllAsync<OutboxRow>('SELECT * FROM sync_outbox WHERE deadAt IS NULL ORDER BY createdAt ASC, rowid ASC');
       return rows.map(rowToItem);
     },
+    async updatePayload(id, payload) {
+      const db = await dbPromise;
+      await db.runAsync('UPDATE sync_outbox SET payload = ? WHERE id = ?', JSON.stringify(payload), id);
+    },
     async remove(id) {
       const db = await dbPromise;
       await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', id);

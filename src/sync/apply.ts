@@ -98,6 +98,10 @@ export function mergeServerDenState(local: DenEconomyState, server: ApiDenState)
     level: server.level,
     // The reveal is one-way: either side having seen it is enough.
     territoryIncomeRevealed: local.territoryIncomeRevealed || server.territoryIncomeRevealed,
+    // Absent from an older server: no pile, no taps counted.
+    pile: server.pile ?? 0,
+    tapDayKey: server.tapDayKey ?? null,
+    tapCount: server.tapCount ?? 0,
   };
 }
 
@@ -244,7 +248,7 @@ export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepo
     ctx,
     true
   );
-  await repos.sync.saveState({ cursor: snapshot.seq });
+  await repos.sync.saveState({ cursor: snapshot.seq, householdTimezone: snapshot.household.timezone });
   return result;
 }
 

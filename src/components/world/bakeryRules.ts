@@ -28,12 +28,21 @@ export function bowlFillLevel(treats: number, cap: number): number {
 
 /** True when the bowl is at (or beyond) the Doghouse's storage cap; then one extra bone lies next to it. */
 export function bowlAtCap(treats: number, cap: number): boolean {
-  return cap > 0 && treats >= cap;
+  return cap > 0 && treats >= cap - 1e-6;
 }
 
 /** Treats shown in the bowl: stored treats plus what the bakery/territories accrued this session, never above the cap. */
 export function projectedTreats(treats: number, sessionGain: number, cap: number): number {
   return Math.min(cap, treats + Math.max(0, sessionGain));
+}
+
+/**
+ * The pile the bowl shows: the settled pile plus what the bakery/territories baked since `lastTickAt` (the same linear
+ * rule applyPassiveAccrual uses), never beyond the room left next to the bank. Display only.
+ */
+export function projectedPile(pile: number, lastTickAt: number, now: number, ratePerHour: number, bank: number, cap: number): number {
+  const hours = Math.max(0, now - lastTickAt) / 3_600_000;
+  return Math.min(pile + hours * Math.max(0, ratePerHour), Math.max(0, cap - bank));
 }
 
 /** Passive treats per hour (bakery + territories) as the small "+N per hour" figure: one decimal below 10, whole above. */

@@ -8,7 +8,7 @@ import { getMyStats } from './stats';
 import { hashInviteCode, newDeviceToken, newInviteCode, sha256Hex } from '../lib/crypto';
 import { isValidTimeZone } from '../lib/time';
 import { appendEvent, currentSeq, type EventBus } from './events';
-import { cellFromRow, cornerFromRow, denFromRow, dogFromRow, lockDen, territoryFromRow, walkMetaFromRow, worldMass } from './state';
+import { cellFromRow, cornerFromRow, denFromRow, dogFromRow, lockDen, stripRev, territoryFromRow, walkMetaFromRow, worldMass } from './state';
 import type { AuthCtx } from './walks';
 
 // ----------------------------------------------------------- operator side (CLI)
@@ -241,8 +241,8 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
 
   const myStats = await getMyStats(db, auth.playerId);
   const den = denFromRow(denRow);
-  const { rev, ...state } = den;
-  const projected = applyPassiveAccrual(state, now, await worldMass(db, hid));
+  const { rev } = den;
+  const projected = applyPassiveAccrual(stripRev(den), now, await worldMass(db, hid));
 
   return {
     serverTime: now,

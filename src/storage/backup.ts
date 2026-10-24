@@ -213,7 +213,8 @@ export async function importBackup(
   await repos.notification.saveState(data.notification);
   // lastTickAt = now: a restored backup must not grant passive accrual for the
   // time since it was exported, nor inflate lifetime stats.
-  await repos.denEconomy.saveState({ ...data.denEconomy, lastTickAt: Date.now() });
+  // pile/tap fields are absent in backups from before the harvest; default them.
+  await repos.denEconomy.saveState({ pile: 0, tapDayKey: null, tapCount: 0, ...data.denEconomy, lastTickAt: Date.now() });
   await repos.personalStats.saveState(data.personalStats.state);
   await repos.personalStats.replaceUnlockedAchievements(data.personalStats.achievements);
 

@@ -166,6 +166,21 @@ describe('walks', () => {
 });
 
 describe('den state', () => {
+  it('remembers the household timezone for the Buddy tap day', async () => {
+    const repos = makeRepos();
+    await applySnapshot(snapshot({ household: { id: 'h1', name: 'Haus', timezone: 'Asia/Tokyo' } }), repos, ctx());
+    expect((await repos.sync.getState()).householdTimezone).toBe('Asia/Tokyo');
+  });
+
+  it('takes the server pile and tap counter, and treats an older server (no fields) as an empty pile', async () => {
+    const repos = makeRepos();
+    await repos.denEconomy.saveState({ ...defaultDenEconomyState(0), pile: 9, tapDayKey: '2026-10-01', tapCount: 4 });
+    await applySnapshot(snapshot({ den: apiDen({ rev: 4, pile: 12.5, tapDayKey: '2026-10-24', tapCount: 7 }) }), repos, ctx());
+    expect(await repos.denEconomy.getState()).toMatchObject({ pile: 12.5, tapDayKey: '2026-10-24', tapCount: 7 });
+    await applySnapshot(snapshot({ den: apiDen({ rev: 5 }) }), repos, ctx());
+    expect(await repos.denEconomy.getState()).toMatchObject({ pile: 0, tapDayKey: null, tapCount: 0 });
+  });
+
   it('server wins for server-owned fields, per-device flags survive, and older revisions are ignored', async () => {
     const repos = makeRepos();
     await repos.denEconomy.saveState({

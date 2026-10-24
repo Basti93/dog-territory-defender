@@ -12,6 +12,9 @@ export function createInMemorySyncRepository(): SyncRepository {
     async getPending() {
       return items.filter((i) => i.deadAt === null).sort((a, b) => a.createdAt - b.createdAt).map((i) => ({ ...i }));
     },
+    async updatePayload(id, payload) {
+      items = items.map((i) => (i.id === id ? { ...i, payload } : i));
+    },
     async remove(id) {
       items = items.filter((i) => i.id !== id);
     },

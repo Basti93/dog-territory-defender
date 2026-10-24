@@ -5,7 +5,8 @@ The Den is the dog's home-base cookie-clicker loop between walks: treats earned 
 ## Treats and buildings
 
 - **Treats:** earned once per walk and passively per hour by buildings (mainly the Treat Bakery); spent on building upgrades, up to the Doghouse's storage capacity.
-- **Passive accrual while not walking:** treats keep accumulating at the owned buildings' rate, capped by Doghouse storage.
+- **Passive accrual while not walking (the pile):** the Bakery's treats pile up at the bowl in the yard at the owned buildings' rate. Bank and pile together never pass Doghouse storage ("if full, then full"). The player harvests the pile with a tap on the bowl (it flies into the treats counter, which shows the bank); the pile never expires and has no timer. An upgrade banks the pile first, so a waiting pile always counts as affordable. A walk end banks the pile first, then credits the walk reward up to the cap; walk rewards and neighbour gift sprinkles are credited straight to the bank.
+- **Buddy pats:** tapping Buddy in the yard gives 1-3 treats (random), up to 30 rewarded taps per household day (household timezone, so two phones share one allowance). Credited to the bank, never past Doghouse storage: a full bank gives nothing and costs no tap. Buddy reacts to every tap as before; no counter or limit message is shown. Flat and level-independent, outside the `anti-snowball` power budget (like the gift sprinkle).
 - **Exactly 10 buildings**, unlocking progressively. Only buildings whose unlock level is at or below the current Den Level become available to build.
 
 | # | Building | Effect | Unlocks at |
@@ -30,7 +31,7 @@ The Den is the dog's home-base cookie-clicker loop between walks: treats earned 
 ## Presentation
 
 - Reflects the season and shows idle life: grass grows visibly greener in spring; the Spring Garden blooms with daffodils on season change; idle animations (dog sleeping in the Doghouse, butterflies near the Sniff Garden).
-- **Overflow while away:** when passive generation fills Doghouse storage, notify the player on return (e.g. "Your Treat Bakery overflowed! 124 treats waiting").
+- **Pile while away:** on return the new pile pops softly at the bowl with a warm line ("124 Leckerlis sind frisch gebacken"); when bank + pile fill Doghouse storage the counter says "voll" and the bowl shows a bone. Never "overflowed", never a missed-out tone.
 
 ## Walk-derived XP
 

@@ -2,6 +2,9 @@ import { AppState } from 'react-native';
 
 import { createApiClient } from '../sync/apiClient';
 import { createSyncEngine } from '../sync/syncEngine';
+import { createBuddyTapBatcher } from '../sync/buddyTapBatcher';
+import { log } from '../utils/log';
+import { dayKeyInZone } from '../utils/householdDay';
 import { createPartnerHomecomingQueue } from '../sync/partnerHomecoming';
 import { createPresenceSender } from '../sync/presenceSender';
 import { createPresenceViewer } from '../sync/presenceViewer';
@@ -28,6 +31,23 @@ export const syncEngine = createSyncEngine({
     await updateCorners({ walkRepository: repos.walkRepository, cornerRepository: repos.cornerRepository, lookupWaitMs: 1500 });
   },
 });
+
+// Buddy tap bonus: taps are credited locally at once and reach the server in small batches (one command per flush),
+// each tap is stored at once in one coalesced outbox row; a sync is kicked at most every 30 s and when the app
+// goes to the background or comes back.
+export const buddyTapBatcher = createBuddyTapBatcher(
+  (treats) => syncEngine.addBuddyTap(treats),
+  () => void syncEngine.syncNow(),
+  undefined,
+  (err) => log('BUDDY_TAP_STORE_ERROR', { error: String(err) })
+);
+AppState.addEventListener('change', () => buddyTapBatcher.flush());
+
+/** The day key of `now` in the household timezone (what the server counts Buddy taps in); the device's zone until a snapshot arrived. */
+export async function householdDayKey(now: number): Promise<string> {
+  const zone = await syncEngine.householdTimezone();
+  return dayKeyInZone(now, zone);
+}
 
 // Live presence of the household (M4 "Alex im Hof"): this phone's heartbeats while it walks, the foreground
 // poller that watches the others, and the queue that turns "her walk ended + her walk arrived" into a mini homecoming.

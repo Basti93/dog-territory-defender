@@ -120,6 +120,30 @@ describe('corner names ("Unsere Ecken")', () => {
     expect((await repos.corners.getCorners()).map((c) => c.name).sort()).toEqual(['Bank', 'Kiosk-Ecke']);
   });
 
+  it('against a server that predates the harvest: den.harvest / den.buddyTaps refused with 400 are dropped, not kept or retried', async () => {
+    const repos = await joined();
+    const command = jest.fn(async (req: { command: { kind: string } }) => {
+      if (req.command.kind === 'den.harvest' || req.command.kind === 'den.buddyTaps') throw new ApiError('client', 'HTTP 400', 400, 'bad_request');
+      return { clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 };
+    });
+    const engine = makeEngine(repos, { command, events: async () => emptyEvents });
+    await engine.enqueueCommand({ kind: 'den.harvest', at: 5_000 });
+    await engine.enqueueCommand({ kind: 'den.buddyTaps', taps: 3, treats: 6 });
+    await engine.syncNow({ force: true });
+    await engine.syncNow({ force: true });
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
+  });
+
+  it('a 404 (household gone) on den.harvest takes the normal dead-letter path, not the old-server drop', async () => {
+    const repos = await joined();
+    const command = jest.fn(async () => { throw new ApiError('client', 'HTTP 404', 404, 'not_found'); });
+    const engine = makeEngine(repos, { command, events: async () => emptyEvents });
+    await engine.enqueueCommand({ kind: 'den.harvest', at: 5_000 });
+    await engine.syncNow({ force: true });
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 1 });
+  });
+
   it('looks for corners after walks of the household arrived', async () => {
     const repos = await joined();
     const afterWalksAdded = jest.fn(async () => undefined);

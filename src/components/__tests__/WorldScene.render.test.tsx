@@ -208,11 +208,72 @@ describe('WorldScene', () => {
     await unmountAndExpectNoTimers(view);
   });
 
-  it('the bowl shows the treats sign (no action)', async () => {
-    const { view } = await setup();
-    expect(screen.getByText(/^70 of \d/)).toBeOnTheScreen();
-    await fireEvent.press(screen.getByRole('button', { name: /^Bowl: 70 of/ }));
+  it('an empty bowl only shows its sign larger when tapped (nothing to harvest)', async () => {
+    const { view, onTreatsChanged } = await setup();
+    expect(screen.getByText(t('world.bowlSignBaking'))).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: t('world.bowlLabelEmpty') }));
     await advance(2500);
+    expect(onTreatsChanged).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('tapping the bowl harvests the pile into the bank and tells the household', async () => {
+    const onHarvested = jest.fn();
+    const { view, onTreatsChanged, denEconomyRepository } = await setup({ onHarvested }, 70, { pile: 40 });
+    expect(screen.getByText(t('world.bowlSignReady', { count: '40' }))).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: t('world.bowlLabel', { count: '40' }) }));
+    await flush();
+    expect(onTreatsChanged).toHaveBeenCalledWith(expect.closeTo(110, 0));
+    const saved = await denEconomyRepository.getState();
+    expect(saved.pile).toBe(0);
+    expect(saved.treats).toBeCloseTo(110, 0);
+    expect(onHarvested).toHaveBeenCalledTimes(1);
+    await advance(2500);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a tap on Buddy pays 1-3 treats into the bank and pops +N, while he reacts as before', async () => {
+    const onBuddyTap = jest.fn();
+    const { view, onTreatsChanged, denEconomyRepository } = await setup({ onBuddyTap }, 70);
+    await fireEvent.press(screen.getByRole('button', { name: 'Rex' }));
+    await flush();
+    const paid = onBuddyTap.mock.calls[0][0] as number;
+    expect(paid).toBeGreaterThanOrEqual(1);
+    expect(paid).toBeLessThanOrEqual(3);
+    expect(onTreatsChanged).toHaveBeenCalledWith(70 + paid);
+    expect((await denEconomyRepository.getState()).tapCount).toBe(1);
+    expect(screen.getByText(`+${paid}`)).toBeOnTheScreen();
+    await advance(2500);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('counts Buddy taps on the household day key it is given', async () => {
+    const { view, denEconomyRepository } = await setup({ getDayKey: async () => '2026-10-24' }, 70);
+    await fireEvent.press(screen.getByRole('button', { name: 'Rex' }));
+    await flush();
+    expect(await denEconomyRepository.getState()).toMatchObject({ tapDayKey: '2026-10-24', tapCount: 1 });
+    await advance(2500);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a leftover pile under 1 that fills the Doghouse can still be harvested', async () => {
+    const { view, denEconomyRepository } = await setup({}, 199.6, { pile: 0.4 });
+    await fireEvent.press(screen.getByRole('button', { name: t('world.bowlLabelEmpty') }));
+    await flush();
+    const saved = await denEconomyRepository.getState();
+    expect(saved.pile).toBe(0);
+    expect(saved.treats).toBeCloseTo(200, 6);
+    await advance(2500);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('no Buddy bonus (and no pop) when bank and pile fill the Doghouse', async () => {
+    const onBuddyTap = jest.fn();
+    const { view, denEconomyRepository } = await setup({ onBuddyTap }, 200);
+    await fireEvent.press(screen.getByRole('button', { name: 'Rex' }));
+    await flush();
+    expect(onBuddyTap).not.toHaveBeenCalled();
+    expect((await denEconomyRepository.getState()).tapCount).toBe(0);
     await unmountAndExpectNoTimers(view);
   });
 
@@ -282,11 +343,11 @@ describe('WorldScene bakery life', () => {
   });
 
   it('lays an extra bone next to the bowl at storage cap, and not below it', async () => {
-    const full = await setup({}, 200);
+    const full = await setup({}, 150, { pile: 50 }); // bank + pile = cap 200
     expect(screen.getByTestId('bowl-bone')).toBeOnTheScreen();
     expect(screen.getAllByTestId(/^bowl-pile-/).length).toBe(5);
     await unmountAndExpectNoTimers(full.view);
-    const some = await setup({}, 100);
+    const some = await setup({}, 100, { pile: 10 });
     expect(screen.queryByTestId('bowl-bone')).toBeNull();
     await unmountAndExpectNoTimers(some.view);
   });
@@ -295,19 +356,19 @@ describe('WorldScene bakery life', () => {
     const session = { kind: 'fresh-open' as const, greetingFlavor: 'first-open' as const };
     const props = { session, accruedDelta: 12, awayStripLines: [{ text: 'The Treat Bakery baked 12 treats.', kind: 'treats' as const }] };
     const first = await setup(props);
-    expect(screen.getByText('The bakery kept busy: +12')).toBeOnTheScreen();
+    expect(screen.getByText(t('world.welcomeBack', { n: '12' }))).toBeOnTheScreen();
     expect(screen.queryByText('The Treat Bakery baked 12 treats.')).toBeNull();
     await advance(2000);
     await unmountAndExpectNoTimers(first.view);
     // Same launch, scene mounted again (back from a walk): no second burst, the old line is back as before.
     const second = await setup(props);
-    expect(screen.queryByText('The bakery kept busy: +12')).toBeNull();
+    expect(screen.queryByText(t('world.welcomeBack', { n: '12' }))).toBeNull();
     await unmountAndExpectNoTimers(second.view);
   });
 
   it('no welcome-back when nothing accrued', async () => {
     const { view } = await setup({ accruedDelta: 0 });
-    expect(screen.queryByText(/The bakery kept busy/)).toBeNull();
+    expect(screen.queryByText(/fresh from the oven/)).toBeNull();
     await unmountAndExpectNoTimers(view);
   });
 
@@ -333,13 +394,15 @@ describe('WorldScene bakery life', () => {
     await unmountAndExpectNoTimers(view);
   });
 
-  it('the welcome-back burst sends at most eight sprites and is over within a few seconds', async () => {
-    const { view } = await setup({ accruedDelta: 50 });
+  it('a harvest sends at most eight sprites from the bowl to the pill and is over within a few seconds', async () => {
+    const { view } = await setup({}, 70, { pile: 50 });
+    await fireEvent.press(screen.getByRole('button', { name: t('world.bowlLabel', { count: '50' }) }));
+    await flush();
     await advance(300);
     const inAir = screen.queryAllByTestId('treat-flight').length;
     expect(inAir).toBeGreaterThanOrEqual(2);
     expect(inAir).toBeLessThanOrEqual(8);
-    await advance(1300); // burst done (0.7 s stagger + 0.6 s flight); the first single emission is still ahead
+    await advance(1500); // 0.7 s stagger + 0.6 s flight; the first ambient emission is still ahead
     expect(screen.queryAllByTestId('treat-flight').length).toBeLessThanOrEqual(1);
     await unmountAndExpectNoTimers(view);
   });

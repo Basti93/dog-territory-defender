@@ -11,7 +11,7 @@ import {
 import { BuddyMood, resolveBuddyMood } from '../components/buddy/buddyMood';
 import { applyPassiveAccrual, dogDisplayName, reconcileBuddyLevelCatchUp } from '../economy/denEconomy';
 import { territoryMass, territoryRate } from '../economy/territoryEconomy';
-import { AchievementId, recordTreatsEarned } from '../economy/personalStats';
+import { AchievementId } from '../economy/personalStats';
 import { checkAndScheduleEarnedTriggerNotification } from '../notifications/earnedTrigger';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { resolveDoorstepOverflowLine } from '../notifications/notificationDecision';
@@ -37,6 +37,7 @@ export interface LaunchEffectsDeps {
   /** First-launch state read from storage (dog name + onboarding flag). */
   applyFirstLaunch: (saved: { dogName: string | null; onboardingDone: boolean }) => void;
   setTreats: (treats: number) => void;
+  setPile: (pile: number) => void;
   setLevel: (level: number) => void;
   openDen: () => void;
   openDoorstep: () => void;
@@ -141,13 +142,14 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
       const { state: reconciled, caughtUpToLevel } = reconcileBuddyLevelCatchUp(accrued);
       await denEconomyRepository.saveState(reconciled);
       log('TREATS_PASSIVE_ACCRUAL', {
-        before: state.treats,
-        after: accrued.treats,
+        before: state.treats + state.pile,
+        after: accrued.treats + accrued.pile,
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
       // Read before the setState batch below so loaded + dogName flip together.
       const onboardingDoneSaved = await settingsRepository.getOnboardingDone().catch(() => false);
       deps.setTreats(reconciled.treats);
+      deps.setPile(reconciled.pile);
       deps.setLevel(reconciled.level);
       deps.applyFirstLaunch({ dogName: reconciled.dogName, onboardingDone: onboardingDoneSaved });
 
@@ -159,7 +161,8 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
         Alert.alert(t('app.caughtUp', { dog: dogDisplayName(reconciled.dogName), level: caughtUpToLevel }));
       }
 
-      const delta = accrued.treats - state.treats;
+      // What the bakery baked while the app was closed lands in the pile; it counts as earned once harvested (useDen.handleHarvest).
+      const delta = accrued.pile - state.pile;
       setAccruedDelta(delta);
 
       // territories design.md Decision 6: the reveal flag flips at most once,
@@ -167,17 +170,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
       const justRevealedTerritoryIncomeNow = !state.territoryIncomeRevealed && reconciled.territoryIncomeRevealed;
       const territoryIncomeRateNow = territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), reconciled.level);
       setTerritoryIncomeRate(territoryIncomeRateNow);
-      let pendingAchievementsForDoorstep: AchievementId[] = [];
-      if (delta > 0) {
-        const personalStats = await personalStatsRepository.getState();
-        const { stats: nextPersonalStats, newlyUnlocked } = recordTreatsEarned(personalStats, delta);
-        await personalStatsRepository.saveState(nextPersonalStats);
-        if (newlyUnlocked.length > 0) {
-          await personalStatsRepository.unlockAchievements(newlyUnlocked, Date.now());
-          setPendingDenAchievements(newlyUnlocked);
-          pendingAchievementsForDoorstep = newlyUnlocked;
-        }
-      }
+      const pendingAchievementsForDoorstep: AchievementId[] = [];
 
       const bookkeeping = await notificationRepository.getState();
       const { showLine, nextBookkeeping } = resolveDoorstepOverflowLine(reconciled, bookkeeping);
@@ -220,7 +213,7 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
           accruedDelta: delta,
           householdLines,
           showOverflowLine: showLine,
-          treats: reconciled.treats,
+          treats: reconciled.treats + reconciled.pile,
           justRevealedTerritoryIncome: justRevealedTerritoryIncomeNow,
           territoryIncomeRate: territoryIncomeRateNow,
         },
