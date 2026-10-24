@@ -1,8 +1,8 @@
 import { Cell } from '../../../storage/HomeRangeRepository';
 import { Territory } from '../../../storage/TerritoryRepository';
 import { cellCentre } from '../../../utils/grid';
-import { t } from '../../../i18n';
-import { emptyRangeNote, latestWalkTerritoryId, pickViertelNotes, statsSignParts, statsSignText, territoryHeading } from '../viertelChrome';
+import { setLocale, t } from '../../../i18n';
+import { emptyRangeNote, incomeLine, latestWalkTerritoryId, pickViertelNotes, statsSignParts, statsSignText, territoryHeading } from '../viertelChrome';
 
 const NOW = new Date(2026, 9, 18, 15, 0).getTime();
 const HOUR = 60 * 60 * 1000;
@@ -52,12 +52,11 @@ describe('territoryHeading', () => {
   const territories = [territory('t1', 'Hinterm Park', 100), territory('t2', 'Am Fluss', 200)];
   const cells = [cell(10, 10, NOW - HOUR, 't1'), cell(50, 50, NOW - 30 * HOUR, 't2')];
 
-  it('is the territory of the latest walk, with its character title', () => {
+  it('is the territory of the latest walk', () => {
     const lastWalkEnd = endIn(10, 10);
     expect(latestWalkTerritoryId(lastWalkEnd, cells)).toBe('t1');
     const heading = territoryHeading({ territories, cells, lastWalkEnd, now: NOW });
     expect(heading?.name).toBe('Hinterm Park');
-    expect(heading?.title).toBe('Everyday'); // oldest territory takes the first title
   });
 
   it('falls back to the most recently painted territory without a usable walk', () => {
@@ -69,8 +68,16 @@ describe('territoryHeading', () => {
     expect(territoryHeading({ territories: [], cells, lastWalkEnd: null, now: NOW })).toBeNull();
     expect(territoryHeading({ territories, cells: [], lastWalkEnd: null, now: NOW })).toBeNull();
   });
+});
 
-  it('has no title for a single territory', () => {
-    expect(territoryHeading({ territories: [territories[0]], cells, lastWalkEnd: null, now: NOW })?.title).toBeNull();
+describe('incomeLine', () => {
+  it('shows one decimal from 1 an hour, "every N hours" below, days when slower still, nothing without income', () => {
+    setLocale('de');
+    expect(incomeLine(1.44)).toBe('Euer Boden bringt 1,4 Leckerlis/Std.');
+    expect(incomeLine(0.4)).toBe('Euer Boden bringt alle 3 Std. ein Leckerli');
+    expect(incomeLine(0.02)).toBe('Euer Boden bringt alle 2 Tage ein Leckerli');
+    expect(incomeLine(0.0001)).toBe('Euer Boden fängt gerade an, Leckerlis zu bringen');
+    expect(incomeLine(0)).toBeNull();
+    setLocale('en');
   });
 });

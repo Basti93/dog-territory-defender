@@ -11,7 +11,7 @@ const emptyEvents = { events: [], cursor: 7, hasMore: false, serverTime: 2_000 }
 async function joined() {
   const repos = makeRepos();
   await repos.settings.saveSyncIdentity(IDENTITY);
-  await repos.sync.saveState({ cursor: 7, lastSyncAt: 1 }); // events path, no snapshot
+  await repos.sync.saveState({ cursor: 7, lastSyncAt: 1, territoriesReconciled: true }); // events path, no snapshot
   return repos;
 }
 

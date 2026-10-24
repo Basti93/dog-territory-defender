@@ -9,12 +9,22 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   BUDDY_COATS,
   BUDDY_EAR_STYLES,
+  BUDDY_FUR_LENGTHS,
   BUDDY_MARKINGS,
+  BUDDY_MUZZLES,
   BUDDY_PALETTE,
   BUDDY_SIZES,
   BUDDY_TAIL_STYLES,
   BuddyAppearance,
+  BuddyFur,
   defaultBuddyAppearance,
+  FUR_SWATCHES,
+  FUR_ZONES,
+  FurZone,
+  furFromLegacy,
+  hexToHsl,
+  hslToHex,
+  softenToClay,
 } from '../../buddy/buddyAppearance';
 import { PICKER_STEPS, PickerStep } from '../../buddy/pickerSteps';
 import { BuddyAvatar } from './BuddyAvatar';
@@ -67,6 +77,9 @@ const SIZE_LABEL_KEY = {
   large: 'buddy.size.large',
 } as const;
 
+const HUES = [0, 30, 60, 90, 150, 190, 220, 260, 300, 330];
+const LIGHTS = [0.3, 0.45, 0.6, 0.75, 0.9];
+
 type StepKey = PickerStep;
 const STEPS: readonly StepKey[] = PICKER_STEPS;
 
@@ -76,6 +89,10 @@ function stepCaption(step: StepKey, name: string): string {
       return t('buddy.step.coat', { name });
     case 'markings':
       return t('buddy.step.markings', { name });
+    case 'fur':
+      return t('buddy.step.fur', { name });
+    case 'form':
+      return t('buddy.step.form');
     case 'earStyle':
       return t('buddy.step.ears');
     case 'tailStyle':
@@ -157,8 +174,28 @@ export function BuddyAppearancePicker({
   const step = STEPS[stepIndex];
   const isLast = step === 'done';
 
+  const [zone, setZone] = useState<FurZone | 'all'>('back');
+
   const set = <K extends keyof BuddyAppearance>(key: K, value: BuddyAppearance[K]) =>
     setLook((prev) => ({ ...prev, [key]: value }));
+  // A preset coat/markings choice applies to the zones too (visible, editable in Fell); shape choices are kept.
+  const setPreset = <K extends 'coat' | 'markings'>(key: K, value: BuddyAppearance[K]) =>
+    setLook((prev) => {
+      const next = { ...prev, [key]: value };
+      return prev.fur ? { ...next, fur: { ...prev.fur, zones: furFromLegacy(next).zones } } : next;
+    });
+  /** Edit the fur block; it starts as an exact copy of the preset look, so nothing jumps. */
+  const editFur = (change: (fur: BuddyFur) => BuddyFur) =>
+    setLook((prev) => ({ ...prev, fur: change(prev.fur ?? furFromLegacy(prev)) }));
+  const paint = (hex: string) =>
+    editFur((fur) => {
+      const colour = softenToClay(hex);
+      const zones = { ...fur.zones };
+      for (const z of zone === 'all' ? FUR_ZONES : [zone]) zones[z] = colour;
+      return { ...fur, zones };
+    });
+  const furNow = look.fur ?? furFromLegacy(look);
+  const currentHex = furNow.zones[zone === 'all' ? 'back' : zone];
 
   const finish = () => (onSave ?? onDone)?.(look);
 
@@ -182,7 +219,7 @@ export function BuddyAppearancePicker({
                 coat={c}
                 label={t(COAT_LABEL_KEY[c])}
                 selected={look.coat === c}
-                onPress={() => set('coat', c)}
+                onPress={() => setPreset('coat', c)}
               />
             ))}
           </View>
@@ -194,9 +231,93 @@ export function BuddyAppearancePicker({
               key={m}
               label={t(MARKINGS_LABEL_KEY[m])}
               selected={look.markings === m}
-              onPress={() => set('markings', m)}
+              onPress={() => setPreset('markings', m)}
             />
           ))}
+        </View>
+      )}
+      {step === 'fur' && (
+        <View style={styles.furBox}>
+          <View style={styles.row}>
+            {(['all', ...FUR_ZONES] as const).map((z) => (
+              <PressableScale
+                key={z}
+                onPress={() => setZone(z)}
+                accessibilityLabel={t(`buddy.zone.${z}`)}
+                style={[styles.zoneChip, zone === z && styles.chipSelected]}
+              >
+                {z !== 'all' && <View style={[styles.zoneDot, { backgroundColor: furNow.zones[z] }]} />}
+                <Text style={[textStyle('body'), styles.chipText, zone === z && styles.chipTextSelected]}>
+                  {t(`buddy.zone.${z}`)}
+                </Text>
+              </PressableScale>
+            ))}
+          </View>
+          <View style={styles.row}>
+            {FUR_SWATCHES.map((hex) => (
+              <PressableScale
+                key={hex}
+                onPress={() => paint(hex)}
+                accessibilityLabel={`${t('buddy.fur.swatch')} ${hex}`}
+                style={[styles.dot, currentHex.toUpperCase() === hex && styles.swatchSelected]}
+              >
+                <View style={[styles.dotFill, { backgroundColor: hex }]} />
+              </PressableScale>
+            ))}
+          </View>
+          <Text style={[textStyle('body'), styles.rowLabel]}>{t('buddy.fur.hue')}</Text>
+          <View style={styles.row}>
+            {HUES.map((h) => (
+              <PressableScale
+                key={h}
+                onPress={() => paint(hslToHex(h, 0.5, hexToHsl(currentHex).l))}
+                accessibilityLabel={`${t('buddy.fur.hue')} ${h}`}
+                style={styles.dot}
+              >
+                <View style={[styles.dotFill, { backgroundColor: softenToClay(hslToHex(h, 0.5, 0.6)) }]} />
+              </PressableScale>
+            ))}
+          </View>
+          <Text style={[textStyle('body'), styles.rowLabel]}>{t('buddy.fur.light')}</Text>
+          <View style={styles.row}>
+            {LIGHTS.map((l) => {
+              const { h, s } = hexToHsl(currentHex);
+              return (
+                <PressableScale
+                  key={l}
+                  onPress={() => paint(hslToHex(h, s, l))}
+                  accessibilityLabel={`${t('buddy.fur.light')} ${Math.round(l * 100)}`}
+                  style={styles.dot}
+                >
+                  <View style={[styles.dotFill, { backgroundColor: softenToClay(hslToHex(h, s, l)) }]} />
+                </PressableScale>
+              );
+            })}
+          </View>
+        </View>
+      )}
+      {step === 'form' && (
+        <View style={styles.furBox}>
+          <View style={styles.row}>
+            {BUDDY_MUZZLES.map((m) => (
+              <OptionChip
+                key={m}
+                label={t(`buddy.muzzle.${m}`)}
+                selected={furNow.muzzle === m}
+                onPress={() => editFur((fur) => ({ ...fur, muzzle: m }))}
+              />
+            ))}
+          </View>
+          <View style={styles.row}>
+            {BUDDY_FUR_LENGTHS.map((f) => (
+              <OptionChip
+                key={f}
+                label={t(`buddy.furLength.${f}`)}
+                selected={furNow.furLength === f}
+                onPress={() => editFur((fur) => ({ ...fur, furLength: f }))}
+              />
+            ))}
+          </View>
         </View>
       )}
       {step === 'earStyle' && (
@@ -308,6 +429,30 @@ const styles = StyleSheet.create({
   chipSelected: { borderColor: material.inkGreen, borderWidth: 3 },
   chipText: { color: material.ink },
   chipTextSelected: { color: material.inkGreen },
+  furBox: { alignSelf: 'stretch', gap: spacing.md },
+  rowLabel: { color: material.ink, textAlign: 'center' },
+  zoneChip: {
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    borderWidth: 2,
+    borderColor: material.woodRim,
+    backgroundColor: material.yarn,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  zoneDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1, borderColor: material.woodRim },
+  dot: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.pill,
+    borderWidth: 3,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotFill: { width: 30, height: 30, borderRadius: radii.pill, borderWidth: 1, borderColor: material.woodRim },
   primary: { marginTop: spacing.xl, minWidth: 200 },
   footer: {
     flexDirection: 'row',

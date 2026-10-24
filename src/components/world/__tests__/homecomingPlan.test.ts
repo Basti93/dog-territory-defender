@@ -49,6 +49,13 @@ describe('planBeats / planExtras', () => {
     expect(planBeats(false, extras)).toEqual(['patch', 'bowl', 'extras', 'rest']);
   });
 
+  it('a new territory comes after a new corner and before badges; the income tick is the softest and counts as one of the two', () => {
+    expect(planExtras(rewards({ unlockedAchievements: [BADGE] }), false, true)).toEqual(['territory', 'badge']);
+    expect(planExtras(rewards(), true, true, true)).toEqual(['corner', 'territory']);
+    expect(planExtras(rewards({ unlockedAchievements: [BADGE] }), false, false, true)).toEqual(['badge', 'income']);
+    expect(planExtras(rewards(), false, false, true)).toEqual(['income']);
+  });
+
   it('shows at most two extras, badge before milestone before pennant', () => {
     const extras = planExtras(
       rewards({
@@ -108,7 +115,7 @@ describe('pickOneNumber', () => {
   it('a newborn territory beats everything', () => {
     const n = pickOneNumber(walk({ newTerritoryName: 'Riverside', rewards: rewards(bigGround) }));
     expect(n.kind).toBe('territory');
-    expect(n.big).toContain('Riverside');
+    expect(n.big).toBe('New territory!');
   });
 
   it('new streets beat fresh ground', () => {

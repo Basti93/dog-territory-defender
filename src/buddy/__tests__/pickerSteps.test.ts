@@ -1,7 +1,7 @@
 import { PICKER_STEPS } from '../pickerSteps';
 
 describe('PICKER_STEPS', () => {
-  it('includes Markings between coat and ears, and ends with done', () => {
-    expect(PICKER_STEPS).toEqual(['coat', 'markings', 'earStyle', 'tailStyle', 'size', 'done']);
+  it('keeps preset coat/markings first, then optional Fell and Form, ends with done', () => {
+    expect(PICKER_STEPS).toEqual(['coat', 'markings', 'fur', 'form', 'earStyle', 'tailStyle', 'size', 'done']);
   });
 });

@@ -32,7 +32,7 @@ M = {}
 BASE = {}            # object name -> matrix_world before head tilt / yaw (to re-pose copies)
 EXTRA = Matrix.Identity(4)   # extra dog-frame transform applied by add() (walk-leg swing, lying-pose scale)
 HOLD = None
-NOFIT_PREFIX = ("pose-", "markings-", "front-legs-walk")
+NOFIT_PREFIX = ("pose-", "markings-", "front-legs-walk", "head-", "mouth-happy-", "fluff-")
 
 
 def mat(key, hexcol, rough=0.6, sss=0.1):
@@ -52,8 +52,20 @@ def mix(h1, h2, t):
     return "#%02X%02X%02X" % tuple(s(a[i] * (1 - t) + b[i] * t) for i in range(3))
 
 
-def add(part, o, only=None, head=None):
+def default_zone(part):
+    """Fur zone of an object when none is given (see buddy_zones.py). '' = not part of any zone (eyes, zzz...)."""
+    for prefix, zone in (("body", "back"), ("head", "head"), ("front-legs", "legs"), ("ear-", "ears"), ("tail", "tail"),
+                         ("fluff-", "chest"), ("pose-lying", "back"), ("eyes-closed", "head")):
+        if part.startswith(prefix):
+            return zone
+    return ""
+
+
+def add(part, o, only=None, head=None, zone=None, nofit=False):
     o["part"], o["only"] = part, only or ""
+    o["zone"] = zone or default_zone(part)   # 'detail' = untinted real-colour layer (nose, mouth line, eyelid)
+    if nofit:
+        o["nofit"] = True
     if head is None:
         head = part in ("head", "eyes-open", "eyes-closed", "mouth-happy") or part.startswith("ear-")
     if part.startswith(NOFIT_PREFIX):
@@ -64,8 +76,8 @@ def add(part, o, only=None, head=None):
     return o
 
 
-def ell(part, loc, rad, key, rot=(0, 0, 0), only=None, head=None):
-    return add(part, common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot), only, head)
+def ell(part, loc, rad, key, rot=(0, 0, 0), only=None, head=None, zone=None, nofit=False):
+    return add(part, common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot), only, head, zone, nofit)
 
 
 def on(c, r, phi, e, k=1.0):
@@ -85,7 +97,7 @@ def cone_ear(part, loc, r, h, side, tilt):
     return add(part, o)
 
 
-def tube(part, pts, radii, key, only=None):
+def tube(part, pts, radii, key, only=None, zone=None):
     cu = bpy.data.curves.new("t", "CURVE")
     cu.dimensions, cu.bevel_depth, cu.bevel_resolution, cu.use_fill_caps = "3D", 1.0, 5, True
     sp = cu.splines.new("POLY")
@@ -103,14 +115,14 @@ def tube(part, pts, radii, key, only=None):
     o.data.materials.append(M[key])
     for p in o.data.polygons:
         p.use_smooth = True
-    return add(part, o, only)
+    return add(part, o, only, zone=zone)
 
 
 def lerp3(a, b, t):
     return [a[i] + (b[i] - a[i]) * t for i in range(3)]
 
 
-def patch(part, loc, rad, shell_loc, shell_rad, key, only, head=None, k=1.02, rot=(0, 0, 0)):
+def patch(part, loc, rad, shell_loc, shell_rad, key, only, head=None, k=1.02, rot=(0, 0, 0), zone=None, nofit=False):
     """Blob intersected with a slightly inflated copy of the underlying ellipsoid -> flat painted patch."""
     shell = common.sph(shell_loc, 1.0, M[key], scale=tuple(v * k for v in shell_rad))
     blob = common.sph(loc, 1.0, M[key], scale=tuple(rad), rot=rot)
@@ -119,7 +131,46 @@ def patch(part, loc, rad, shell_loc, shell_rad, key, only, head=None, k=1.02, ro
     bpy.context.view_layer.objects.active = blob
     bpy.ops.object.modifier_apply(modifier="i")
     bpy.data.objects.remove(shell)
-    return add(part, blob, only, head)
+    return add(part, blob, only, head, zone, nofit)
+
+
+# Muzzle length variants for the fur-zone Buddy (medium = the original model). (MC, MR, M2C, M2R, nose)
+MUZZLES = {
+    "short": (Vector((-1.45, 0, 2.6)), Vector((0.55, 0.5, 0.42)), Vector((-1.62, 0, 2.58)), Vector((0.42, 0.5, 0.45)), Vector((-2.02, 0, 2.78))),
+    "long": (Vector((-1.55, 0, 2.62)), Vector((0.85, 0.54, 0.46)), Vector((-2.02, 0, 2.55)), Vector((0.58, 0.36, 0.34)), Vector((-2.6, 0, 2.7))),
+}
+
+
+def head_block(sfx, mc, mr, m2c, m2r, nz):
+    """Skull + muzzle + nose + mouth lines. sfx '' = the original (medium) head; others are nofit zone variants."""
+    P, nf = f"head{'-' + sfx if sfx else ''}", bool(sfx)
+    ell(P, HC, HR, "coat", nofit=nf)
+    ell(P, mc, mr, "accent", zone="muzzle", nofit=nf)
+    ell(P, m2c, m2r, "accent", zone="muzzle", nofit=nf)
+    ell(P, nz, (0.23, 0.33, 0.24), "nose", zone="detail", nofit=nf)
+    ell(P, nz + Vector((-0.1, -0.06, 0.1)), (0.06, 0.1, 0.05), "shine", zone="detail", nofit=nf)
+    for s_ in (-1, 1):
+        ell(P, on(HC, HR, 42 * s_, 0, 0.96), (0.19, 0.19, 0.12), "blush", rot=(0, 0, math.radians(-42 * s_)), zone="detail", nofit=nf)
+    pts = [list(on(m2c, m2r, 0, e, 1.0)) for e in (-2, -5, -9, -13)]
+    o = tube(P, pts, [0.05] * 4, "mline", zone="detail")
+    o["nofit"] = nf
+    for sg in (-1, 1):
+        sp = []
+        for i in range(9):
+            u = i / 8
+            sp.append(list(on(m2c, m2r, sg * 52 * u, -13 - 17 * math.sin(math.pi * u) + 9 * u, 1.0)))
+        o = tube(P, sp, [0.05] * 9, "mline", zone="detail")
+        o["nofit"] = nf
+    # eye patch: a shell around each eye (zone render only; hidden from legacy renders by only="__zone")
+    for ph, e in EYES:
+        patch(P, on(HC, HR, ph, e, 0.97), (0.46, 0.46, 0.58), HC, HR, "coat", "__zone", head=True, k=1.035,
+              rot=(0, 0, math.radians(ph)), zone="eyepatch", nofit=True)
+
+
+def mouth_block(part, m2c, m2r, nofit):
+    mp = on(m2c, m2r, 0, -24, 0.98)
+    ell(part, mp, (0.11, 0.27, 0.13), "mouth", nofit=nofit)
+    ell(part, on(m2c, m2r, 0, -36, 1.0) + Vector((-0.04, 0, 0)), (0.1, 0.15, 0.2), "tongue", nofit=nofit)
 
 
 def build():
@@ -132,37 +183,26 @@ def build():
     # ---- body: torso, both haunches, hind paw, far front leg, chest bib
     T_L, T_R = Vector((0.35, 0, 1.25)), (1.0, 0.9, 1.25)
     ell("body", T_L, T_R, "coat")
-    ell("body", (-0.62, 0, 1.15), (0.3, 0.55, 0.85), "accent")
+    ell("body", (-0.62, 0, 1.15), (0.3, 0.55, 0.85), "accent", zone="chest")
     for s in (-1, 1):
-        ell("body", (0.75, s * 0.68, 0.8), (0.8, 0.62, 0.8), "coat")
-    ell("body", (-0.05, -0.78, 0.17), (0.5, 0.3, 0.19), "coat")                 # near hind paw
-    ell("body", (-0.45, 0.5, 0.62), (0.27, 0.27, 0.65), "coat")                 # far front leg
-    ell("body", (-0.58, 0.5, 0.15), (0.4, 0.32, 0.17), "coat")
+        ell("body", (0.75, s * 0.68, 0.8), (0.8, 0.62, 0.8), "coat", zone="legs")
+    ell("body", (-0.05, -0.78, 0.17), (0.5, 0.3, 0.19), "coat", zone="paws")    # near hind paw
+    ell("body", (-0.45, 0.5, 0.62), (0.27, 0.27, 0.65), "coat", zone="legs")    # far front leg
+    ell("body", (-0.58, 0.5, 0.15), (0.4, 0.32, 0.17), "coat", zone="paws")
+    # fur-zone shell on the underside (hidden in legacy renders by only="__zone", never part of the framing)
+    patch("body", (0.25, -0.62, 0.4), (1.5, 0.8, 0.7), T_L, T_R, "coat", "__zone", head=False, k=1.035, zone="belly", nofit=True)
     patch("body", (0.5, 0, 2.2), (0.9, 0.85, 0.55), T_L, T_R, "charcoal", "tricolour")
     patch("body", (0.8, -0.85, 0.85), (0.6, 0.5, 0.6), (0.75, -0.68, 0.8), (0.8, 0.62, 0.8), "ginger", "tricolour")
 
     # ---- near front leg
     ell("front-legs", (-0.4, -0.52, 0.62), (0.28, 0.28, 0.68), "coat")
-    ell("front-legs", (-0.55, -0.52, 0.15), (0.42, 0.34, 0.18), "coat")
+    ell("front-legs", (-0.55, -0.52, 0.15), (0.42, 0.34, 0.18), "coat", zone="paws")
 
     # ---- head (no eyes, no ears): skull, forward snout (capsule), big nose, brows, blush, "w" mouth
-    ell("head", HC, HR, "coat")
-    ell("head", MC, MR, "accent")
-    ell("head", M2C, M2R, "accent")
-    nz = Vector((-2.4, 0, 2.8))
-    ell("head", nz, (0.23, 0.33, 0.24), "nose")
-    ell("head", nz + Vector((-0.1, -0.06, 0.1)), (0.06, 0.1, 0.05), "shine")
-    for s_ in (-1, 1):
-        ell("head", on(HC, HR, 42 * s_, 0, 0.96), (0.19, 0.19, 0.12), "blush", rot=(0, 0, math.radians(-42 * s_)))
+    head_block("", MC, MR, M2C, M2R, Vector((-2.4, 0, 2.8)))
     patch("head", (-0.95, 0.05, 3.5), (0.8, 0.7, 0.6), HC, HR, "ginger", "tricolour")
-    pts = [list(on(M2C, M2R, 0, e, 1.0)) for e in (-2, -5, -9, -13)]
-    tube("head", pts, [0.05] * 4, "mline")
-    for sg in (-1, 1):
-        sp = []
-        for i in range(9):
-            u = i / 8
-            sp.append(list(on(M2C, M2R, sg * 52 * u, -13 - 17 * math.sin(math.pi * u) + 9 * u, 1.0)))
-        tube("head", sp, [0.05] * 9, "mline")
+    for sfx, (mc, mr, m2c, m2r, nz) in MUZZLES.items():
+        head_block(sfx, mc, mr, m2c, m2r, nz)
 
     # ---- eyes: big glossy ovals on the FRONT of the face, above the muzzle
     for ph, e in EYES:
@@ -178,12 +218,12 @@ def build():
         ell("eyes-closed", p, (0.2, 0.26, 0.33), "coat", rot=rz)
         arc = [list(p + n * (0.17 - 0.03 * u * u) + t * (u * 0.2) + Vector((0, 0, 0.04 - 0.08 * (1 - u * u))))
                for u in [i / 4 - 1 for i in range(9)]]
-        tube("eyes-closed", arc, [0.05] * 9, "lid")
+        tube("eyes-closed", arc, [0.05] * 9, "lid", zone="detail")
 
     # ---- open happy mouth + tongue coming out of the "w" mouth
-    mp = on(M2C, M2R, 0, -24, 0.98)
-    ell("mouth-happy", mp, (0.11, 0.27, 0.13), "mouth")
-    ell("mouth-happy", on(M2C, M2R, 0, -36, 1.0) + Vector((-0.04, 0, 0)), (0.1, 0.15, 0.2), "tongue")
+    mouth_block("mouth-happy", M2C, M2R, False)
+    for sfx, (_, _, m2c, m2r, _) in MUZZLES.items():
+        mouth_block(f"mouth-happy-{sfx}", m2c, m2r, True)
 
     # ---- ears (bigger, higher). root on the top sides of the head; left = near (-Y), right = far (+Y)
     for side, name in ((1, "left"), (-1, "right")):
@@ -213,6 +253,17 @@ def build():
     tube("tail-straight", ps, [0.24 - 0.09 * i / 24 for i in range(25)], "tail")
     ell("tail-straight", Vector(ps[-1]), (0.15,) * 3, "tail")
     ell("tail-stubby", tb + Vector((0.2, 0, 0.18)), (0.34, 0.3, 0.3), "tail", rot=(0, math.radians(30), 0))
+    # fluffy tails: small soft tufts along the tail only (zone render only, nofit)
+    ctr = Vector((1.95, 0, 1.75))
+    for st, seq in (("curly", pts), ("straight", ps)):
+        for i in range(5, len(seq) - 1, 2 if st == "curly" else 2):
+            cur, nxt = Vector(seq[i]), Vector(seq[min(i + 1, len(seq) - 1)])
+            tan = (nxt - cur).normalized()
+            out = (cur - ctr).normalized() if st == "curly" else Vector((0, 0, 1))
+            tuft(f"tail-{st}-fluffy", list(cur), 0.13, 0.42, tan * 1.2 + out * (0.45 if (i // 2) % 2 else 0.2), "tail")
+        tuft(f"tail-{st}-fluffy", list(seq[-1]), 0.15, 0.4, (tan * 1.0 + out * 0.3), "tail")
+    for d in ((0.6, 0, 0.8), (1, 0, 0.2), (0.4, 0, -0.9)):
+        tuft("tail-stubby-fluffy", list(tb + Vector((0.25, 0, 0.25))), 0.14, 0.4, d, "tail")
 
     # ---- zzz: three small clay Z's, rising up-right of the head (face the camera, no yaw)
     for (zx, zz, s) in ((-1.7, 4.0, 0.2), (-0.95, 4.2, 0.25), (-0.2, 4.4, 0.3)):
@@ -270,8 +321,37 @@ def build_extras():
     for ph, e in EYES:
         patch(Mk, on(HC, HR, ph, e, 0.97), (0.3, 0.34, 0.42), HC, HR, "mark", None, head=True, k=MK, rot=(0, 0, math.radians(ph)))
 
+    build_fluff()
     build_lying()
     build_back()
+
+
+def tuft(part, loc, r, h, direction, key, zone=None):
+    """Soft fur tuft: an elongated rounded blob along `direction`, base near `loc` (zone render only, nofit)."""
+    d = Vector(direction).normalized()
+    rot = Vector((0, 0, 1)).rotation_difference(d).to_euler()
+    o = common.sph(tuple(Vector(loc) + d * (h * 0.4)), 1.0, M[key], scale=(r, r * 0.8, h * 0.5), rot=tuple(rot))
+    return add(part, o, zone=zone, nofit=True)
+
+
+def build_fluff():
+    """Fur length for the fur-zone Buddy, zone chest, drawn between body and head. short = none; medium = a subtle
+    chest ruff; fluffy = a fuller ruff plus many small soft tufts on chest and neck (kept at the silhouette edge)."""
+    BIB, BIBR = Vector((-0.62, 0, 1.15)), Vector((0.3, 0.55, 0.85))
+    for level, k in (("medium", 1.1), ("fluffy", 1.3)):
+        P = f"fluff-{level}"
+        for loc, rad in (((-0.78, 0, 1.55), (0.36, 0.62, 0.62)), ((-0.62, -0.5, 1.75), (0.34, 0.3, 0.42)),
+                         ((-0.62, 0.5, 1.75), (0.34, 0.3, 0.42)), ((-0.92, 0, 1.15), (0.3, 0.45, 0.4))):
+            ell(P, (loc[0] - 0.08 * (k - 1), loc[1] * k, loc[2] + 0.05 * (k - 1)), tuple(r * k for r in rad), "accent")
+    P = "fluff-fluffy"
+    for e in (-35, -10, 15, 40, 65):
+        for phi in (-75, -40, -5, 30, 65):
+            p0 = on(BIB, BIBR, phi, e, 1.0)
+            d = (p0 - BIB).normalized() + Vector((0, 0, -0.35))
+            tuft(P, p0 - d.normalized() * 0.1, 0.14, 0.45, d, "accent")
+    for ph in (-80, -50, 50, 80):   # neck / cheek line
+        p0 = on(Vector((-0.6, 0, 2.0)), Vector((0.35, 0.8, 0.3)), ph, 10, 1.0)
+        tuft(P, p0, 0.11, 0.38, (p0 - Vector((-0.6, 0, 2.0))).normalized() + Vector((0, 0, -0.5)), "accent")
 
 
 def build_lying():
@@ -281,12 +361,12 @@ def build_lying():
     EXTRA = Matrix.Translation((0.35, 0, 0)) @ Matrix.Scale(LS, 4)
     L = "pose-lying"
     ell(L, (0.35, 0, 0.78), (1.3, 0.92, 0.78), "coat")
-    ell(L, (-0.75, 0, 0.7), (0.32, 0.6, 0.55), "accent")
+    ell(L, (-0.75, 0, 0.7), (0.32, 0.6, 0.55), "accent", zone="chest")
     for sg in (-1, 1):
-        ell(L, (0.95, sg * 0.74, 0.5), (0.85, 0.6, 0.5), "coat")
-        ell(L, (-0.5, sg * 0.55, 0.4), (0.5, 0.3, 0.4), "coat")
-        ell(L, (-1.95, sg * 0.5, 0.2), (0.95, 0.3, 0.2), "coat")
-    ell(L, (0.1, -1.05, 0.17), (0.6, 0.3, 0.19), "coat")
+        ell(L, (0.95, sg * 0.74, 0.5), (0.85, 0.6, 0.5), "coat", zone="legs")
+        ell(L, (-0.5, sg * 0.55, 0.4), (0.5, 0.3, 0.4), "coat", zone="legs")
+        ell(L, (-1.95, sg * 0.5, 0.2), (0.95, 0.3, 0.2), "coat", zone="paws")
+    ell(L, (0.1, -1.05, 0.17), (0.6, 0.3, 0.19), "coat", zone="paws")
     T = (0.35, 0, 0.78)
     patch(L, (0.5, 0, 1.4), (0.9, 0.85, 0.5), T, (1.3, 0.92, 0.78), "charcoal", "tricolour", head=False)
     patch(L, (1.0, -0.85, 0.55), (0.6, 0.5, 0.5), (0.95, -0.74, 0.5), (0.85, 0.6, 0.5), "ginger", "tricolour", head=False)
@@ -504,6 +584,9 @@ def sheet(out, coats):
 
 
 def main(argv):
+    if "--zones" in argv or "--zones-sheet" in argv:   # fur-zone layers: see buddy_zones.py
+        import buddy_zones
+        return buddy_zones.main(argv)
     fast = "--fast" in argv
     arg = lambda k, d=None: argv[argv.index(k) + 1] if k in argv else d
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

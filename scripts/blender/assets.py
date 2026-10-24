@@ -20,9 +20,48 @@ HEX["stripe"] = "#F2786E"
 # ---------- shared pieces ----------
 
 def base(r=1.5):
-    """Round sod tile every building stands on; top surface at z=0."""
-    cyl((0, 0, -0.2), r, 0.4, "brown", bev=0.12)
-    cyl((0, 0, -0.07), r + 0.06, 0.14, "grass", bev=0.07)
+    """Contact shadow + a few grass tufts instead of a sod tile (buildings stand in the yard ground).
+    Soft dark-green radial shadow baked with transparency; r = footprint radius in world units."""
+    mat = bpy.data.materials.new("contact_shadow")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    grad = nt.nodes.new("ShaderNodeTexGradient")
+    grad.gradient_type = "QUADRATIC_SPHERE"  # 1 at the centre, soft falloff to 0 at radius 1
+    mp = nt.nodes.new("ShaderNodeMapping")  # UV 0..1 -> -1..1
+    mp.inputs["Location"].default_value = (-1, -1, 0)
+    mp.inputs["Scale"].default_value = (2, 2, 1)
+    nt.links.new(tc.outputs["UV"], mp.inputs["Vector"])
+    nt.links.new(mp.outputs["Vector"], grad.inputs["Vector"])
+    mul = nt.nodes.new("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    mul.inputs[1].default_value = 0.5  # peak opacity
+    nt.links.new(grad.outputs["Fac"], mul.inputs[0])
+    em = nt.nodes.new("ShaderNodeEmission")
+    em.inputs["Color"].default_value = lin("#2F6B3A")
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mix = nt.nodes.new("ShaderNodeMixShader")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(mul.outputs[0], mix.inputs[0])
+    nt.links.new(tr.outputs[0], mix.inputs[1])
+    nt.links.new(em.outputs[0], mix.inputs[2])
+    nt.links.new(mix.outputs[0], out.inputs[0])
+    bpy.ops.mesh.primitive_plane_add(size=2 * r * 1.1, location=(0, 0.0, 0.004))
+    sh = bpy.context.active_object
+    sh.name = "contact_shadow"
+    sh.data.materials.append(mat)
+    sh["noextent"] = True
+    sh.visible_shadow = False
+    rnd = random.Random(7)
+    for i in range(9):
+        ang = i * 2 * math.pi / 9 + rnd.uniform(-0.2, 0.2)
+        rr = r * rnd.uniform(0.82, 0.98)
+        x, y = math.cos(ang) * rr, math.sin(ang) * rr * 0.9
+        for k in range(3):
+            h = rnd.uniform(0.16, 0.28)
+            cone((x + (k - 1) * 0.05, y, h / 2 - 0.01), 0.045, h, "grass" if k % 2 else "grass_dark",
+                 rot=(rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), 0))
 
 
 def bone(loc, length, thick, mat, rot=(0, 0, 0), plane="xy"):
@@ -298,6 +337,16 @@ def garden(stage):
         box((0, 0.1, 0.07), (1.7, 1.2, 0.16), "brown", bev=0.06)
         for i, (x, y) in enumerate([(-0.4, 0.0), (0.15, 0.2), (0.45, -0.1)]):
             flower((x, y, 0.15), cols[i], s=1.0, stem=0.3)
+        # height so it reads as a building: sign post, trellis with blooms, shrub
+        cyl((-0.75, -0.45, 0.55), 0.04, 1.0, "wood_dark", bev=0, verts=12)
+        box((-0.75, -0.47, 0.98), (0.55, 0.06, 0.3), "wood", bev=0.03)
+        bone((-0.75, -0.52, 0.98), 0.3, 0.035, "warm")
+        for sx in (-1, 1):
+            cyl((0.55 + sx * 0.28, 0.45, 0.6), 0.035, 1.2, "cream", bev=0, verts=12)
+        box((0.55, 0.45, 1.2), (0.7, 0.06, 0.06), "cream", bev=0.02)
+        for k, c in enumerate(("pink", "coral", "yellow")):
+            sph((0.35 + k * 0.2, 0.43, 1.05 - 0.12 * (k % 2)), 0.1, c)
+        bush((-0.5, 0.65, 0.1), 0.32)
         return
     fenced_bed()
     pos = [(-0.8, 0.3), (-0.4, -0.2), (0.0, 0.4), (0.4, 0.0), (0.8, 0.35), (-0.1, -0.3)]
@@ -306,6 +355,16 @@ def garden(stage):
     bush((-1.3, 0.7, 0), 0.3)
     bush((1.25, 0.8, 0), 0.34)
     bush((0.0, 1.15, 0), 0.28, "grass")
+    # arch trellis with blooms and a sign post (height)
+    for sx in (-1, 1):
+        cyl((sx * 0.55, -0.9, 0.7), 0.04, 1.4, "cream", bev=0, verts=12)
+        sph((sx * 0.55, -0.9, 0.5 + 0.35 * (sx > 0)), 0.12, "pink" if sx < 0 else "lav")
+    box((0, -0.9, 1.42), (1.2, 0.07, 0.07), "cream", bev=0.02)
+    for k, c in enumerate(("coral", "yellow", "pink", "lav")):
+        sph((-0.45 + k * 0.3, -0.9, 1.38), 0.1, c)
+    cyl((-1.55, -0.6, 0.65), 0.04, 1.3, "wood_dark", bev=0, verts=12)
+    box((-1.55, -0.63, 1.25), (0.6, 0.06, 0.3), "wood", bev=0.03)
+    bone((-1.55, -0.68, 1.25), 0.32, 0.035, "warm")
     # watering can
     cyl((1.0, -1.35, 0.17), 0.19, 0.34, "sky", bev=0.04)
     cyl((0.78, -1.35, 0.3), 0.03, 0.4, "sky", bev=0, rot=(0, R(-50), 0), verts=16)
@@ -1163,14 +1222,38 @@ def prop_question():
 
 
 
+BUILDING_FAMILIES = ("doghouse-", "bakery-", "garden-")
+
+
+def is_building(name):
+    return name.startswith(BUILDING_FAMILIES)
+
+
 # name -> (builder, w, h, camera(rx, rz), fill, opaque)
 ISO = (62, 30)
 FRONT = (90, 0)
 ICON = (72, 18)
 ASSETS = {}
+
+
+def grown(fn, k):
+    """Build, then scale the whole model by k about the origin (smooth stage 1-2 growth curve; k in assets table)."""
+    def build():
+        fn()
+        root = bpy.data.objects.new("grow", None)
+        bpy.context.scene.collection.objects.link(root)
+        for o in list(bpy.context.scene.objects):
+            if o.type == "MESH":
+                o.parent = root
+        root.scale = (k, k, k)
+        bpy.context.view_layer.update()
+    return build
+
+
+GROW = {1: 1.6, 2: 1.55}
 for fam, fn in (("doghouse", doghouse), ("bakery", bakery), ("garden", garden)):
     for st in (1, 2, 3):
-        ASSETS[f"{fam}-{st}"] = (lambda f=fn, s=st: f(s), 1024, 1024, ISO, {1: 0.5, 2: 0.72, 3: 0.92}[st], False)
+        ASSETS[f"{fam}-{st}"] = (grown(lambda f=fn, s=st: f(s), GROW[st]) if st in GROW else (lambda f=fn, s=st: f(s)), 1024, 1024, ISO, {1: 0.5, 2: 0.72, 3: 0.92}[st], False)
 for n, fn in (("icon-treat", icon_treat), ("icon-paw", icon_paw), ("icon-pin", icon_pin), ("icon-badge", icon_badge),
               ("icon-home", icon_home), ("icon-settings", icon_settings), ("icon-walks", icon_walks),
               ("icon-den", icon_den)):

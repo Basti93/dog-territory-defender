@@ -14,7 +14,7 @@
 - Gentle OTA updates (`expo-updates`): background download, flag only, meadow card "restart now?", never during a walk. Auto-finish forgotten walk (`src/app/autoFinish.ts`): >= 8 min, within 40 m of start after >= 150 m away for 3 min, or 20 min still (< 25 m); same rewards; per-player switch default on.
 - Redesign steps 1-4 (2026-10-18): one scene with three heights (`WorldScene.tsx`, replaces Doorstep + Den yard; upgrade logic moved to `src/app/useDen.ts`); "Heimkehr" replaces the celebration screen (`Homecoming.tsx`, `homecomingPlan.ts`, one tap per beat); `WoodSign` 9-slice sprites, Settings as "Post" paper sheet; bakery loop visible (`BakeryLife.tsx`, `bakeryRules.ts`: emit interval = 3600000/rate clamped 3-12 s, max 6 in the air, none at cap or during a walk; bowl count is display-only projection, real accrual unchanged).
 **Rejected:**
-- Photo import / photo-to-avatar ML, free-form colour picker, because uncanny, native dependency and off-palette results.
+- Photo import / photo-to-avatar ML, because uncanny and a native dependency. (The free colour picker part was reopened by the owner on 2026-10-24: now free fur zones, always clay-softened; see LOG.md.)
 - reanimated, Lottie, sprite sheets, expo-three/real-time 3D, Unity/Godot, because native rebuilds, no recolouring, asset explosion; parked, not dead.
 - Full-size 1024 renders everywhere, because bitmap memory on mid-range Android.
 - Auto-reload on OTA, geofencing for auto-finish, music during walks, extras over Celebration/walk screens, because they interrupt walks or add native deps.

@@ -2,11 +2,11 @@
 // No React, no Animated: YardBuddy.tsx owns the animation, this file owns the choices and the
 // wander clock (pause/resume included), so all of it is unit-testable with a seeded rng.
 
-export type BuildingSpot = 'doghouse' | 'bakery' | 'sniffGarden';
-export type SpotId = BuildingSpot | 'front';
+/** Where he may stand in the Hof: `front` is the middle above the bowl; `bench` and `mailbox` are the ends of the bottom row. */
+export type SpotId = 'front' | 'bench' | 'mailbox';
 export type YardActivity = 'sniff' | 'sit' | 'sleep' | 'trick';
 
-export const SPOT_IDS: readonly SpotId[] = ['doghouse', 'bakery', 'sniffGarden', 'front'];
+export const SPOT_IDS: readonly SpotId[] = ['bench', 'mailbox', 'front'];
 
 export const WANDER_MIN_MS = 15000;
 export const WANDER_MAX_MS = 30000;
@@ -32,10 +32,10 @@ export function pickDestination(rng: Rng, current: SpotId | null): SpotId {
   return options[Math.floor(unit(rng) * options.length)];
 }
 
-/** Sleeping only at the doghouse; sniffing only toward a building; the front spot is for sitting or a trick. */
+/** Sleeping only by the bench; sniffing at the bench or the mailbox; the front spot is for sitting or a trick. */
 export function activityOptions(spot: SpotId): YardActivity[] {
   if (spot === 'front') return ['sit', 'trick'];
-  if (spot === 'doghouse') return ['sniff', 'sit', 'sleep', 'trick'];
+  if (spot === 'bench') return ['sniff', 'sit', 'sleep', 'trick'];
   return ['sniff', 'sit', 'trick'];
 }
 

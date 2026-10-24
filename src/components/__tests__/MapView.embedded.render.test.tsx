@@ -12,8 +12,9 @@ const messages = (type: string) => posted.map((m) => JSON.parse(m)).filter((m) =
 
 const chrome = (extra: Partial<ViertelChromeData> = {}): ViertelChromeData => ({
   loaded: true,
-  territory: { name: 'Hinterm Park', title: 'Everyday' },
+  territory: { name: 'Hinterm Park' },
   statsParts: ['42 walks', '31 streets'],
+  incomeText: 'Your ground brings 0.4 treats/hr',
   notes: [{ text: 'stitched today', lat: 1, lon: 2, anchor: 'below' }],
   corners: [],
   wildSpot: null,
@@ -38,7 +39,7 @@ describe('MapView embedded (Viertel band)', () => {
     await flush();
     expect(messages('SHOW_NOTES').pop().payload.notes).toEqual([{ text: 'stitched today', lat: 1, lon: 2, anchor: 'below' }]);
     expect(screen.getByText('Hinterm Park')).toBeOnTheScreen();
-    expect(screen.getByText(t('territories.title.everyday'))).toBeOnTheScreen();
+    expect(screen.getByText('Your ground brings 0.4 treats/hr')).toBeOnTheScreen();
     expect(screen.getByText('42 walks')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: t('world.neighbourhoodLabel') }));
     expect(onEmbeddedPress).toHaveBeenCalledTimes(1);

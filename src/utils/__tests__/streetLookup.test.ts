@@ -156,12 +156,12 @@ describe('resolveNewGroundSpot', () => {
 // always get a real, non-empty name, even when reverse-geocoding fails
 // (unlike the wild-cluster/New-Ground states above, which render nothing).
 describe('resolveTerritoryName', () => {
-  it('composes the dog name and the resolved place when geocoding succeeds', async () => {
+  it('composes the dog name and the resolved street when geocoding succeeds', async () => {
     mockReverseGeocodeAsync.mockResolvedValueOnce([{ street: 'Hauptstraße', district: null, city: null } as never]);
 
     const name = await resolveTerritoryName(48.1, 11.5, 'Buddy');
 
-    expect(name).toBe("Buddy's Hauptstraße Range");
+    expect(name).toBe("Buddy's territory on Hauptstraße");
   });
 
   it('falls back to a non-empty placeholder name when geocoding resolves nothing', async () => {
@@ -169,7 +169,7 @@ describe('resolveTerritoryName', () => {
 
     const name = await resolveTerritoryName(48.1, 11.5, 'Buddy');
 
-    expect(name).toBe("Buddy's New Range");
+    expect(name).toBe("New territory");
   });
 
   it('falls back to a non-empty placeholder name when the geocoder throws', async () => {
@@ -177,7 +177,7 @@ describe('resolveTerritoryName', () => {
 
     const name = await resolveTerritoryName(48.1, 11.5, 'Buddy');
 
-    expect(name).toBe("Buddy's New Range");
+    expect(name).toBe("New territory");
   });
 
   it('uses the generic dog fallback when no dog name is set', async () => {
@@ -185,6 +185,6 @@ describe('resolveTerritoryName', () => {
 
     const name = await resolveTerritoryName(48.1, 11.5, null);
 
-    expect(name).toBe("Your dog's New Range");
+    expect(name).toBe("New territory");
   });
 });

@@ -30,9 +30,20 @@ function matcherFor(template: string, key: string): Matcher {
   return { key, re: new RegExp(`^${source}$`), vars };
 }
 
+// Names generated before 2026-10-24 ("Revier von {dog} rund um {place}", "{dog}'s {place} Range") still show in the current language.
+const LEGACY_TEMPLATES: Array<{ key: string; template: string }> = [
+  { key: 'territory.name.fallback', template: '{dog}\'s New Range' },
+  { key: 'territory.name.fallback', template: 'Neues Revier von {dog}' },
+  { key: 'territory.name.withPlace', template: '{dog}\'s {place} Range' },
+  { key: 'territory.name.withPlace', template: 'Revier von {dog} rund um {place}' },
+];
+
 // The fallback is tested before the place form: "Newt's New Range" would also read as place "New".
-const MATCHERS: Matcher[] = ['territory.name.fallback', 'territory.name.withPlace'].flatMap((key) => dictionaries.map((d) => matcherFor(d[key], key)));
-const SERVER_DEFAULTS = dictionaries.map((d) => d['territory.name.serverDefault']);
+const MATCHERS: Matcher[] = [
+  ...['territory.name.fallback', 'territory.name.withPlace'].flatMap((key) => dictionaries.map((d) => matcherFor(d[key], key))),
+  ...LEGACY_TEMPLATES.map(({ key, template }) => matcherFor(template, key)),
+];
+const SERVER_DEFAULTS = [...dictionaries.map((d) => d['territory.name.serverDefault']), 'A new corner', 'Eine neue Ecke', 'A new territory']; // the last two: the server's old default
 
 /** The territory name to show: generated defaults (any language, server default included) re-rendered in the current language. */
 export function displayTerritoryName(stored: string): string {

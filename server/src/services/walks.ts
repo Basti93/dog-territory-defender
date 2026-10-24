@@ -6,7 +6,7 @@ import { walkDistanceMeters } from '@game/utils/geometry';
 import { bloomMultiplier, manualLogBloomMultiplier } from '@game/economy/formulas';
 import { BALANCE } from '@game/economy/balanceConfig';
 import type { Location } from '@game/types';
-import { resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '@game/utils/territoryCluster';
+import { confirmPromotions, findPromotionCandidates, homeCentreCell, resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '@game/utils/territoryCluster';
 import { generateTerritoryId } from '@game/storage/TerritoryRepository';
 import type { Cell } from '@game/storage/HomeRangeRepository';
 import type {
@@ -40,10 +40,10 @@ export type WalkResult =
   | { kind: 'rejected'; reason: WalkRejectedReason }
   | { kind: 'capped' };
 
-const DEFAULT_TERRITORY_NAME = 'A new corner';
+const DEFAULT_TERRITORY_NAME = 'New territory';
 
 function cleanName(raw: string | undefined): string {
-  const trimmed = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const trimmed = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, API_LIMITS.maxTerritoryNameLength);
   return trimmed.length > 0 ? trimmed : DEFAULT_TERRITORY_NAME;
 }
 
@@ -180,6 +180,8 @@ export async function ingestWalk(
     const territoryNames = new Map(existingTerritories.map((t) => [t.id, t.name] as const));
     let creditedTerritoryId: string | null = null;
     let newTerritoryName: string | null = null;
+    let newTerritoryId: string | null = null;
+    let homeCentre: ReturnType<typeof homeCentreCell> = null;
     let mergedTerritoryNames: [string, string] | null = null;
     const assignment = new Map<string, string>();
     const reassigned: Array<{ from: string; to: string }> = [];
@@ -188,31 +190,36 @@ export async function ingestWalk(
     let merges: Array<{ survivorId: string; loserId: string }> = [];
 
     if (painted.size > 0) {
+      // Home = where the first tracked walks started (only each walk's first fix is read); this walk counts too.
+      const startRows = await dbx
+        .select({ id: walks.id, startTime: walks.startTime, first: sql<Location | null>`${walks.route}->0` })
+        .from(walks)
+        .where(and(eq(walks.householdId, hid), eq(walks.startSource, 'button'), eq(walks.generated, false)));
+      homeCentre = homeCentreCell([
+        ...startRows.filter((r) => r.first).map((r) => ({ id: r.id, startTime: r.startTime, startSource: 'button' as const, locations: [r.first as Location] })),
+        { id: req.id, startTime: req.startTime, startSource: req.startSource, locations: req.locations.slice(0, 1) },
+      ]);
       const plan = resolveTerritoryChanges(
         rangeBefore,
         painted,
         now,
-        new Map(existingTerritories.map((t) => [t.id, t.createdAt] as const))
+        new Map(existingTerritories.map((t) => [t.id, t.createdAt] as const)),
+        homeCentre
       );
       const provisionalToReal = new Map<string, string>();
-      const birthNames = new Map<string, string>();
-      let first = true;
+      // Only the household's very first territory is born here; later ones are promotions (below).
       for (const birth of plan.births) {
         const realId = generateTerritoryId(now);
-        const name = first ? cleanName(req.territoryNameHint) : DEFAULT_TERRITORY_NAME;
-        first = false;
+        const name = cleanName(req.territoryNameHint);
         provisionalToReal.set(birth.provisionalId, realId);
-        birthNames.set(birth.provisionalId, name);
         territoryNames.set(realId, name);
         await dbx.insert(territories).values({ householdId: hid, id: realId, name, createdAt: now });
         touchedTerritoryIds.add(realId);
       }
       const real = (id: string) => provisionalToReal.get(id) ?? id;
       for (const [cellId, id] of plan.newCellAssignments) assignment.set(cellId, real(id));
-      creditedTerritoryId = real(plan.creditedTerritoryId);
-      const beat = resolveCelebrationTerritoryBeat(plan, birthNames, territoryNames);
-      newTerritoryName = beat.newTerritoryName;
-      mergedTerritoryNames = beat.mergedTerritoryNames;
+      creditedTerritoryId = real(plan.creditedTerritoryId) || null;
+      mergedTerritoryNames = resolveCelebrationTerritoryBeat(plan, null, territoryNames).mergedTerritoryNames;
       merges = plan.merges;
     }
 
@@ -260,6 +267,39 @@ export async function ingestWalk(
         removedTerritoryIds.push(merge.loserId);
         touchedTerritoryIds.delete(merge.loserId);
         if (creditedTerritoryId === merge.loserId) creditedTerritoryId = merge.survivorId;
+      }
+
+      // ---- promotion: a far patch walked on 2+ walks with 40+ cells becomes a territory of its own
+      const territoryCreatedAtNow = new Map(
+        (await dbx.select().from(territories).where(eq(territories.householdId, hid))).map((t) => [t.id, t.createdAt] as const)
+      );
+      const afterRows = await dbx.select().from(cells).where(and(eq(cells.householdId, hid), eq(cells.generated, false)));
+      const candidates = findPromotionCandidates(
+        afterRows.map((r) => ({ ix: r.ix, iy: r.iy, lastRefreshed: r.lastRefreshed, lastTracked: r.lastTracked, visits: r.visits, territoryId: r.territoryId })),
+        territoryCreatedAtNow,
+        painted,
+        homeCentre
+      );
+      if (candidates.length > 0) {
+        const earlierRoutes = await dbx
+          .select({ route: walks.route })
+          .from(walks)
+          .where(and(eq(walks.householdId, hid), eq(walks.generated, false), isNull(walks.deletedAt), sql`${walks.startSource} <> 'manual-log'`));
+        const earlier = earlierRoutes.map((w) => paintedCells((w.route ?? []) as Location[]));
+        const [promotion] = confirmPromotions(candidates, painted, earlier);
+        if (promotion) {
+          const promotedId = generateTerritoryId(now);
+          const promotedName = cleanName(req.territoryNameHint);
+          await dbx.insert(territories).values({ householdId: hid, id: promotedId, name: promotedName, createdAt: now, walksHere: promotion.walks });
+          const promotedJson = JSON.stringify(promotion.cellIds.map((id) => parseCellKey(id)).map(({ ix, iy }) => [ix, iy]));
+          await dbx.execute(sql`
+            update cells c set territory_id = ${promotedId}
+            from jsonb_array_elements(${promotedJson}::jsonb) e
+            where c.household_id = ${hid}::uuid and c.ix = (e->>0)::int and c.iy = (e->>1)::int`);
+          touchedTerritoryIds.add(promotedId);
+          newTerritoryName = promotedName;
+          newTerritoryId = promotedId;
+        }
       }
 
       touchedCells = (
@@ -341,6 +381,7 @@ export async function ingestWalk(
       leveledUpTo,
       territoryId: creditedTerritoryId,
       newTerritoryName,
+      ...(newTerritoryId ? { newTerritoryId } : {}),
       mergedTerritoryNames,
       ...(isManual ? { routeRefreshed: refreshRoute !== null } : {}),
     };

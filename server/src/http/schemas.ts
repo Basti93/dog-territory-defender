@@ -83,6 +83,15 @@ export const CommandSchema = Type.Object(
         },
         { additionalProperties: false }
       ),
+      Type.Object(
+        {
+          kind: Type.Literal('territory.name'),
+          territoryId: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+          fromWalkId: Type.Optional(Id),
+          name: Type.String({ minLength: 1, maxLength: API_LIMITS.maxTerritoryNameLength, pattern: '^(?=.*\\S)[^\\u0000-\\u001F\\u007F]+$' }),
+        },
+        { additionalProperties: false }
+      ),
     ]),
   },
   { additionalProperties: false }

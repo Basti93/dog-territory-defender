@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Image, ImageSourcePropType, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Image, ImageSourcePropType, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { artOr } from '../../art/artAssets';
@@ -12,6 +12,7 @@ import { formatNumber, t } from '../../i18n';
 import { AnimatedNumber, ArtImage, Confetti, DecorImage, PaperNote, WoodSign, material, spacing, stitch, textStyle } from '../../ui';
 import { MAX_COUNT_UP_MS } from '../../ui/AnimatedNumber';
 import { BuddyAvatar } from '../buddy';
+import { API_LIMITS } from '../../sync/apiContract';
 import { BUDDY_SIZE, SceneLayout, WorldYardLayout } from './sceneLayout';
 import { BeatId, HomecomingVariant, HomecomingWalk, OneNumber, homecomingBadgeArrivals, homecomingVariant, pickClosingLine, pickOneNumber, planBeats, planExtras } from './homecomingPlan';
 
@@ -51,7 +52,7 @@ export interface HomecomingProps {
 export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bowl, level, levelTitle, onCamera, onDone, onBeat, onNameCorner }: HomecomingProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards, !!walk.corner)), [walk]);
+  const extras = useMemo(() => (walk.manual ? [] : planExtras(walk.rewards, !!walk.corner, !!walk.newTerritory, !!walk.incomeChange)), [walk]);
   const partner = !!walk.partnerName;
   const beats = useMemo(() => planBeats(walk.manual, extras, partner), [walk.manual, extras, partner]);
   const variant = useMemo(() => homecomingVariant(walkCount), [walkCount]);
@@ -109,7 +110,7 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
               spot={spot}
               entryFromLeft={beat === 'bowl' && variant.buddyEntry === 'left'}
               lying={beat === 'rest'}
-              sitting={beat === 'extras' && extras.includes('corner')}
+              sitting={beat === 'extras' && (extras.includes('corner') || extras.includes('territory'))}
             />
             {beat === 'bowl' && <TreatDots count={walk.rewards.treatsEarned} spot={spot} layout={layout} width={width} />}
           </>
@@ -146,6 +147,9 @@ export function Homecoming({ walk, walkCount, dog, appearance, layout, yard, bow
       {/* Above the tap area: the one piece of the homecoming that takes a touch of its own. Tapping anywhere else skips it. */}
       {beat === 'extras' && extras.includes('corner') && walk.corner && (
         <CornerPrompt corner={walk.corner} bottom={height - spot.top + 4} onName={() => onNameCorner?.(walk.corner!.id)} />
+      )}
+      {beat === 'extras' && extras.includes('territory') && !extras.includes('corner') && walk.newTerritory && (
+        <TerritoryPrompt dog={dog} territory={walk.newTerritory} bottom={height - spot.top + 4} />
       )}
     </View>
   );
@@ -392,7 +396,16 @@ function ExtraPieces({
           </WoodSign>
         </PopIn>
       )}
-      {extras.includes('pennant') && rewards.tease && <PennantPiece building={rewards.tease.building} layout={layout} yard={yard} />}
+      {extras.includes('pennant') && rewards.tease && <PennantPiece layout={layout} />}
+      {extras.includes('income') && walk.incomeChange && (
+        <PopIn style={[styles.abs, { left: 12, top: layout.hofTop + 10, maxWidth: width * 0.6, transform: [{ rotate: '-3deg' }] }]}>
+          <WoodSign size="medium" testID="homecoming-income">
+            <Text style={[textStyle('sign'), styles.ink, styles.smallSign]}>
+              {t('income.prompt', { from: formatRate(walk.incomeChange.from), to: formatRate(walk.incomeChange.to) })}
+            </Text>
+          </WoodSign>
+        </PopIn>
+      )}
     </>
   );
 }
@@ -412,13 +425,43 @@ function CornerPrompt({ corner, bottom, onName }: { corner: { id: string; name: 
   );
 }
 
-function PennantPiece({ building, layout, yard }: { building: keyof WorldYardLayout['world']; layout: SceneLayout; yard: WorldYardLayout }) {
-  const pennant = artOr('pennant', null);
-  const w = yard.world[building];
-  const top = layout.hofTop + layout.yardH - w.pennantBottom - 72;
+function formatRate(rate: number): string {
+  return formatNumber(rate, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/** "Neues Revier! {dog} hat weit weg von zu Hause neuen Boden entdeckt.": the suggested name sits on a sign; a tap edits it, anything else skips for free. */
+function TerritoryPrompt({ dog, territory, bottom }: { dog: string; territory: { name: string; rename: (name: string) => void }; bottom: number }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(territory.name);
+  const save = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== territory.name) territory.rename(trimmed);
+    setEditing(false);
+  };
   return (
-    <PopIn style={[styles.abs, { left: w.pennantLeft, top }]}>
-      {pennant ? <DecorImage source={pennant} resizeMode="contain" style={{ width: 36, height: 72 }} /> : <View testID="homecoming-pennant" style={styles.pennantFallback} />}
+    <PopIn style={[styles.cornerPrompt, { bottom }]}>
+      <PaperNote testID="homecoming-territory" style={styles.cornerNote}>
+        <Text style={[textStyle('body'), styles.ink]}>{t('territory.prompt', { dog })}</Text>
+        {editing ? (
+          <TextInput testID="homecoming-territory-input" value={name} onChangeText={setName} onSubmitEditing={save} onBlur={save} autoFocus maxLength={API_LIMITS.maxTerritoryNameLength} style={[textStyle('hand'), styles.cornerWhere]} />
+        ) : (
+          <Text style={[textStyle('hand'), styles.cornerWhere]}>{name}</Text>
+        )}
+        <WoodSign size="medium" onPress={editing ? save : () => setEditing(true)} accessibilityLabel={editing ? t('territory.prompt.save') : t('territory.prompt.rename')} testID="homecoming-territory-edit">
+          {editing ? t('territory.prompt.save') : t('territory.prompt.rename')}
+        </WoodSign>
+      </PaperNote>
+    </PopIn>
+  );
+}
+
+/** The next-upgrade tease: the pennant pops up at the strip that leads down to the buildings (they are on their own page now), same spot as the Hof's "upgrade ready" cue. */
+function PennantPiece({ layout }: { layout: SceneLayout }) {
+  const pennant = artOr('pennant', null);
+  const top = layout.hofTop + layout.hintDownTop - 26;
+  return (
+    <PopIn style={[styles.abs, { right: 14, top }]}>
+      {pennant ? <DecorImage source={pennant} resizeMode="contain" style={{ width: 18, height: 36 }} /> : <View testID="homecoming-pennant" style={styles.pennantFallback} />}
     </PopIn>
   );
 }

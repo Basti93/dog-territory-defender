@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react-native';
 
-import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
+import { defaultBuddyAppearance, furFromLegacy } from '../../buddy/buddyAppearance';
 import { buddyImageSources } from '../../buddy/imageSkinSources';
 import { t } from '../../i18n';
 import { imagesIn, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
@@ -23,11 +23,13 @@ function previewSources() {
 }
 
 describe('BuddyAppearancePicker', () => {
-  it('walks the step captions in order, including Markings', async () => {
+  it('walks the step captions in order, including Markings, Fell and Form', async () => {
     const view = await renderScreen(<BuddyAppearancePicker name={NAME} />);
     const captions = [
       t('buddy.step.coat', { name: NAME }),
       t('buddy.step.markings', { name: NAME }),
+      t('buddy.step.fur', { name: NAME }),
+      t('buddy.step.form'),
       t('buddy.step.ears'),
       t('buddy.step.tail', { name: NAME }),
       t('buddy.step.size'),
@@ -71,11 +73,40 @@ describe('BuddyAppearancePicker', () => {
     await fireEvent.press(screen.getByLabelText(t('buddy.coat.ginger')));
     await fireEvent.press(screen.getByText(t('common.next')));
     await fireEvent.press(screen.getByText(t('buddy.markings.patch')));
-    for (let i = 0; i < 4; i++) await fireEvent.press(screen.getByText(t('common.next')));
+    for (let i = 0; i < 6; i++) await fireEvent.press(screen.getByText(t('common.next')));
     expect(onSave).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByText(t('dogName.submit')));
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave).toHaveBeenCalledWith({ ...defaultBuddyAppearance(), coat: 'ginger', markings: 'patch' });
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('painting a zone adds a softened fur block and switches the preview to zone layers', async () => {
+    const onSave = jest.fn();
+    const view = await renderScreen(<BuddyAppearancePicker name={NAME} onSave={onSave} />);
+    await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByLabelText(t('buddy.zone.paws')));
+    await fireEvent.press(screen.getByLabelText(`${t('buddy.fur.swatch')} #FFFFFF`.replace('#FFFFFF', '#4A423E')));
+    for (let i = 0; i < 5; i++) await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByText(t('dogName.submit')));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.fur.zones.paws).toBe('#4A423E');
+    expect(saved.fur.zones.back).toBe(furFromLegacy(defaultBuddyAppearance()).zones.back);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a preset after painting re-applies the preset to the zones and keeps the shape', async () => {
+    const onSave = jest.fn();
+    const view = await renderScreen(<BuddyAppearancePicker name={NAME} initial={{ ...defaultBuddyAppearance(), fur: { ...furFromLegacy(defaultBuddyAppearance()), muzzle: 'long' } }} onSave={onSave} />);
+    await fireEvent.press(screen.getByLabelText(t('buddy.coat.ginger')));
+    await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByText(t('buddy.markings.socks')));
+    for (let i = 0; i < 6; i++) await fireEvent.press(screen.getByText(t('common.next')));
+    await fireEvent.press(screen.getByText(t('dogName.submit')));
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.fur.muzzle).toBe('long');
+    expect(saved.fur.zones).toEqual(furFromLegacy({ coat: 'ginger', markings: 'socks' }).zones);
     await unmountAndExpectNoTimers(view);
   });
 

@@ -78,10 +78,11 @@ function Canvas({ size, children }: { size: number; children: React.ReactNode })
 }
 
 function coatFill(a: BuddyAppearance): string {
-  return BUDDY_PALETTE.coats[a.coat];
+  return a.fur ? a.fur.zones.back : BUDDY_PALETTE.coats[a.coat];
 }
 /** Near ear is charcoal on a tricolour dog; otherwise the coat. */
 function earFill(a: BuddyAppearance): string {
+  if (a.fur) return a.fur.zones.ears;
   return a.coat === 'tricolour' ? BUDDY_PALETTE.tricolourPatches.charcoal : coatFill(a);
 }
 
@@ -89,7 +90,7 @@ function earFill(a: BuddyAppearance): string {
 function Body({ appearance: a, size }: PartRenderArgs) {
   const pr = proportions(a.size);
   const coat = coatFill(a);
-  const accent = BUDDY_PALETTE.accents[a.accentColour];
+  const accent = a.fur ? a.fur.zones.muzzle : BUDDY_PALETTE.accents[a.accentColour];
   const clipId = `bodyClip-${a.size}`;
   const sock = a.markings === 'socks' ? markingColourFor(a.coat, 'socks') : null;
   return (
@@ -157,7 +158,7 @@ function Tail({ appearance: a, size }: PartRenderArgs) {
   const pr = proportions(a.size);
   const base = bodyPoint(TAIL_BASE, pr);
   const { d, width } = tailPath(a.tailStyle);
-  const fill = a.coat === 'tricolour' ? BUDDY_PALETTE.tricolourPatches.charcoal : coatFill(a);
+  const fill = a.fur ? a.fur.zones.tail : a.coat === 'tricolour' ? BUDDY_PALETTE.tricolourPatches.charcoal : coatFill(a);
   return (
     <Canvas size={size}>
       <G transform={`translate(${base.x} ${base.y}) scale(${pr.ts}) translate(${-TAIL_BASE.x} ${-TAIL_BASE.y})`}>
@@ -172,7 +173,7 @@ function Tail({ appearance: a, size }: PartRenderArgs) {
 function Head({ appearance: a, size }: PartRenderArgs) {
   const pr = proportions(a.size);
   const coat = coatFill(a);
-  const accent = BUDDY_PALETTE.accents[a.accentColour];
+  const accent = a.fur ? a.fur.zones.muzzle : BUDDY_PALETTE.accents[a.accentColour];
   const markCol = markingColourFor(a.coat, a.markings);
   const clipId = `headClip-${a.size}`;
   const nose = noseColourFor(a.coat);

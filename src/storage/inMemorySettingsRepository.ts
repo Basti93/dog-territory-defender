@@ -12,6 +12,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let liveShareEnabled = false;
   let liveSharePromptShown = false;
   let batteryHintShown = false;
+  let incomeBeatShown: { day: string; rate: number } | null = null;
   let shownPartnerWalkIds: string[] = [];
   return {
     async getSyncIdentity() {
@@ -67,6 +68,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveLiveSharePromptShown(shown) {
       liveSharePromptShown = shown === true;
+    },
+    async getIncomeBeatShown() {
+      return incomeBeatShown;
+    },
+    async saveIncomeBeatShown(shown) {
+      incomeBeatShown = { ...shown };
     },
     async getShownPartnerWalkIds() {
       return [...shownPartnerWalkIds];

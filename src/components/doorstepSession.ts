@@ -127,7 +127,8 @@ export async function resolveAwayStripLines(deps: AwayStripDeps, sessionKind: Se
   // Somewhere Wild/achievements/treats, but always shown over the
   // flavor-only anchor line below when it fires — this is a genuine
   // one-time event, not filler).
-  if (deps.justRevealedTerritoryIncome) {
+  // Income is always visible now (Viertel sign), so this one-off beat only fires for a rate that reads as whole treats.
+  if (deps.justRevealedTerritoryIncome && (deps.territoryIncomeRate ?? 0) >= 1) {
     candidates.push({
       text: t('doorstep.territoryIncomeBuddy', { rate: formatNumber(Math.round(deps.territoryIncomeRate ?? 0)) }),
       kind: 'territory-income',

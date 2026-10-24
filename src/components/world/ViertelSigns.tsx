@@ -3,7 +3,6 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { t, useLocale } from '../../i18n';
 import { WoodSign, material, textStyle } from '../../ui';
-import { TERRITORY_TITLE_KEYS } from '../TerritoryCard';
 import type { ViertelChromeData } from './useViertelChrome';
 
 interface ViertelSignsProps {
@@ -22,14 +21,13 @@ interface ViertelSignsProps {
 export function ViertelSigns({ chrome, onOpenTerritories, bottomInset = 0 }: ViertelSignsProps) {
   useLocale(); // re-render on a language switch: the labels and the character title resolve through t() right here
   if (!chrome.loaded) return null;
-  const { territory, statsParts } = chrome;
+  const { territory, statsParts, incomeText } = chrome;
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       {territory && (
         <View pointerEvents="none" testID="viertel-territory-sign" style={styles.nameSign}>
-          <WoodSign size="small" rotate={-2} accessibilityLabel={territory.title ? `${territory.name}, ${t(TERRITORY_TITLE_KEYS[territory.title])}` : territory.name} style={styles.nameFace}>
+          <WoodSign size="small" rotate={-2} accessibilityLabel={territory.name} style={styles.nameFace}>
             <Text numberOfLines={1} style={[textStyle('sign'), styles.name]}>{territory.name}</Text>
-            {territory.title && <Text style={[textStyle('min'), styles.title]}>{t(TERRITORY_TITLE_KEYS[territory.title])}</Text>}
           </WoodSign>
         </View>
       )}
@@ -40,14 +38,15 @@ export function ViertelSigns({ chrome, onOpenTerritories, bottomInset = 0 }: Vie
           </WoodSign>
         </View>
       )}
-      {statsParts.length > 0 && (
+      {(statsParts.length > 0 || incomeText) && (
         <View pointerEvents="none" testID="viertel-stats-sign" style={[styles.statsSign, { bottom: styles.statsSign.bottom + bottomInset }]}>
-          <WoodSign size="small" accessibilityLabel={t('viertel.statsLabel', { stats: statsParts.join(', ') })} style={[styles.paperFace, styles.statsFace]}>
+          <WoodSign size="small" accessibilityLabel={t('viertel.statsLabel', { stats: [...statsParts, incomeText].filter(Boolean).join(', ') })} style={[styles.paperFace, styles.statsFace]}>
             <View style={styles.statsRow}>
               {statsParts.map((part) => (
                 <Text key={part} style={[textStyle('small'), styles.statText]}>{part}</Text>
               ))}
             </View>
+            {incomeText && <Text testID="viertel-income" style={[textStyle('small'), styles.statText, styles.incomeText]}>{incomeText}</Text>}
           </WoodSign>
         </View>
       )}
@@ -59,7 +58,6 @@ const styles = StyleSheet.create({
   nameSign: { position: 'absolute', left: 12, top: 12, maxWidth: '62%', alignItems: 'flex-start' },
   nameFace: { paddingHorizontal: 12, paddingVertical: 5 },
   name: { fontSize: 20, lineHeight: 22, color: material.ink },
-  title: { fontSize: 12, lineHeight: 14, color: material.ink, textAlign: 'center' },
   territoriesSign: { position: 'absolute', right: 12, top: 16 },
   paperFace: { backgroundColor: material.yarn },
   smallText: { fontSize: 14, lineHeight: 18 },
@@ -67,4 +65,5 @@ const styles = StyleSheet.create({
   statsFace: { paddingVertical: 6 },
   statsRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, justifyContent: 'center' },
   statText: { color: material.ink },
+  incomeText: { textAlign: 'center' },
 });

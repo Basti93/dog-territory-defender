@@ -17,5 +17,8 @@ The head group rotates about the NECK. Pivots are fractions 0..1 of the canvas, 
 - `front-legs-walk-a|b`: swap-ins for `front-legs` (near leg forward/back).
 - `pose-walk-back-a|b` (trotting away) and `pose-sit-back` (back to us, looking over the shoulder): full sprites, same canvas and groundY, replace all layers.
 
+## Fur zones (free colours, `zones` block in `manifest.json`)
+`zones/<unit>-mask-<zone>.png` (flat white + alpha, tinted in the app), `<unit>-shade.png` (black/white overlay), `<unit>-detail.png` (untinted nose/mouth/eyelid); 384 px, gray+alpha / RGBA PNG, same canvas and pivots. Units: body, front-legs(+walk-a/b), head (+ `-short`, `-long` muzzle), ear-left|right-<style>, tail-<style>, fluff-medium|fluffy (chest ruff), pose-lying. `common/mouth-happy-short|long.png` follow the muzzle. Regenerate: `render_buddy.py -- --zones`, then `node scripts/genBuddyZoneSources.mjs` (writes `src/buddy/zoneSources.ts`).
+
 ## Image-API recipe (if not using Blender)
 Use the locked style sentence from `assets/art/README.md`, then per part: "ONLY the <part>, all other parts removed, same position and scale as the full dog on a 1024x1024 canvas". Generate the full dog first, then ask for each layer from that image. Check by stacking: no gaps at joins, no baked-in shadows.

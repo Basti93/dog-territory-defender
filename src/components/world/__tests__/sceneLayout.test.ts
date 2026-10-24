@@ -1,21 +1,23 @@
-import { gateVisibleAtStart, sceneLayout, viertelScrollTarget, worldYardLayout } from '../sceneLayout';
+import { BUILDING_SIZE, SPRITE_GROUND_Y_FRAC } from '../../den/YardScene';
+import { BOTTOM_ROW_H, BUILDING_SLOTS, HINT_H, PANEL_ROOM, buildingSelectOffset, buildingsLayout, gateVisibleAtStart, sceneLayout, viertelScrollTarget, worldYardLayout } from '../sceneLayout';
 import { dayPhaseForHour, skyTintForPhase } from '../timeOfDay';
 
+// [window height, safe-area top]: small Android, iPhone SE-ish, iPhone 14, tall Pixel/Pro Max
+const phones: Array<[number, number]> = [
+  [640, 24],
+  [667, 20],
+  [844, 47],
+  [932, 59],
+];
+
 describe('sceneLayout', () => {
-  // [window height, safe-area top]: small Android, iPhone SE-ish, iPhone 14, tall Pixel/Pro Max
-  const phones: Array<[number, number]> = [
-    [640, 24],
-    [667, 20],
-    [844, 47],
-    [932, 59],
-  ];
 
   it.each(phones)('the gate is visible at the opening scroll without scrolling (%d tall, inset %d)', (h, inset) => {
     const l = sceneLayout(h, 390, inset);
     expect(gateVisibleAtStart(l)).toBe(true);
     expect(l.gateSignTopInViewport).toBeGreaterThanOrEqual(inset);
-    // the opening offset shows the bottom of the content: the tail fills the window exactly
-    expect(l.contentH - l.startOffset).toBe(h);
+    // the opening offset shows the Hof (the tail) exactly; the buildings page hangs below it
+    expect(l.buildingsTop - l.startOffset).toBe(h);
   });
 
   it('the yard keeps a usable height on a short phone', () => {
@@ -35,24 +37,90 @@ describe('sceneLayout', () => {
   });
 });
 
-describe('worldYardLayout', () => {
-  const levels = { doghouse: 1, bakery: 1, sniffGarden: 1 };
-  it('rests Buddy at the top of the yard, above every building tile', () => {
-    const y = worldYardLayout(390, 405, levels);
-    const buddyBottomEdge = y.buddy.bottom; // px up from the yard floor
-    for (const k of ['doghouse', 'bakery', 'sniffGarden'] as const) {
-      expect(y.hits[k].bottom + y.hits[k].height).toBeLessThan(buddyBottomEdge);
-    }
+describe('buildings page', () => {
+  it.each(phones)('hangs one page below the Hof, reachable by scrolling (%d tall, inset %d)', (h, inset) => {
+    const l = sceneLayout(h, 390, inset);
+    expect(l.buildingsTop).toBe(l.tailTop + l.hofTop + l.hofH);
+    expect(l.buildingsPageH).toBeGreaterThanOrEqual(h);
+    expect(l.buildingsH).toBe(l.buildingsPageH + PANEL_ROOM);
+    expect(l.contentH).toBe(l.buildingsTop + l.buildingsH);
+    expect(l.buildingsOffset).toBe(l.contentH - PANEL_ROOM - h);
+    expect(l.buildingsOffset).toBeGreaterThan(l.startOffset);
+    // the page shows at the end of the scroll range, and the opening offset still lands on the Hof
+    expect(l.startOffset).toBe(l.buildingsTop - h);
   });
 
-  it('building hit boxes never overlap Buddy', () => {
-    const y = worldYardLayout(390, 405, { doghouse: 12, bakery: 12, sniffGarden: 12 });
+  it('puts the "down to the buildings" strip at the bottom of the Hof, inside the opening viewport', () => {
+    const l = sceneLayout(844, 390, 47, 34);
+    expect(l.hintDownTop + HINT_H + 34).toBe(l.hofH); // above the home indicator
+    expect(l.tailTop + l.hofTop + l.hintDownTop + HINT_H + 34 - l.startOffset).toBe(844);
+    // clear of the bowl sign (row-relative 96..166)
+    expect(l.hintDownTop - l.bottomRowTop).toBeGreaterThanOrEqual(166);
+    expect(BOTTOM_ROW_H).toBeGreaterThanOrEqual(166 + HINT_H + 34);
+  });
+
+  const levelsToWidth: Array<[number, number]> = [[360, 24], [390, 47], [430, 59]];
+  it.each(levelsToWidth)('every building shares one size and stands on its row ground line, on screen (width %d)', (width, inset) => {
+    const b = buildingsLayout(width, inset, 844);
     for (const k of ['doghouse', 'bakery', 'sniffGarden'] as const) {
-      const h = y.hits[k];
-      const overlapsY = h.bottom < y.buddy.bottom + y.buddy.size && h.bottom + h.height > y.buddy.bottom;
-      const overlapsX = h.left < y.buddy.left + y.buddy.size && h.left + h.width > y.buddy.left;
-      expect(overlapsY && overlapsX).toBe(false);
+      const w = b.world[k];
+      expect(w.sprite.size).toBe(BUILDING_SIZE);
+      expect(w.sprite.left).toBeGreaterThanOrEqual(-0.07 * BUILDING_SIZE - 0.001);
+      expect(w.sprite.left + w.sprite.size).toBeLessThanOrEqual(width + 0.07 * BUILDING_SIZE + 0.001);
     }
+    // ground point (0.5, 0.69 of the canvas) of both buildings in row 1 sits on the same line
+    const ground = (k: 'doghouse' | 'bakery' | 'sniffGarden') => b.world[k].sprite.top + SPRITE_GROUND_Y_FRAC * BUILDING_SIZE;
+    expect(ground('doghouse')).toBeCloseTo(b.rowGroundY[0], 5);
+    expect(ground('bakery')).toBeCloseTo(b.rowGroundY[0], 5);
+    expect(ground('sniffGarden')).toBeCloseTo(b.rowGroundY[1], 5);
+    // the two neighbours of a row do not overlap by more than their transparent margins
+    expect(b.world.bakery.sprite.left - (b.world.doghouse.sprite.left + BUILDING_SIZE)).toBeGreaterThan(-0.2 * BUILDING_SIZE);
+  });
+
+  it('keeps a 4th, empty slot for the Friend Lounge that draws nothing, and the first row clear of the back strip', () => {
+    expect(BUILDING_SLOTS).toHaveLength(4);
+    expect(BUILDING_SLOTS[3]).toBeNull();
+    const b = buildingsLayout(390, 47, 844);
+    expect(b.slots[3].key).toBeNull();
+    expect(Object.keys(b.world)).toHaveLength(3);
+    expect(b.world.doghouse.sprite.top + 0.1 * BUILDING_SIZE).toBeGreaterThan(b.backTop + HINT_H - 0.001);
+  });
+
+  it('opening a row-2 building scrolls it above the docked panel; row 1 stays at the page', () => {
+    for (const [h, inset] of [[667, 20], [740, 24], [844, 47]] as Array<[number, number]>) {
+      const l = sceneLayout(h, 390, inset, 34);
+      const b = buildingsLayout(390, inset, l.buildingsPageH);
+      expect(buildingSelectOffset(l, b, 'doghouse')).toBeGreaterThanOrEqual(l.buildingsOffset);
+      const y = buildingSelectOffset(l, b, 'sniffGarden');
+      const signBottomOnScreen = l.buildingsTop + b.world.sniffGarden.signTop + 64 - y;
+      expect(signBottomOnScreen).toBeLessThanOrEqual(h - PANEL_ROOM + 0.001);
+      expect(y).toBeLessThanOrEqual(l.contentH - h);
+    }
+    const l = sceneLayout(667, 390, 20, 34);
+    const b = buildingsLayout(390, 20, l.buildingsPageH);
+    expect(buildingSelectOffset(l, b, 'sniffGarden')).toBeGreaterThan(l.buildingsOffset);
+  });
+
+  it('hangs each sign below the baked shadow (>= 0.25 S under the ground line)', () => {
+    const b = buildingsLayout(390, 47, 844);
+    expect(b.world.doghouse.signTop - b.rowGroundY[0]).toBeGreaterThanOrEqual(0.25 * 206 - 0.001);
+  });
+
+  it('keeps both rows and their signs inside the page, also on a short phone', () => {
+    const l = sceneLayout(640, 390, 24);
+    const b = buildingsLayout(390, 24, l.buildingsPageH);
+    for (const k of ['doghouse', 'bakery', 'sniffGarden'] as const) {
+      expect(b.world[k].signTop + 64).toBeLessThanOrEqual(l.buildingsPageH);
+    }
+  });
+});
+
+describe('worldYardLayout', () => {
+  it('rests Buddy at the top of the yard, inside it, with the Extras anchored on fixed Hof points', () => {
+    const y = worldYardLayout(390, 405);
+    expect(y.buddy.bottom + y.buddy.size).toBeLessThanOrEqual(405);
+    expect(y.extras.teaBaseY).toBeLessThan(405);
+    expect(y.doormat.width).toBeGreaterThan(0);
   });
 });
 

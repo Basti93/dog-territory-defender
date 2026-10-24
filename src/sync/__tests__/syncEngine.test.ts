@@ -19,7 +19,7 @@ async function joined() {
   const repos = makeRepos();
   await repos.settings.saveSyncIdentity(IDENTITY);
   // Pretend the first snapshot happened so the engine pulls events.
-  await repos.sync.saveState({ cursor: 7, lastSyncAt: 1 });
+  await repos.sync.saveState({ cursor: 7, lastSyncAt: 1, territoriesReconciled: true });
   return repos;
 }
 
@@ -507,5 +507,24 @@ describe('join flow (mock fetch)', () => {
     expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
     expect(await repos.walks.getWalk('keep')).not.toBeNull();
     expect((await engine.getStatus()).joined).toBe(false);
+  });
+});
+
+describe('one-time territory reconcile', () => {
+  it('a phone that synced before territories were server-authoritative loads a snapshot once, dropping its ghost territories', async () => {
+    const repos = makeRepos();
+    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1 }); // no territoriesReconciled flag: an old install
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    await repos.territories.upsertTerritories([{ id: 't-ghost', name: 'Ghost', createdAt: 5, walksHere: 0, treatsEarnedHere: 0 }]);
+    const snapshotFn = jest.fn(async () =>
+      snapshot({ walks: [{ id: 'w1', playerId: 'p-me', startTime: 1, startSource: 'button', closed: true, newGroundCellIds: [], treatsEarned: 1, deleted: false }], territories: [{ id: 't-srv', name: 'Home', createdAt: 1, walksHere: 3, treatsEarnedHere: 0 }] })
+    );
+    const events = jest.fn(async () => emptyEvents);
+    const engine = makeEngine(repos, { snapshot: snapshotFn, events, getWalk: async () => null });
+    await engine.syncNow();
+    expect(snapshotFn).toHaveBeenCalledTimes(1);
+    expect((await repos.territories.getTerritories()).map((t) => t.id)).toEqual(['t-srv']);
+    await engine.syncNow();
+    expect(snapshotFn).toHaveBeenCalledTimes(1); // once
   });
 });

@@ -51,13 +51,6 @@ export function formatRatePerHour(ratePerHour: number): string {
   return formatNumber(ratePerHour, { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
-/** Where the chimney sits inside the bakery sprite box (share of its width/height) per art tier. */
-export function chimneyAnchor(artTier: number): { fx: number; fy: number } {
-  if (artTier <= 1) return { fx: 0.445, fy: 0.3 };
-  if (artTier === 2) return { fx: 0.5, fy: 0.42 };
-  return { fx: 0.74, fy: 0.37 };
-}
-
 /** Welcome-back burst: at most 8 sprites over about 1.3 s, so never more than 6 fly at once. */
 export const BURST_MAX = 8;
 export const BURST_STAGGER_MS = 100;

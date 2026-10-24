@@ -10,7 +10,7 @@ import { createSqliteSyncRepository } from '../storage/sqliteSyncRepository';
 import { createSqliteActiveWalkRepository } from '../storage/sqliteActiveWalkRepository';
 import { createSqliteCornerRepository } from '../storage/sqliteCornerRepository';
 import { runHomeRangeMigrationIfNeeded } from '../storage/homeRangeMigration';
-import { runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
+import { runTerritoryFoldIfNeeded, runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
 import { loadFeedbackPrefsAtStartup } from '../feedback/feedbackRepository';
 import { resolveTerritoryName } from '../utils/streetLookup';
 import { getDeviceLocale, LocalePreference, resolveLocale, setLocale } from '../i18n';
@@ -82,5 +82,9 @@ export function runStartupMigrations(r: AppRepositories): Promise<void> {
       denEconomyRepository: r.denEconomyRepository,
       resolveTerritoryName,
     })
-  );
+  ).then(async () => {
+    // Joined households fold on the server and receive the result with the next snapshot.
+    if (await r.settingsRepository.getSyncIdentity()) return;
+    await runTerritoryFoldIfNeeded({ homeRangeRepository: r.homeRangeRepository, territoryRepository: r.territoryRepository });
+  });
 }

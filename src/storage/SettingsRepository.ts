@@ -56,6 +56,9 @@ export interface SettingsRepository {
   /** Ids of partner walks whose mini homecoming already played (newest last, capped by the caller). Returns [] when nothing saved. */
   getShownPartnerWalkIds(): Promise<string[]>;
   saveShownPartnerWalkIds(ids: string[]): Promise<void>;
+  /** The last "Euer Boden: 0,4 → 0,5/Std." homecoming beat: local day and the rate it showed. Null until one was shown. */
+  getIncomeBeatShown(): Promise<{ day: string; rate: number } | null>;
+  saveIncomeBeatShown(shown: { day: string; rate: number }): Promise<void>;
 }
 
 /** Defensive read of the stored shown-partner-walk list. */

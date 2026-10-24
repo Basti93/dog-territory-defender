@@ -5,7 +5,7 @@
 //
 //  - walks:        insert if missing (route fetched on demand); a partner's walk
 //                  NEVER re-runs rewards locally
-//  - territories:  upsert (server name wins, counters max), removed ones dropped
+//  - territories:  upsert (server name wins, counters max), removed ones dropped; a snapshot also drops local-only ones (reconcileTerritories)
 //  - cells:        merge with max(visits), max(lastTracked/lastRefreshed), territoryId from server
 //  - den state:    server wins when its revision is newer; local-only fields stay
 //  - dog name:     server wins when it has one
@@ -248,8 +248,52 @@ export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepo
     ctx,
     true
   );
-  await repos.sync.saveState({ cursor: snapshot.seq, householdTimezone: snapshot.household.timezone });
+  await reconcileTerritories(snapshot.territories, repos);
+  await repos.sync.saveState({ cursor: snapshot.seq, householdTimezone: snapshot.household.timezone, territoriesReconciled: true });
   return result;
+}
+
+/** Above this many (orphan cell x server cell) pairs the nearest-territory search gives up and uses the oldest server territory. */
+const MAX_NEAREST_SEARCH_PAIRS = 5_000_000;
+
+/**
+ * A snapshot is the household server's complete truth: territories this phone made up on its own (before it joined, or
+ * while a walk was still unsent) do not exist there and are dropped. Their cells that the server does not know move to
+ * the nearest server territory. No server territories at all = nothing to compare with, nothing is touched.
+ */
+export async function reconcileTerritories(serverTerritories: ApiTerritory[], repos: Pick<ApplyRepos, 'territories' | 'homeRange'>): Promise<void> {
+  if (serverTerritories.length === 0) return;
+  const serverIds = new Set(serverTerritories.map((t) => t.id));
+  const stale = (await repos.territories.getTerritories()).filter((t) => !serverIds.has(t.id));
+  if (stale.length === 0) return;
+  const staleIds = new Set(stale.map((t) => t.id));
+
+  const allCells = await repos.homeRange.getCells();
+  const orphans = allCells.filter((c) => c.territoryId !== null && staleIds.has(c.territoryId));
+  const anchors = allCells.filter((c) => c.territoryId !== null && serverIds.has(c.territoryId));
+  if (orphans.length > 0) {
+    const oldest = [...serverTerritories].sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1))[0].id;
+    const useNearest = orphans.length * anchors.length <= MAX_NEAREST_SEARCH_PAIRS;
+    const byTarget = new Map<string, string[]>();
+    for (const cell of orphans) {
+      let target = oldest;
+      if (useNearest) {
+        let best = Infinity;
+        for (const a of anchors) {
+          const d = (a.ix - cell.ix) ** 2 + (a.iy - cell.iy) ** 2;
+          if (d < best) {
+            best = d;
+            target = a.territoryId as string;
+          }
+        }
+      }
+      const list = byTarget.get(target) ?? [];
+      list.push(`${cell.ix},${cell.iy}`);
+      byTarget.set(target, list);
+    }
+    for (const [territoryId, cellIds] of byTarget) await repos.homeRange.assignTerritoryToCells(cellIds, territoryId);
+  }
+  await repos.territories.removeTerritories(stale.map((t) => t.id));
 }
 
 export async function applyEvents(

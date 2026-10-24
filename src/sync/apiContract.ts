@@ -71,6 +71,8 @@ export const API_LIMITS = {
   maxRenameLength: 24,
   /** `corner.name`: trimmed length 1..this ("Unsere Ecken"). */
   maxCornerNameLength: 24,
+  /** Territory names (typed or generated), characters. */
+  maxTerritoryNameLength: 60,
   maxDogNameLength: 40,
   /** Founding import ceilings (body limit 5 MiB). */
   maxImportWalks: 2000,
@@ -321,7 +323,7 @@ export interface WalkUploadRequest {
    * Silently ignored when the day's refresh is used up or the walk has no route.
    */
   refreshRouteWalkId?: string;
-  /** Optional reverse-geocoded name hint for a territory born by this walk (server falls back to a generic name). */
+  /** Optional reverse-geocoded name hint for the territory this walk births (the household's first) or promotes (server falls back to a generic name). */
   territoryNameHint?: string;
 }
 
@@ -341,6 +343,8 @@ export interface WalkReward {
   territoryId: string | null;
   /** Names for the celebration beat; null when no birth/merge happened or it is the very first territory. */
   newTerritoryName: string | null;
+  /** Set with newTerritoryName: the id of the territory this walk promoted, so the owner's rename in the homecoming can address it. */
+  newTerritoryId?: string;
   mergedTerritoryNames: [string, string] | null;
   /** manual-log only: the route refresh was applied (counts against the household's daily refresh). */
   routeRefreshed?: boolean;
@@ -459,6 +463,12 @@ export type CommandBody =
    * wins, no notification. Emits `corner.updated`. Idempotent like every command.
    */
   | { kind: 'corner.name'; cornerId: string; name: string }
+  /**
+   * Renames a territory for the whole household (trimmed, 1..maxTerritoryNameLength, last writer wins). Address it by
+   * `territoryId`, or by `fromWalkId` = the walk that promoted it (the phone does not know the id yet right after the
+   * homecoming). Emits `territory.changed`. Unknown territory/walk = not-found.
+   */
+  | { kind: 'territory.name'; territoryId?: string; fromWalkId?: string; name: string }
   /**
    * Opens a neighbour gift (POST /v1/gifts/:id/open wraps this). First opener wins; a second open is
    * ok with no further credit. The gift's treat sprinkle goes straight into the Den (no reward formulas).

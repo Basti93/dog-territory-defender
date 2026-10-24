@@ -90,7 +90,7 @@ describe('sync engine and the neighbourhood store', () => {
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
     const entry = { line: 'neighbours.line.wave', botName: 'Keks', botId: 'b4', params: { bot: 'Keks' }, at: 1, seq: 1 };
-    await repos.sync.saveState({ neighbourLines: [entry], cursor: 3, lastSyncAt: 1 });
+    await repos.sync.saveState({ neighbourLines: [entry], cursor: 3, lastSyncAt: 1, territoriesReconciled: true });
     const engine = makeEngine(repos, {
       events: async () => {
         throw new ApiError('network', 'down');

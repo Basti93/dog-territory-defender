@@ -58,6 +58,7 @@ export function MapScreen(p: MapScreenProps) {
     homeRangeRepository: p.repos.homeRangeRepository,
     walkRepository: p.repos.walkRepository,
     territoryRepository: p.repos.territoryRepository,
+    denEconomyRepository: p.repos.denEconomyRepository,
     cornerRepository: p.cornerTools?.repository,
     dogName: p.dogName,
     refreshKey: p.homeRangeRefreshKey + cornerEdits,

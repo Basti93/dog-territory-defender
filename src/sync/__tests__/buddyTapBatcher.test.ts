@@ -40,7 +40,7 @@ describe('addBuddyTap on the sync engine', () => {
   async function joined() {
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
-    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1 });
+    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1, territoriesReconciled: true });
     return repos;
   }
   const ok = { clientId: 'c', ok: true, replayed: false, den: apiDen({ rev: 1 }), serverTime: 1, seq: 1 };

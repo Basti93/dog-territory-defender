@@ -52,5 +52,5 @@ export function territoryDisplayRate(territoryMassValue: number, worldMass: numb
   return globalTerritoryRate * (territoryMassValue / worldMass);
 }
 
-/** The display-floor gate (design.md Decision 6) — no territory-income figure anywhere until the global rate crosses this. */
-export const TERRITORY_INCOME_DISPLAY_FLOOR = 1;
+/** The display-floor gate: no territory-income figure until the global rate reaches this. 0 = always visible (was 1 treat/hour until 2026-10-24; see docs/decisions/LOG.md). */
+export const TERRITORY_INCOME_DISPLAY_FLOOR = 0;

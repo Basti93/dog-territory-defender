@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, screen, within } from '@testing-library/react-native';
+import { Dimensions, ScrollView } from 'react-native';
 import type { TestInstance } from 'test-renderer';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
@@ -15,6 +16,8 @@ import { cellCentre } from '../../utils/grid';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { advance, flush, imagesIn, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { pickSceneNotes, WorldScene, WorldSceneProps } from '../world/WorldScene';
+import { buildingSelectOffset, buildingsLayout, sceneLayout } from '../world/sceneLayout';
+import { resetBackActions, runBackActions } from '../../app/backStack';
 import * as sounds from '../../feedback/sounds';
 import type { ApiGift, CoopWeekResponse, NearbyItem } from '../../sync/apiContract';
 import { resetNeighbourhood, setNearby, setNeighbourhood } from '../../sync/neighbourhoodStore';
@@ -175,7 +178,7 @@ describe('WorldScene', () => {
     await unmountAndExpectNoTimers(view);
   });
 
-  it('shows the numbers sign, the territory sign with its title and the Reviere sign over the map', async () => {
+  it('shows the numbers sign, the territory sign and the Reviere sign over the map', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();
     const territoryRepository = createInMemoryTerritoryRepository();
     const id = await territoryRepository.createTerritory('Hinterm Park', 1);
@@ -202,9 +205,20 @@ describe('WorldScene', () => {
   it('tapping the embedded Viertel opens the full map', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();
     await homeRangeRepository.paintCells([{ ix: 1, iy: 1, refreshedAt: Date.now(), tracked: true, territoryId: null } as never]);
-    const { view, onOpenMap } = await setup({ homeRangeRepository });
+    const { view, onOpenMap, onStartWalk } = await setup({ homeRangeRepository });
     await fireEvent.press(await screen.findByRole('button', { name: t('world.neighbourhoodLabel') }));
     expect(onOpenMap).toHaveBeenCalledTimes(1);
+    await advance(1000);
+    expect(onStartWalk).not.toHaveBeenCalled(); // looking at the map is never a walk start
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('with the Viertel scrolled into view a tap on the gate sign does not start a walk', async () => {
+    const { view, onStartWalk } = await setup();
+    await fireEvent.scroll(screen.getByTestId('world-scroll'), { nativeEvent: { contentOffset: { y: 0 } } });
+    await fireEvent.press(screen.getByRole('button', { name: t('world.gateLabel') }));
+    await advance(1500);
+    expect(onStartWalk).not.toHaveBeenCalled();
     await unmountAndExpectNoTimers(view);
   });
 
@@ -773,6 +787,79 @@ describe('WorldScene partner presence', () => {
     await fireEvent.press(screen.getByTestId('homecoming-tap'));
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onStartWalk).not.toHaveBeenCalled();
+    await unmountAndExpectNoTimers(view);
+  });
+});
+
+describe('WorldScene buildings page', () => {
+  const win = Dimensions.get('window');
+  const layout = sceneLayout(win.height, win.width, 47, 34); // the test provider's insets
+  const geo = buildingsLayout(win.width, 47, layout.buildingsPageH);
+  const scrollTo = () => ScrollView.prototype.scrollTo as unknown as jest.Mock;
+  const scrollNow = (y: number) => fireEvent.scroll(screen.getByTestId('world-scroll'), { nativeEvent: { contentOffset: { y } } });
+  afterEach(() => resetBackActions());
+
+  it('lays the buildings on their own page below the Hof: three signs with Lv, three hit areas, no fourth', async () => {
+    const { view } = await setup({}, 10);
+    for (const k of ['doghouse', 'bakery', 'sniffGarden'] as const) {
+      const name = t(`den.building.${k}.name`);
+      expect(screen.getByText(t('world.buildingSign', { name, level: 1 }))).toBeOnTheScreen();
+      expect(screen.getByRole('button', { name: t('den.showUpgrade', { name }) })).toBeOnTheScreen();
+    }
+    expect(screen.getAllByRole('button', { name: /^Show the .* upgrade$/ }).length).toBe(3); // the reserved 4th slot draws nothing
+    expect(layout.buildingsOffset).toBeGreaterThan(layout.startOffset);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('opens at the Hof, and the Hof strip leads down to the buildings', async () => {
+    const { view } = await setup({}, 10);
+    scrollTo().mockClear();
+    await fireEvent.press(screen.getByRole('button', { name: t('world.toBuildings') }));
+    expect(scrollTo()).toHaveBeenLastCalledWith({ y: layout.buildingsOffset, animated: true });
+    expect(screen.queryByText(t('world.upgradeReady'), { exact: false })).toBeNull(); // nothing affordable: a plain strip
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the Hof strip says "upgrade ready" (with a pennant cue) when bank and pile pay for an upgrade', async () => {
+    const a = await setup({}, 10, { pile: 60 }); // bank 10 + pile 60 >= doghouse 60
+    expect(screen.getByRole('button', { name: `${t('world.toBuildings')} · ${t('world.upgradeReady')}` })).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({}, 70);
+    expect(screen.getByRole('button', { name: `${t('world.toBuildings')} · ${t('world.upgradeReady')}` })).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('back from the buildings page goes to the Hof; an open sign closes first', async () => {
+    const { view } = await setup({}, 70);
+    await scrollNow(layout.buildingsOffset);
+    await fireEvent.press(screen.getByRole('button', { name: t('den.showUpgrade', { name: t('den.building.doghouse.name') }) }));
+    expect(screen.getByRole('button', { name: /^Upgrade for / })).toBeOnTheScreen();
+    scrollTo().mockClear();
+    await act(async () => {
+      expect(runBackActions()).toBe(true); // closes the sign
+    });
+    expect(screen.queryByRole('button', { name: /^Upgrade for / })).toBeNull();
+    expect(scrollTo()).not.toHaveBeenCalled();
+    await act(async () => {
+      expect(runBackActions()).toBe(true); // then back to the Hof
+    });
+    expect(scrollTo()).toHaveBeenLastCalledWith({ y: layout.startOffset, animated: true });
+    await fireEvent.press(screen.getByRole('button', { name: t('world.backToYard') }));
+    expect(scrollTo()).toHaveBeenLastCalledWith({ y: layout.startOffset, animated: true });
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the den alias scrolls to the buildings page (not the Hof) and opens the sign', async () => {
+    scrollTo().mockClear();
+    const { view } = await setup({ openDenPanel: true }, 70);
+    expect(scrollTo()).toHaveBeenCalledWith({ y: buildingSelectOffset(layout, geo, 'doghouse'), animated: true });
+    expect(screen.getByRole('button', { name: /^Upgrade for / })).toBeOnTheScreen();
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the pennant and sparkle stay on the affordable building of the buildings page', async () => {
+    const { view } = await setup({}, 70);
+    expect(screen.getAllByTestId('upgrade-sparkle').length).toBe(1);
     await unmountAndExpectNoTimers(view);
   });
 });

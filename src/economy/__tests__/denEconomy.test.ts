@@ -106,10 +106,10 @@ describe('applyPassiveAccrual', () => {
     expect(later.territoryIncomeRevealed).toBe(true);
   });
 
-  it('does not reveal below the display floor', () => {
+  it('reveals at once: the display floor is 0 (income is always visible)', () => {
     const state = defaultDenEconomyState(NOW);
     const after = applyPassiveAccrual(state, NOW + 1 * HOUR, { cellCount: 10, visitsSum: 0 });
-    expect(after.territoryIncomeRevealed).toBe(false);
+    expect(after.territoryIncomeRevealed).toBe(true);
   });
 });
 

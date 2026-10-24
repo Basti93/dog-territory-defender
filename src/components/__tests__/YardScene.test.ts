@@ -3,25 +3,17 @@ import {
   ART_TIER_3_FROM_LEVEL,
   ART_TIER_4_FROM_LEVEL,
   ART_TIER_5_FROM_LEVEL,
-  STAGE_SIZE,
+  BUILDING_SIZE,
+  SPRITE_GROUND_Y_FRAC,
   YARD_MIN_HEIGHT,
   artTierForLevel,
-  yardLayout,
   yardWalkGeometry,
 } from '../den/YardScene';
+import { worldYardLayout } from '../world/sceneLayout';
 
-const STAGE_3 = { doghouse: 260, bakery: 260, sniffGarden: 260 };
-
-describe('yardLayout (stage 3, min yard height)', () => {
+describe('Hof layout (min yard height)', () => {
   for (const width of [360, 390]) {
-    const L = yardLayout(width, YARD_MIN_HEIGHT, STAGE_3);
-
-    it(`keeps buildings on screen (side ones may overlap an edge by <=10%) at width ${width}`, () => {
-      for (const box of Object.values(L.sprites)) {
-        expect(box.left).toBeGreaterThanOrEqual(-0.1 * box.size - 0.001);
-        expect(box.left + box.size).toBeLessThanOrEqual(width + 0.1 * box.size + 0.001);
-      }
-    });
+    const L = worldYardLayout(width, YARD_MIN_HEIGHT);
 
     it(`covers the bottom 0.78H with a 2:1 hill that bleeds past both sides at width ${width}`, () => {
       const H = YARD_MIN_HEIGHT;
@@ -35,33 +27,9 @@ describe('yardLayout (stage 3, min yard height)', () => {
       expect(g.width).toBeGreaterThanOrEqual(1.25 * width - 0.001);
     });
 
-    it(`puts the horizon near 0.42H and every tile base on the grass, inside the yard at width ${width}`, () => {
-      const H = YARD_MIN_HEIGHT;
-      expect(L.ground.horizonY).toBeGreaterThanOrEqual(0.38 * H);
-      expect(L.ground.horizonY).toBeLessThanOrEqual(0.46 * H);
-      for (const box of Object.values(L.sprites)) {
-        const baseFromTop = H - box.bottom - 0.14 * box.size;
-        expect(baseFromTop).toBeGreaterThan(L.ground.horizonY);
-        expect(baseFromTop).toBeLessThanOrEqual(H);
-      }
-    });
-
-    it(`keeps building hit boxes in their sprite's lower half and clear of Buddy at width ${width}`, () => {
-      for (const key of ['doghouse', 'bakery', 'sniffGarden'] as const) {
-        const hit = L.hits[key];
-        const sprite = L.sprites[key];
-        expect(hit.width).toBeGreaterThan(20);
-        expect(hit.bottom).toBeGreaterThanOrEqual(sprite.bottom - 0.001);
-        expect(hit.bottom + hit.height).toBeLessThanOrEqual(sprite.bottom + 0.5 * sprite.size + 0.001);
-        expect(hit.left).toBeGreaterThanOrEqual(sprite.left - 0.001);
-        expect(hit.left + hit.width).toBeLessThanOrEqual(sprite.left + sprite.size + 0.001);
-        const apart =
-          hit.left + hit.width <= L.buddy.left + 0.001 ||
-          hit.left >= L.buddy.left + L.buddy.size - 0.001 ||
-          hit.bottom + hit.height <= L.buddy.bottom + 0.001 ||
-          hit.bottom >= L.buddy.bottom + L.buddy.size - 0.001;
-        expect(apart).toBe(true);
-      }
+    it(`puts the horizon near 0.42H at width ${width}`, () => {
+      expect(L.ground.horizonY).toBeGreaterThanOrEqual(0.38 * YARD_MIN_HEIGHT);
+      expect(L.ground.horizonY).toBeLessThanOrEqual(0.46 * YARD_MIN_HEIGHT);
     });
 
     it(`keeps Buddy's whole box inside the yard at width ${width}`, () => {
@@ -71,19 +39,7 @@ describe('yardLayout (stage 3, min yard height)', () => {
       expect(L.buddy.left + L.buddy.size).toBeLessThanOrEqual(width);
     });
 
-    it(`keeps the doghouse badge off Buddy's head at width ${width}`, () => {
-      // Head = top 55% of Buddy's box; badge must sit entirely above that box's top edge or beside it.
-      const buddyTop = L.buddy.bottom + L.buddy.size;
-      const headBottom = buddyTop - 0.55 * L.buddy.size;
-      for (const key of ['doghouse', 'bakery', 'sniffGarden'] as const) {
-        const badge = L.badges[key];
-        const overlapsHeadVertically = badge.bottom < buddyTop && badge.bottom + 28 > headBottom;
-        const overlapsHeadHorizontally = badge.left < L.buddy.left + L.buddy.size && badge.left + 72 > L.buddy.left;
-        expect(overlapsHeadVertically && overlapsHeadHorizontally).toBe(false);
-      }
-    });
-
-    it(`keeps every wander spot on the grass, apart from the others, below the doghouse base at width ${width}`, () => {
+    it(`keeps every wander spot on the grass and apart from the others at width ${width}`, () => {
       const G = yardWalkGeometry(L, width);
       const xs = Object.values(G.spots);
       for (const x of xs) {
@@ -91,11 +47,21 @@ describe('yardLayout (stage 3, min yard height)', () => {
         expect(x).toBeLessThanOrEqual(G.range.max);
       }
       xs.forEach((a, i) => xs.slice(i + 1).forEach((b) => expect(Math.abs(a - b)).toBeGreaterThanOrEqual(25)));
-      // Buddy never changes y: his head stays below the doghouse tile base, so he never covers an upper half.
-      const doghouseBaseFromTop = YARD_MIN_HEIGHT - L.sprites.doghouse.bottom - 0.14 * L.sprites.doghouse.size;
-      const buddyTopFromTop = YARD_MIN_HEIGHT - L.buddy.bottom - L.buddy.size;
-      expect(buddyTopFromTop + 0.3 * L.buddy.size).toBeGreaterThan(doghouseBaseFromTop - 0.001);
       expect(G.spots.front).toBeCloseTo(G.baseCx, 5);
+      // bench on the left, mailbox on the right (where the props are)
+      expect(G.spots.bench).toBeLessThan(G.spots.front);
+      expect(G.spots.mailbox).toBeGreaterThan(G.spots.front);
+    });
+
+    it(`gives the Wild Extras fixed anchors inside the yard at width ${width}`, () => {
+      for (const x of [L.extras.daisyCx, L.extras.fireflyCx, L.extras.teaCx]) {
+        expect(x).toBeGreaterThan(0);
+        expect(x).toBeLessThan(width);
+      }
+      for (const y of [L.extras.duckBaseY, L.extras.teaBaseY]) {
+        expect(y).toBeGreaterThan(L.ground.horizonY);
+        expect(y).toBeLessThan(YARD_MIN_HEIGHT);
+      }
     });
   }
 });
@@ -109,31 +75,11 @@ describe('artTierForLevel (five stages)', () => {
     const cases: Array<[number, number]> = [[1, 1], [3, 1], [4, 2], [9, 2], [10, 3], [19, 3], [20, 4], [34, 4], [35, 5], [100, 5]];
     for (const [level, tier] of cases) expect(artTierForLevel(level)).toBe(tier);
   });
-
-  it('stage sizes grow with the stage (280 and 300 for stages 4 and 5)', () => {
-    expect(STAGE_SIZE[4]).toBe(280);
-    expect(STAGE_SIZE[5]).toBe(300);
-    expect([1, 2, 3, 4, 5].map((s) => STAGE_SIZE[s as 1 | 2 | 3 | 4 | 5])).toEqual([160, 210, 260, 280, 300]);
-  });
 });
 
-describe('yardLayout (stage 5, min yard height)', () => {
-  const STAGE_5 = { doghouse: 300, bakery: 300, sniffGarden: 300 };
-  for (const width of [360, 390]) {
-    it(`keeps side buildings within the 10% edge overhang and Buddy's hit boxes clear at width ${width}`, () => {
-      const L = yardLayout(width, YARD_MIN_HEIGHT, STAGE_5);
-      for (const box of Object.values(L.sprites)) {
-        expect(box.left).toBeGreaterThanOrEqual(-0.1 * box.size - 0.001);
-        expect(box.left + box.size).toBeLessThanOrEqual(width + 0.1 * box.size + 0.001);
-      }
-      for (const hit of Object.values(L.hits)) {
-        const apart =
-          hit.left + hit.width <= L.buddy.left + 0.001 ||
-          hit.left >= L.buddy.left + L.buddy.size - 0.001 ||
-          hit.bottom + hit.height <= L.buddy.bottom + 0.001 ||
-          hit.bottom >= L.buddy.bottom + L.buddy.size - 0.001;
-        expect(apart).toBe(true);
-      }
-    });
-  }
+describe('one world scale for the building art', () => {
+  it('a stage-5 sprite (widest: 86% of the canvas) fits half a 360 pt page, and the ground point is the baked 0.69', () => {
+    expect(BUILDING_SIZE * 0.86).toBeLessThanOrEqual(360 / 2);
+    expect(SPRITE_GROUND_Y_FRAC).toBe(0.69);
+  });
 });

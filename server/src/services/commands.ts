@@ -4,12 +4,12 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { CommandRequest, CommandResponse, CommandErrorCode } from '@game/sync/apiContract';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
-import { corners, dogs, economyCommands, gifts, households, players, walks } from '../db/schema';
+import { corners, dogs, economyCommands, gifts, households, players, territories, walks } from '../db/schema';
 import { canonicalJson } from '../lib/canonicalJson';
 import { dayKeyInZone, sameLocalDay } from '../lib/time';
 import { applyBuddyTaps, giftRoom, applyPassiveAccrual, harvestAt, upgradeBuilding } from '../economy/denTransitions';
 import { appendEvent, currentSeq, type EventBus } from './events';
-import { denFromRow, dogFromRow, lockDen, saveDen, stripRev, worldMass } from './state';
+import { denFromRow, dogFromRow, lockDen, saveDen, stripRev, territoryFromRow, worldMass } from './state';
 import type { AuthCtx } from './walks';
 
 export type CommandResult = { kind: 'ok'; response: CommandResponse } | { kind: 'conflict' } | { kind: 'capped' };
@@ -155,6 +155,27 @@ export async function runCommand(
         await appendEvent(dbx, hid, 'corner.updated', auth.playerId, {
           corner: { id: cmd.cornerId, name, updatedBy: auth.playerId, updatedAt: now },
         });
+        break;
+      }
+      case 'territory.name': {
+        // By id, or by the walk that promoted it (the phone only knows the walk right after the homecoming).
+        let territoryId = cmd.territoryId ?? null;
+        if (!territoryId && cmd.fromWalkId) {
+          const [walk] = await dbx.select({ reward: walks.reward }).from(walks).where(and(eq(walks.householdId, hid), eq(walks.id, cmd.fromWalkId)));
+          territoryId = (walk?.reward as { newTerritoryId?: string } | undefined)?.newTerritoryId ?? null;
+        }
+        const [row] = territoryId
+          ? await dbx
+              .update(territories)
+              .set({ name: cmd.name.trim() })
+              .where(and(eq(territories.householdId, hid), eq(territories.id, territoryId)))
+              .returning()
+          : [];
+        if (!row) {
+          outcome = { ok: false, error: 'not-found' };
+        } else {
+          await appendEvent(dbx, hid, 'territory.changed', auth.playerId, { upserted: [territoryFromRow(row)], removedIds: [] });
+        }
         break;
       }
       case 'gift.open': {

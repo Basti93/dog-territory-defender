@@ -20,3 +20,14 @@ Places the household keeps coming back to become corners: a small wood sign on t
 - **Display:** signs on the embedded Viertel and the full map; tapping a sign on the full map opens a PaperNote sheet (rename, Buddy lying, the newest 3 postcards of walks that ran through the block). A postcard's postmark uses the corner's name when the walk touched a named corner (else the territory).
 - **Sync:** names are household data (`corner.name` command, `corner.updated` event, snapshot `corners`); detection is not synced. After a restore from backup the corners are re-found from the walks, names are lost.
 
+## Reviere (territories, "Variante a", 2026-10-24)
+
+Viertel = the whole map. Revier = a distant, named area. Ecke = a favourite corner. Numbers live in `src/utils/territoryCluster.ts`; income in `src/economy/territoryEconomy.ts`.
+- **Home:** the oldest territory. Its centre is where home is (the first tracked walks' start, same anchor as corners). Ground within `SPAWN_DISTANCE_M` = 1000 m of that centre is home ground.
+- **Far ground stays home's** (mass and income unchanged, split-invariant) until a connected far patch has been walked on by at least 2 walks AND holds at least 40 cells: then it is shown as its own Revier ("Neues Revier!", name suggested "{Hund}s Revier an der {Straße}", fallback "Neues Revier", editable, skip free). A patch that touches home ground (a road out) is one place with home and never splits off.
+- **Merge** stays literal 8-neighbour touch (older survives). A shown Revier never disappears or splits. Far ground within 1000 m of a shown Revier joins it.
+- **Household sync:** the server births, merges and promotes; phones assign cells only for immediate display and every snapshot drops territories the server does not have (cells move to the nearest server territory).
+- **Income** is always visible (no reveal threshold): the Viertel stats sign says "Euer Boden bringt 1,4 Leckerlis/Std." (below 1/h "alle 2 Std. ein Leckerli"); a walk that raises the figure may show "Euer Boden: 0,4 → 0,5/Std." as a beat-3 extra (lowest priority, counts toward the max 2).
+- **Reviere screen:** one sentence on top, then per Revier: portrait, name, "{km} km von zu Hause", walks, "zuletzt: gestern" (beyond 2 weeks only "schon eine Weile her", no colour, no day count), "bringt 0,3/Std.". No titles, no ranking. A single Revier gets a wish ("Geht mal weiter weg ..."), never a push.
+- **Migration:** territories with fewer than 2 walks fold into the nearest kept one (counters summed, cells re-assigned); idempotent on phone (offline players) and server.
+

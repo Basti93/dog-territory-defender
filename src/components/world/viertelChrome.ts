@@ -7,8 +7,7 @@ import { Territory, TerritoryId } from '../../storage/TerritoryRepository';
 import { cellCentre, cellForLocation, cellKey } from '../../utils/grid';
 import { calendarDayGap } from '../../utils/manualWalkLog';
 import { displayTerritoryName } from '../../utils/territoryDisplayName';
-import { assignTerritoryTitles, TerritoryTitle } from '../../utils/territoryTitles';
-import { t, tPlural } from '../../i18n';
+import { formatNumber, t, tPlural } from '../../i18n';
 
 export interface MapNote {
   text: string;
@@ -89,22 +88,26 @@ export function latestWalkTerritoryId(lastWalkEnd: LatLon | null, cells: Cell[])
 
 export interface TerritoryHeading {
   name: string;
-  /** Character title (resolve its text with TERRITORY_TITLE_KEYS), or null when the territory holds none. */
-  title: TerritoryTitle | null;
 }
 
-/** Name and character title of the territory the latest walk was in; null when there is none. */
+/** Name of the territory the latest walk was in; null when there is none. */
 export function territoryHeading(input: { territories: Territory[]; cells: Cell[]; lastWalkEnd: LatLon | null; now: number }): TerritoryHeading | null {
   const id = latestWalkTerritoryId(input.lastWalkEnd, input.cells);
   const territory = id ? input.territories.find((x) => x.id === id) : undefined;
   if (!territory) return null;
-  const cellsByTerritory = new Map<TerritoryId, Cell[]>();
-  for (const c of input.cells) {
-    if (!c.territoryId) continue;
-    const list = cellsByTerritory.get(c.territoryId);
-    if (list) list.push(c);
-    else cellsByTerritory.set(c.territoryId, [c]);
-  }
-  const title = assignTerritoryTitles(input.territories, cellsByTerritory, input.now).get(territory.id) ?? null;
-  return { name: displayTerritoryName(territory.name), title };
+  return { name: displayTerritoryName(territory.name) };
+}
+
+/**
+ * The stats sign's income line: "Euer Boden bringt 1,4 Leckerlis/Std." from 1 an hour, below that "alle 2 Std. ein
+ * Leckerli", and "alle 3 Tage" when it is slower still. Null when there is no income at all. Always shown, no threshold.
+ */
+export function incomeLine(ratePerHour: number): string | null {
+  if (!(ratePerHour > 0)) return null;
+  if (ratePerHour >= 1) return t('viertel.income.perHour', { rate: formatNumber(Math.round(ratePerHour * 10) / 10, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
+  const hours = Math.round(1 / ratePerHour);
+  if (hours <= 48) return t('viertel.income.everyHours', { hours: Math.max(1, hours) });
+  const days = Math.round(hours / 24);
+  if (days <= 30) return t('viertel.income.everyDays', { days });
+  return t('viertel.income.tiny');
 }

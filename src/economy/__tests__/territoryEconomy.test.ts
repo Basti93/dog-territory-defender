@@ -84,8 +84,8 @@ describe('territoryDisplayRate', () => {
 });
 
 describe('TERRITORY_INCOME_DISPLAY_FLOOR', () => {
-  it('is 1 treat/hour, per design.md Decision 6', () => {
-    expect(TERRITORY_INCOME_DISPLAY_FLOOR).toBe(1);
+  it('is 0: the income is always visible (was 1 treat/hour until 2026-10-24)', () => {
+    expect(TERRITORY_INCOME_DISPLAY_FLOOR).toBe(0);
   });
 });
 

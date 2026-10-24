@@ -22,9 +22,6 @@ interface Props {
   onDone: () => void;
 }
 
-/** The duck parade walks behind the doghouse, so YardScene mounts it under the doghouse sprite. */
-export const BEHIND_DOGHOUSE_EXTRAS: readonly WildExtraId[] = ['duck-parade'];
-
 type P = Animated.Value;
 type Key = readonly [number, number];
 type Num = Animated.AnimatedInterpolation<number>;
@@ -91,9 +88,8 @@ export function YardExtras({ id, layout, width, height, onDone }: Props) {
     return () => anim.stop();
   }, [id, p]);
 
-  const behind = BEHIND_DOGHOUSE_EXTRAS.includes(id);
   return (
-    <View testID={`wild-extra-${id}`} pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: behind ? 0 : 6 }]}>
+    <View testID={`wild-extra-${id}`} pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 6 }]}>
       <Scene id={id} p={p} layout={layout} width={width} height={height} />
     </View>
   );
@@ -127,13 +123,9 @@ function Scene({ id, ...rest }: SceneProps & { id: WildExtraId }) {
   }
 }
 
-/** Px from the yard top where a sprite's tile base stands. */
-const baseY = (box: { bottom: number; size: number }, height: number) => height - box.bottom - 0.14 * box.size;
-const centreX = (box: { left: number; size: number }) => box.left + box.size / 2;
-
-// ----- 1. Daisy abduction: UFO lifts one garden daisy with a glowing beam, bows, sets it back -----
+// ----- 1. Daisy abduction: UFO lifts one daisy from the Hof lawn with a glowing beam, bows, sets it back -----
 function DaisyAbduction({ p, layout, height }: SceneProps) {
-  const gx = centreX(layout.sprites.sniffGarden);
+  const gx = layout.extras.daisyCx;
   const ufoTop = height * 0.2;
   const daisyTop = height * 0.8;
   const lift = daisyTop - ufoTop - 36;
@@ -329,9 +321,9 @@ function MailboxPeriscope({ p, height }: SceneProps) {
   );
 }
 
-// ----- 6. Duck parade: three ducks in party hats march left to right behind the doghouse -----
-function DuckParade({ p, layout, width, height }: SceneProps) {
-  const top = baseY(layout.sprites.doghouse, height) - 34;
+// ----- 6. Duck parade: three ducks in party hats march left to right across the lawn -----
+function DuckParade({ p, layout, width }: SceneProps) {
+  const top = layout.extras.duckBaseY - 34;
   return (
     <>
       {[0, 0.07, 0.14].map((lag) => (
@@ -377,7 +369,7 @@ const FIREFLY_SCATTER: ReadonlyArray<readonly [number, number]> = [
 ];
 
 function Fireflies({ p, layout, width, height }: SceneProps) {
-  const cx = Math.min(width - 60, Math.max(60, centreX(layout.sprites.doghouse)));
+  const cx = Math.min(width - 60, Math.max(60, layout.extras.fireflyCx));
   const cy = Math.max(110, height * 0.24);
   return (
     <>
@@ -416,11 +408,10 @@ function Fireflies({ p, layout, width, height }: SceneProps) {
   );
 }
 
-// ----- 8. Tea-time visitor: a small cloud floats down beside the garden gnome, two teacups bob, it leaves -----
-function TeaTime({ p, layout, width, height }: SceneProps) {
-  const garden = layout.sprites.sniffGarden;
-  const gnomeLeft = Math.min(width - 54, centreX(garden) + garden.size * 0.22);
-  const gnomeTop = baseY(garden, height) - 40;
+// ----- 8. Tea-time visitor: a small cloud floats down beside a lawn gnome, two teacups bob, it leaves -----
+function TeaTime({ p, layout, width }: SceneProps) {
+  const gnomeLeft = Math.min(width - 54, layout.extras.teaCx);
+  const gnomeTop = layout.extras.teaBaseY - 40;
   const cloudTop = gnomeTop - 22;
   const cloudLeft = gnomeLeft - 74;
   const rise = cloudTop + 90;

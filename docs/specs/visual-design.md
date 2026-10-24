@@ -10,6 +10,7 @@ Exactly these; a new colour needs a `docs/decisions/LOG.md` entry explaining why
 - Warm accent (collectibles/joy): `#F39C12`
 - Dog brown (UI elements, badges): `#8B6F47`
 - White/neutral: `#FAFAF8`
+- Avatar-only free colours (Buddy fur zones, 2026-10-24): any player-chosen fur colour always passes through the pure `softenToClay(hex)` (`src/buddy/buddyAppearance.ts`: saturation <= 0.70, lightness 0.22-0.95, neutrals stay neutral) before it is stored or drawn, so the dog stays clay-pastel. UI chrome keeps the tokens above; these colours never leave the avatar.
 - Headline: rounded sans (e.g. Sora or Nunito), friendly not corporate. Body: clean sans (e.g. Inter), readable small. Minimum text size 12px (outdoor readability).
 
 ## Tone and exclusions
@@ -23,7 +24,7 @@ Exactly these; a new colour needs a `docs/decisions/LOG.md` entry explaining why
 - **Territory Claimed (Homecoming / Heimkehr, plays over the home scene; no separate celebration screen):** peak-joy moment; shows what was claimed and the dog's XP/level progress; ends with a clear call to the next walk.
 - **Dog Profile:** dog is the star; stats about walks and community, not power creep; badges feel earned.
 - **Leaderboard (backlog, not built):** friendly competition celebrating all dogs; reached by tapping from the map (modal), not a primary tab.
-- **Den (the yard of the home scene "Unser Viertel"; buildings open an upgrade panel, no separate Den screen):** buildable home base; the current cheapest affordable "next upgrade" is always visibly called out with its cost; buildings feel alive (idle touches, spring theming), no stat-dashboard chrome (bare progress bars, power meters); upgrading reads as building a bigger yard, not leveling a stat.
+- **Den (the buildings page of the home scene "Unser Viertel": Hof, fence zone and buildings are one vertical scroll; the buildings stand below the Hof, 2 per row on one ground, tapping one opens an upgrade panel docked at the screen bottom; no separate Den screen):** buildable home base; the current cheapest affordable "next upgrade" is always visibly called out with its cost (pennant and sparkle on the building, and a pennant plus "Upgrade bereit" on the strip at the Hof's bottom that leads down); every building sprite is drawn at one shared size (one world scale, stage 5 simply has more art), the 4th slot is reserved for the Friend Lounge and draws nothing; buildings feel alive (idle touches, spring theming), no stat-dashboard chrome (bare progress bars, power meters); upgrading reads as building a bigger yard, not leveling a stat.
 
 ## Postcards on the Bench (Album)
 - Every finished tracked walk that went somewhere is a two-sided postcard derived from the walk (nothing extra stored). A walk that painted nothing gets none; a manual log is a handwriting-only card (no route, no flip).

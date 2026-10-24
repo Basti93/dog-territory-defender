@@ -16,6 +16,7 @@ import { WalkRepository } from '../storage/WalkRepository';
 import { Location as GpsLocation } from '../types';
 import { WildCluster } from './wildSpot';
 import { t } from '../i18n';
+import { API_LIMITS } from '../sync/apiContract';
 
 /** Recent walk history is scanned at most this deep (nearest-in-time first) before giving up — design.md Decision 3 Fix 1's bound on the fallback scan's cost. */
 const MAX_FALLBACK_WALKS_SCANNED = 20;
@@ -249,9 +250,10 @@ export async function resolveTerritoryName(
   dogName: string | null
 ): Promise<string> {
   const dog = dogDisplayName(dogName);
-  const place = await resolveLabelForPoint(anchorLat, anchorLon);
+  // A street, not a district: the name reads "{dog}s Revier an der {street}".
+  const place = await resolveStreetForPoint(anchorLat, anchorLon);
   if (place) {
-    return t('territory.name.withPlace', { dog, place });
+    return t('territory.name.withPlace', { dog, place }).slice(0, API_LIMITS.maxTerritoryNameLength);
   }
   return t('territory.name.fallback', { dog });
 }

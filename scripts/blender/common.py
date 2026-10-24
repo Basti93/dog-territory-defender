@@ -136,6 +136,38 @@ def fit(fill=0.82, w=1024, h=1024, extra=()):
     cam.location += cam.matrix_world.to_3x3() @ Vector((cx, cy, 0))
 
 
+# Shared building view: every building/stage uses the SAME ortho scale and the world origin
+# (footprint centre, z=0) lands on the SAME pixel, so size differences are real model size.
+BUILDING_SCALE = 9.2    # world units across the canvas width (stage-5 garden is 5.9 tall, widest 7.9)
+BUILDING_BASE_X = 0.5   # origin column, fraction of width
+BUILDING_BASE_Y = 0.69  # origin row, fraction of height from top
+
+
+def fixed_view(scale=BUILDING_SCALE, bx=BUILDING_BASE_X, by=BUILDING_BASE_Y):
+    cam = bpy.context.scene.camera
+    cam.data.ortho_scale = scale
+    r = cam.matrix_world.to_3x3()
+    # camera sits on the line through the origin; slide it so the origin projects to (bx, by)
+    cam.location += r @ Vector(((0.5 - bx) * scale, (by - 0.5) * scale, 0))
+
+
+def camera_extents():
+    """Mesh extents (xmin, xmax, ymin, ymax) in camera space relative to the origin's projection."""
+    cam = bpy.context.scene.camera
+    inv = cam.matrix_world.inverted()
+    o = inv @ Vector((0, 0, 0))
+    xs, ys = [], []
+    for ob in bpy.context.scene.objects:
+        if ob.type != "MESH" or ob.get("noextent"):
+            continue
+        mw = inv @ ob.matrix_world
+        for vert in ob.data.vertices:
+            v = mw @ vert.co
+            xs.append(v.x - o.x)
+            ys.append(v.y - o.y)
+    return min(xs), max(xs), min(ys), max(ys)
+
+
 def render(path, w=1024, h=1024, samples=32, transparent=True):
     sc = bpy.context.scene
     r = sc.render

@@ -17,6 +17,8 @@ export interface CelebrationState {
   manual?: boolean;
   /** "Unsere Ecken": the walk completed a corner; beat 3 asks once for a name. `street` feeds the auto-name. */
   corner?: { id: string; street: string | null };
+  /** The income of the household's ground rose with this walk. */
+  incomeChange?: { from: number; to: number };
 }
 
 /** The one-off reward moment shown on top of everything else until "Nice walk!". */

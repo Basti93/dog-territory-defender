@@ -72,7 +72,7 @@ describe('founding import', () => {
   it('reports ok:false command answers through onCommandRejected', async () => {
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
-    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1 });
+    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1, territoriesReconciled: true });
     const command = async () => ({ clientId: 'c', ok: false, error: 'insufficient-treats' as const, replayed: false, den: apiDen({ rev: 2 }), serverTime: 1, seq: 1 });
     const engine = makeEngine(repos, { command, events: async () => ({ events: [], cursor: 7, hasMore: false, serverTime: 1 }) });
     const onCommandRejected = jest.fn();
@@ -80,5 +80,25 @@ describe('founding import', () => {
     await engine.enqueueCommand({ kind: 'den.upgrade', building: 'bakery' });
     await engine.syncNow();
     expect(onCommandRejected).toHaveBeenCalledWith('insufficient-treats');
+  });
+
+  it('a territory.name the server cannot place (not-found, or an old server answering 400) is dropped quietly: no rejection callback, no dead letter', async () => {
+    const repos = makeRepos();
+    await repos.settings.saveSyncIdentity(IDENTITY);
+    await repos.sync.saveState({ cursor: 7, lastSyncAt: 1, territoriesReconciled: true });
+    let n = 0;
+    const command = async () => {
+      if (n++ === 0) return { clientId: 'c', ok: false, error: 'not-found' as const, replayed: false, den: apiDen({ rev: 2 }), serverTime: 1, seq: 1 };
+      throw new ApiError('client', 'HTTP 400', 400, 'bad_request');
+    };
+    const engine = makeEngine(repos, { command, events: async () => ({ events: [], cursor: 7, hasMore: false, serverTime: 1 }) });
+    const onCommandRejected = jest.fn();
+    engine.setCallbacks({ onCommandRejected });
+    await engine.enqueueCommand({ kind: 'territory.name', fromWalkId: 'walk-0001', name: 'Aue' });
+    await engine.syncNow();
+    await engine.enqueueCommand({ kind: 'territory.name', fromWalkId: 'walk-0002', name: 'Aue' });
+    await engine.syncNow();
+    expect(onCommandRejected).not.toHaveBeenCalled();
+    expect(await repos.sync.counts()).toEqual({ pending: 0, dead: 0 });
   });
 });

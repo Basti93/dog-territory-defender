@@ -141,7 +141,7 @@ export interface SyncEngine extends NeighbourhoodActions {
 function isOptionalDenCommand(item: { kind: string; payload: unknown }): boolean {
   if (item.kind !== 'command') return false;
   const kind = (item.payload as CommandBody).kind;
-  return kind === 'den.harvest' || kind === 'den.buddyTaps';
+  return kind === 'den.harvest' || kind === 'den.buddyTaps' || kind === 'territory.name';
 }
 
 /** Safety cap on pages per run; the rest arrives on the next sync. */
@@ -240,7 +240,11 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           const response = await client.command({ clientId: item.id, command: item.payload as CommandBody });
           lastDen = response.den;
           await noteServerTime(response.serverTime);
-          if (!response.ok && response.error) callbacks.onCommandRejected?.(response.error);
+          if (!response.ok && response.error) {
+            // A territory.name for a predicted promotion the server did not make (not-found) is expected: the server's territories win.
+            if ((item.payload as CommandBody).kind === 'territory.name') log('SYNC_COMMAND_DROPPED', { kind: 'territory.name', error: response.error });
+            else callbacks.onCommandRejected?.(response.error);
+          }
           // ok:false (e.g. insufficient-treats) is a normal answer, not a failure: the item is done
           // and the server's Den state applied below is the silent correction.
         }
@@ -392,7 +396,8 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
         }
       },
     };
-    const needsSnapshot = state.cursor === 0 && state.lastSyncAt === null;
+    // Also once for a phone that synced before territories were server-authoritative: its local-only territories go.
+    const needsSnapshot = (state.cursor === 0 && state.lastSyncAt === null) || state.territoriesReconciled !== true;
     if (!needsSnapshot) {
       try {
         let cursor = state.cursor;

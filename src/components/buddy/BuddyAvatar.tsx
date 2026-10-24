@@ -183,6 +183,7 @@ export function BuddyAvatar({
       walkA: P.frontLegsWalkA?.(args) ?? null,
       walkB: P.frontLegsWalkB?.(args) ?? null,
       markings: P.markings?.(args) ?? null,
+      fluff: P.fluff?.(args) ?? null,
       poseLying: P.poseLying?.(args) ?? null,
       tail: P.tail(args),
       head: P.head(args),
@@ -623,6 +624,8 @@ export function BuddyAvatar({
                 ) : (
                   parts.frontLegs
                 )}
+                {/* Chest ruff of the fur-zone look (fur length): static with the body, behind the head. */}
+                {parts.fluff}
               </Animated.View>
               <Animated.View style={[styles.box, { transform: styles.head as never }]}>
                 <Animated.View style={[styles.box, { transform: styles.earRight as never }]}>{parts.earRight}</Animated.View>

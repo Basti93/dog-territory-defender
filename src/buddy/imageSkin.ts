@@ -1,9 +1,10 @@
 // Default Buddy skin: pre-rendered PNG layers (assets/buddy). Wraps
 // createImageSkin and adds the size scale. Markings are separate overlay layers;
 // the accent colour is baked into the art and NOT rendered by this skin.
-import { BuddyAppearance, BuddySize } from './buddyAppearance';
+import { BuddyAppearance, BuddySize, FUR_ZONES } from './buddyAppearance';
 import { BuddySkin, createImageSkin, PivotPoint } from './buddySkin';
-import { BUDDY_IMAGE_GROUND_Y, BUDDY_IMAGE_PIVOTS, buddyImageSources } from './imageSkinSources';
+import { BUDDY_IMAGE_GROUND_Y, BUDDY_IMAGE_PIVOTS, buddyCommonSources, buddyImageSources } from './imageSkinSources';
+import { zoneParts } from './zoneSkin';
 
 // Only a medium model exists; small/large are a uniform scale about the feet.
 const SIZE_SCALE: Record<BuddySize, number> = { small: 0.88, medium: 1, large: 1.12 };
@@ -17,6 +18,8 @@ export function buddyFeetInset(size: number): number {
   return size * (1 - BUDDY_IMAGE_GROUND_Y);
 }
 
+// Small LRU: free colours make the key space unbounded. A skin in use keeps its own reference, so eviction is safe.
+const CACHE_LIMIT = 24;
 const cache = new Map<string, BuddySkin>();
 
 /** Scale a canvas point about (0.5, groundY) so it follows the scaled artwork. */
@@ -26,10 +29,12 @@ function scalePoint(p: PivotPoint, s: number): PivotPoint {
 
 function build(appearance: BuddyAppearance): BuddySkin {
   const s = SIZE_SCALE[appearance.size] ?? 1;
-  const base = createImageSkin(buddyImageSources(appearance), BUDDY_IMAGE_PIVOTS, {
-    scale: s,
-    scaleOriginY: BUDDY_IMAGE_GROUND_Y,
-  });
+  const opts = { scale: s, scaleOriginY: BUDDY_IMAGE_GROUND_Y };
+  const fur = appearance.fur;
+  const base = fur
+    ? createImageSkin(buddyCommonSources(fur.muzzle), BUDDY_IMAGE_PIVOTS, opts)
+    : createImageSkin(buddyImageSources(appearance), BUDDY_IMAGE_PIVOTS, opts);
+  if (fur) Object.assign(base.parts, zoneParts(appearance, fur, opts));
   return {
     ...base,
     groundY: BUDDY_IMAGE_GROUND_Y,
@@ -44,11 +49,16 @@ function build(appearance: BuddyAppearance): BuddySkin {
 
 /** Memoised per look, so the rig's skin identity is stable across renders. */
 export function imageSkinFor(appearance: BuddyAppearance): BuddySkin {
-  const key = `${appearance.coat}|${appearance.earStyle}|${appearance.tailStyle}|${appearance.size}|${appearance.markings}`;
+  const f = appearance.fur;
+  const furKey = f ? `|fur:${FUR_ZONES.map((z) => f.zones[z]).join('')}|${f.muzzle}|${f.furLength}` : '';
+  const key = `${appearance.coat}|${appearance.earStyle}|${appearance.tailStyle}|${appearance.size}|${appearance.markings}${furKey}`;
   let skin = cache.get(key);
-  if (!skin) {
+  if (skin) {
+    cache.delete(key); // re-insert: most recently used goes last
+  } else {
     skin = build(appearance);
-    cache.set(key, skin);
+    if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
   }
+  cache.set(key, skin);
   return skin;
 }

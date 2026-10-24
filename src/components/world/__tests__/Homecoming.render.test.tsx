@@ -46,7 +46,7 @@ const walk = (over: Partial<HomecomingWalk> = {}): HomecomingWalk => ({
 });
 
 const layout = sceneLayout(844, 390, 47);
-const yard = worldYardLayout(390, layout.yardH, { doghouse: 1, bakery: 1, sniffGarden: 1 });
+const yard = worldYardLayout(390, layout.yardH);
 
 async function setup(w: HomecomingWalk, extra: Partial<HomecomingProps> = {}) {
   const onCamera = jest.fn();

@@ -51,7 +51,9 @@ def main():
             w, h = w // 2, h // 2
         common.setup_scene(*cam)
         fn()
-        if fill:
+        if assets.is_building(name):
+            common.fixed_view()
+        elif fill:
             common.fit(fill, w, h)
         elif not bpy.context.scene.get("manual"):
             bpy.context.scene.camera.data.ortho_scale = 8

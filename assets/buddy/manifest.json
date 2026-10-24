@@ -1376,6 +1376,230 @@
       "part": "poseSitBack",
       "coat": "tricolour",
       "style": "sit-back"
+    },
+    {
+      "file": "common/mouth-happy-short.png",
+      "part": "mouthHappy",
+      "coat": null,
+      "style": "short"
+    },
+    {
+      "file": "common/mouth-happy-long.png",
+      "part": "mouthHappy",
+      "coat": null,
+      "style": "long"
     }
-  ]
+  ],
+  "zones": {
+    "size": 384,
+    "zoneNames": [
+      "head",
+      "muzzle",
+      "eyepatch",
+      "ears",
+      "back",
+      "belly",
+      "chest",
+      "legs",
+      "paws",
+      "tail"
+    ],
+    "units": {
+      "body": {
+        "base": "back",
+        "masks": {
+          "back": "zones/body-mask-back.png",
+          "chest": "zones/body-mask-chest.png",
+          "legs": "zones/body-mask-legs.png",
+          "paws": "zones/body-mask-paws.png",
+          "belly": "zones/body-mask-belly.png"
+        },
+        "shade": "zones/body-shade.png",
+        "detail": null
+      },
+      "head": {
+        "base": "head",
+        "masks": {
+          "head": "zones/head-mask-head.png",
+          "muzzle": "zones/head-mask-muzzle.png",
+          "eyepatch": "zones/head-mask-eyepatch.png"
+        },
+        "shade": "zones/head-shade.png",
+        "detail": "zones/head-detail.png"
+      },
+      "head-short": {
+        "base": "head",
+        "masks": {
+          "head": "zones/head-short-mask-head.png",
+          "muzzle": "zones/head-short-mask-muzzle.png",
+          "eyepatch": "zones/head-short-mask-eyepatch.png"
+        },
+        "shade": "zones/head-short-shade.png",
+        "detail": "zones/head-short-detail.png"
+      },
+      "head-long": {
+        "base": "head",
+        "masks": {
+          "head": "zones/head-long-mask-head.png",
+          "muzzle": "zones/head-long-mask-muzzle.png",
+          "eyepatch": "zones/head-long-mask-eyepatch.png"
+        },
+        "shade": "zones/head-long-shade.png",
+        "detail": "zones/head-long-detail.png"
+      },
+      "front-legs": {
+        "base": "legs",
+        "masks": {
+          "legs": "zones/front-legs-mask-legs.png",
+          "paws": "zones/front-legs-mask-paws.png"
+        },
+        "shade": "zones/front-legs-shade.png",
+        "detail": null
+      },
+      "front-legs-walk-a": {
+        "base": "legs",
+        "masks": {
+          "legs": "zones/front-legs-walk-a-mask-legs.png"
+        },
+        "shade": "zones/front-legs-walk-a-shade.png",
+        "detail": null
+      },
+      "front-legs-walk-b": {
+        "base": "legs",
+        "masks": {
+          "legs": "zones/front-legs-walk-b-mask-legs.png"
+        },
+        "shade": "zones/front-legs-walk-b-shade.png",
+        "detail": null
+      },
+      "ear-left-floppy": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-left-floppy-mask-ears.png"
+        },
+        "shade": "zones/ear-left-floppy-shade.png",
+        "detail": null
+      },
+      "ear-left-pointy": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-left-pointy-mask-ears.png"
+        },
+        "shade": "zones/ear-left-pointy-shade.png",
+        "detail": null
+      },
+      "ear-left-folded": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-left-folded-mask-ears.png"
+        },
+        "shade": "zones/ear-left-folded-shade.png",
+        "detail": null
+      },
+      "ear-right-floppy": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-right-floppy-mask-ears.png"
+        },
+        "shade": "zones/ear-right-floppy-shade.png",
+        "detail": null
+      },
+      "ear-right-pointy": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-right-pointy-mask-ears.png"
+        },
+        "shade": "zones/ear-right-pointy-shade.png",
+        "detail": null
+      },
+      "ear-right-folded": {
+        "base": "ears",
+        "masks": {
+          "ears": "zones/ear-right-folded-mask-ears.png"
+        },
+        "shade": "zones/ear-right-folded-shade.png",
+        "detail": null
+      },
+      "tail-curly": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-curly-mask-tail.png"
+        },
+        "shade": "zones/tail-curly-shade.png",
+        "detail": null
+      },
+      "tail-straight": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-straight-mask-tail.png"
+        },
+        "shade": "zones/tail-straight-shade.png",
+        "detail": null
+      },
+      "tail-stubby": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-stubby-mask-tail.png"
+        },
+        "shade": "zones/tail-stubby-shade.png",
+        "detail": null
+      },
+      "fluff-medium": {
+        "base": "chest",
+        "masks": {
+          "chest": "zones/fluff-medium-mask-chest.png"
+        },
+        "shade": "zones/fluff-medium-shade.png",
+        "detail": null
+      },
+      "fluff-fluffy": {
+        "base": "chest",
+        "masks": {
+          "chest": "zones/fluff-fluffy-mask-chest.png"
+        },
+        "shade": "zones/fluff-fluffy-shade.png",
+        "detail": null
+      },
+      "pose-lying": {
+        "base": "back",
+        "masks": {
+          "back": "zones/pose-lying-mask-back.png",
+          "head": "zones/pose-lying-mask-head.png",
+          "muzzle": "zones/pose-lying-mask-muzzle.png",
+          "eyepatch": "zones/pose-lying-mask-eyepatch.png",
+          "ears": "zones/pose-lying-mask-ears.png",
+          "chest": "zones/pose-lying-mask-chest.png",
+          "legs": "zones/pose-lying-mask-legs.png",
+          "paws": "zones/pose-lying-mask-paws.png",
+          "tail": "zones/pose-lying-mask-tail.png"
+        },
+        "shade": "zones/pose-lying-shade.png",
+        "detail": "zones/pose-lying-detail.png"
+      },
+      "tail-curly-fluffy": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-curly-fluffy-mask-tail.png"
+        },
+        "shade": "zones/tail-curly-fluffy-shade.png",
+        "detail": null
+      },
+      "tail-straight-fluffy": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-straight-fluffy-mask-tail.png"
+        },
+        "shade": "zones/tail-straight-fluffy-shade.png",
+        "detail": null
+      },
+      "tail-stubby-fluffy": {
+        "base": "tail",
+        "masks": {
+          "tail": "zones/tail-stubby-fluffy-mask-tail.png"
+        },
+        "shade": "zones/tail-stubby-fluffy-shade.png",
+        "detail": null
+      }
+    }
+  }
 }

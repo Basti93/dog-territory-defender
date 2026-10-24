@@ -48,17 +48,17 @@ describe('wander scheduler', () => {
     expect(pickDestination(() => 0.999, null)).toBe('front');
   });
 
-  it('lets him lie down only at the doghouse, and sniff only toward a building', () => {
+  it('lets him lie down only by the bench, and sniff at the bench or the mailbox', () => {
     for (const spot of SPOT_IDS) {
       const opts = activityOptions(spot);
-      expect(opts.includes('sleep')).toBe(spot === 'doghouse');
+      expect(opts.includes('sleep')).toBe(spot === 'bench');
       expect(opts.includes('sniff')).toBe(spot !== 'front');
     }
     const rng = seeded(3);
     for (let i = 0; i < 300; i++) {
       for (const spot of SPOT_IDS) {
         const act = pickActivity(rng, spot);
-        if (act === 'sleep') expect(spot).toBe('doghouse');
+        if (act === 'sleep') expect(spot).toBe('bench');
       }
     }
     expect(ACTIVITY_MS.sleep).toBe(8000);

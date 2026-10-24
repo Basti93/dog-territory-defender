@@ -172,7 +172,7 @@ describe('evaluateSomewhereWild — full path', () => {
     });
 
     expect(result.card).not.toBeNull();
-    expect(result.card!.text).toContain("Buddy's Office Range");
+    expect(result.card!.text).toContain("Buddy's territory on Office");
     expect(result.card!.text).not.toContain('Some Random Street');
   });
 

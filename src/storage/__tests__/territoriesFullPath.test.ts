@@ -68,92 +68,64 @@ async function runWalk(
 }
 
 describe('territories full path', () => {
-  it('two separate neighborhoods birth two territories, then a bridging walk merges them with correct attribution and a split-invariant territoryRate', async () => {
+  it('far ground stays home ground (one territory), and territoryRate matches the single ungrouped worldMass', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();
     const territoryRepository = createInMemoryTerritoryRepository();
     const day1 = Date.parse('2026-01-01T08:00:00Z');
     const day2 = Date.parse('2026-01-02T08:00:00Z');
     const day3 = Date.parse('2026-01-03T08:00:00Z');
 
-    // Walk 1: the "home" neighborhood.
     const home = block(0, 0, 4, 4);
     const { plan: plan1 } = await runWalk(homeRangeRepository, territoryRepository, home, day1, 50);
     expect(plan1.births).toHaveLength(1);
 
-    // Walk 2: a genuinely separate "office" neighborhood, far away (>400m).
-    const office = block(100, 100, 4, 4);
-    const { plan: plan2 } = await runWalk(homeRangeRepository, territoryRepository, office, day2, 55);
-    expect(plan2.births).toHaveLength(1);
+    // A far neighbourhood (4 km away): no new territory until a promotion (2+ walks, 40+ cells).
+    const office = block(200, 100, 4, 4);
+    const { plan: plan2, creditedId } = await runWalk(homeRangeRepository, territoryRepository, office, day2, 55);
+    expect(plan2.births).toHaveLength(0);
 
-    let territories = await territoryRepository.getTerritories();
-    expect(territories).toHaveLength(2);
-    const homeTerritory = territories.find((t) => t.createdAt === day1)!;
-    const officeTerritory = territories.find((t) => t.createdAt === day2)!;
-    expect(homeTerritory.walksHere).toBe(1);
-    expect(homeTerritory.treatsEarnedHere).toBe(50);
-    expect(officeTerritory.walksHere).toBe(1);
-    expect(officeTerritory.treatsEarnedHere).toBe(55);
+    await runWalk(homeRangeRepository, territoryRepository, home, day3, 12);
 
-    // Walk 3: nothing new painted directly bridges home and office in this
-    // synthetic setup (100 cells apart is too far for one walk to close in
-    // a single painted patch) — instead, confirm re-covering home ground
-    // alone correctly attributes to the SAME (older) territory, not a new one.
-    const { plan: plan3, creditedId } = await runWalk(homeRangeRepository, territoryRepository, home, day3, 12);
-    expect(plan3.births).toHaveLength(0);
-    expect(plan3.merges).toHaveLength(0);
-    expect(creditedId).toBe(homeTerritory.id);
+    const territories = await territoryRepository.getTerritories();
+    expect(territories).toHaveLength(1);
+    expect(territories[0].id).toBe(creditedId);
+    expect(territories[0].walksHere).toBe(3);
+    expect(territories[0].treatsEarnedHere).toBe(117);
+    expect((await homeRangeRepository.getCells()).every((c) => c.territoryId === territories[0].id)).toBe(true);
 
-    territories = await territoryRepository.getTerritories();
-    const homeAfter = territories.find((t) => t.id === homeTerritory.id)!;
-    expect(homeAfter.walksHere).toBe(2);
-    expect(homeAfter.treatsEarnedHere).toBe(62);
-
-    // Split-invariance (design.md Decision 6): the final territoryRate must
-    // equal what a single ungrouped worldMass aggregate says, regardless of
-    // there being two separate territories on the board.
     const worldMass = await homeRangeRepository.getWorldMass();
-    const rateFromRepo = territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), 1);
-
     const allCells = await homeRangeRepository.getCells();
-    const manualCellCount = allCells.length;
-    const manualVisitsSum = allCells.reduce((sum, c) => sum + c.visits, 0);
-    const rateFromManualSum = territoryRate(territoryMass(manualCellCount, manualVisitsSum), 1);
-
-    expect(rateFromRepo).toBe(rateFromManualSum);
+    const manual = territoryMass(allCells.length, allCells.reduce((sum, c) => sum + c.visits, 0));
+    expect(territoryRate(territoryMass(worldMass.cellCount, worldMass.visitsSum), 1)).toBe(territoryRate(manual, 1));
   });
 
-  it('a bridging walk that literally connects two existing territories merges them, keeping the older name/id and summing stats', async () => {
+  it('a bridging walk that literally connects two shown territories merges them, keeping the older name/id and summing stats', async () => {
     const homeRangeRepository = createInMemoryHomeRangeRepository();
     const territoryRepository = createInMemoryTerritoryRepository();
     const day1 = Date.parse('2026-01-01T08:00:00Z');
     const day2 = Date.parse('2026-01-02T08:00:00Z');
     const day3 = Date.parse('2026-01-03T08:00:00Z');
 
-    const territoryA = block(0, 0, 2, 2); // ix 0-1, iy 0-1
-    await runWalk(homeRangeRepository, territoryRepository, territoryA, day1, 50);
+    const a = await territoryRepository.createTerritory('A', day1);
+    const b = await territoryRepository.createTerritory('B', day2);
+    await territoryRepository.incrementTerritoryStats(a, { walksIncrement: 1, treatsIncrement: 50 });
+    await territoryRepository.incrementTerritoryStats(b, { walksIncrement: 2, treatsIncrement: 55 });
+    const paint = (set: Set<string>, id: string) =>
+      Array.from(set).map((cid) => {
+        const [ix, iy] = cid.split(',').map(Number);
+        return { ix, iy, refreshedAt: day2, tracked: true, territoryId: id };
+      });
+    await homeRangeRepository.paintCells([...paint(block(0, 0, 2, 2), a), ...paint(block(30, 0, 2, 2), b)]);
 
-    const territoryB = block(3, 0, 2, 2); // ix 3-4, iy 0-1 — within spawn distance of A, so this assimilates into A unless it's actually far enough to birth separately.
-    // Use a genuinely far second block instead, then bridge with a third walk.
-    const farB = block(30, 0, 2, 2);
-    await runWalk(homeRangeRepository, territoryRepository, farB, day2, 55);
-
-    let territories = await territoryRepository.getTerritories();
-    expect(territories).toHaveLength(2);
-
-    // Bridging walk: paints every cell strictly between the two blocks so
-    // the new ground becomes literally 8-neighbour-adjacent to both.
-    const bridge = block(2, 0, 28, 1); // ix 2..29, iy 0 — connects ix=1 (A) to ix=30 (farB)
-    const { plan } = await runWalk(homeRangeRepository, territoryRepository, bridge, day3, 20);
+    const { plan } = await runWalk(homeRangeRepository, territoryRepository, block(2, 0, 28, 1), day3, 20);
     expect(plan.merges.length).toBeGreaterThanOrEqual(1);
 
-    territories = await territoryRepository.getTerritories();
+    const territories = await territoryRepository.getTerritories();
     expect(territories).toHaveLength(1);
     const survivor = territories[0];
-    expect(survivor.createdAt).toBe(day1); // older wins
-    expect(survivor.walksHere).toBe(3); // 1 (A) + 1 (farB) + 1 (bridge, credited to survivor)
-    expect(survivor.treatsEarnedHere).toBe(125); // 50 + 55 + 20
-
-    const allCells = await homeRangeRepository.getCells();
-    expect(allCells.every((c) => c.territoryId === survivor.id)).toBe(true);
+    expect(survivor.createdAt).toBe(day1);
+    expect(survivor.walksHere).toBe(4); // 1 + 2 + the bridge walk
+    expect(survivor.treatsEarnedHere).toBe(125);
+    expect((await homeRangeRepository.getCells()).every((c) => c.territoryId === survivor.id)).toBe(true);
   });
 });

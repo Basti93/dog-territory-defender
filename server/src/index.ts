@@ -1,6 +1,7 @@
 import { loadConfig } from './config';
 import { connectPostgres, runMigrations } from './db/client';
 import { buildApp, buildReadyApp } from './http/app';
+import { foldSmallTerritories } from './services/territoryFold';
 import { startLogRetention } from './services/logRetention';
 import { startNeighbourScheduler } from './neighbours/scheduler';
 
@@ -13,6 +14,11 @@ async function main() {
   const { app, bus } = await buildApp({ db: conn.db, config });
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
+  // Idempotent data migration (see services/territoryFold.ts): after listen, never blocks or breaks startup.
+  void foldSmallTerritories(conn.db, bus, (hid, err) => app.log.error({ hid, err: String(err) }, 'territory fold failed for household')).then(
+    (n) => app.log.info({ folded: n }, 'territory fold'),
+    (err) => app.log.error({ err: String(err) }, 'territory fold failed')
+  );
   const ready = config.readyPort > 0 ? buildReadyApp(conn.db) : null;
   if (ready) await ready.listen({ port: config.readyPort, host: '0.0.0.0' });
 

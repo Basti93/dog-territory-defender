@@ -48,6 +48,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'shownPartnerWalks')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN shownPartnerWalks TEXT NOT NULL DEFAULT '[]'");
     }
+    if (!columns.some((c) => c.name === 'incomeBeatShown')) {
+      await db.execAsync("ALTER TABLE app_settings ADD COLUMN incomeBeatShown TEXT NOT NULL DEFAULT ''");
+    }
     return db;
   });
 
@@ -222,6 +225,23 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET batteryHintShown = excluded.batteryHintShown`,
         SINGLETON_ID,
         shown ? 1 : 0
+      );
+    },
+
+    async getIncomeBeatShown(): Promise<{ day: string; rate: number } | null> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ incomeBeatShown: string }>('SELECT incomeBeatShown FROM app_settings WHERE id = ?', SINGLETON_ID);
+      const [day, rate] = (row?.incomeBeatShown ?? '').split('|');
+      return day && Number.isFinite(Number(rate)) && rate !== '' ? { day, rate: Number(rate) } : null;
+    },
+
+    async saveIncomeBeatShown(shown: { day: string; rate: number }): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, incomeBeatShown) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET incomeBeatShown = excluded.incomeBeatShown`,
+        SINGLETON_ID,
+        `${shown.day}|${shown.rate}`
       );
     },
 

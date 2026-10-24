@@ -361,3 +361,49 @@ describe('corner names ("Unsere Ecken")', () => {
     expect((await applyEvents([cornerEvent(1, '1,1', 'X', 'p-lisa')], 1, withoutStore, ctx())).cornersChanged).toBe(false);
   });
 });
+
+describe('snapshot territory reconciliation (the server is the truth for a household)', () => {
+  const terr = (id: string, createdAt: number) => ({ id, name: id, createdAt, walksHere: 0, treatsEarnedHere: 0 });
+
+  it('drops local-only territories and moves their cells the server does not know to the nearest server territory', async () => {
+    const repos = makeRepos();
+    await repos.territories.upsertTerritories([terr('t-home', 1), terr('t-ghost', 2), terr('t-ghost2', 3)]);
+    await repos.homeRange.replaceAll(
+      [cell(0, 0, 1, 10, 't-home'), cell(1, 0, 1, 10, 't-ghost'), cell(500, 500, 1, 10, 't-far'), cell(501, 500, 1, 10, 't-ghost2')],
+      null
+    );
+    await applySnapshot(
+      snapshot({ territories: [terr('t-home', 1), terr('t-far', 5)], cells: [cell(0, 0, 1, 10, 't-home'), cell(500, 500, 1, 10, 't-far')] }),
+      repos,
+      ctx()
+    );
+    expect((await repos.territories.getTerritories()).map((t) => t.id).sort()).toEqual(['t-far', 't-home']);
+    const byKey = new Map((await repos.homeRange.getCells()).map((c) => [`${c.ix},${c.iy}`, c.territoryId]));
+    expect(byKey.get('1,0')).toBe('t-home');
+    expect(byKey.get('501,500')).toBe('t-far');
+  });
+
+  it('re-uses the server id for a cell the server knows (no ghost left behind) and is idempotent', async () => {
+    const repos = makeRepos();
+    await repos.territories.upsertTerritories([terr('t-ghost', 2)]);
+    await repos.homeRange.replaceAll([cell(3, 3, 1, 10, 't-ghost')], null);
+    const snap = snapshot({ territories: [terr('t-srv', 1)], cells: [cell(3, 3, 1, 10, 't-srv')] });
+    await applySnapshot(snap, repos, ctx());
+    await applySnapshot(snap, repos, ctx());
+    expect((await repos.territories.getTerritories()).map((t) => t.id)).toEqual(['t-srv']);
+    expect((await repos.homeRange.getCells())[0].territoryId).toBe('t-srv');
+  });
+
+  it('leaves local territories alone when the server has none yet', async () => {
+    const repos = makeRepos();
+    await repos.territories.upsertTerritories([terr('t-local', 1)]);
+    await applySnapshot(snapshot(), repos, ctx());
+    expect((await repos.territories.getTerritories()).map((t) => t.id)).toEqual(['t-local']);
+  });
+
+  it('marks the phone as reconciled', async () => {
+    const repos = makeRepos();
+    await applySnapshot(snapshot(), repos, ctx());
+    expect((await repos.sync.getState()).territoriesReconciled).toBe(true);
+  });
+});

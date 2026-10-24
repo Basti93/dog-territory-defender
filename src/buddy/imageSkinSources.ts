@@ -4,7 +4,7 @@
 // assets/buddy/manifest.json). Every layer shares one canvas.
 import { ImageSourcePropType } from 'react-native';
 
-import { BuddyAppearance, BuddyEarStyle, BuddyMarkings, BuddyTailStyle, defaultBuddyAppearance, normalizeAppearance } from './buddyAppearance';
+import { BUDDY_COATS, BUDDY_PALETTE, BuddyAppearance, BuddyCoat, BuddyEarStyle, BuddyMarkings, BuddyTailStyle, defaultBuddyAppearance, normalizeAppearance } from './buddyAppearance';
 import type { BuddyPart, BuddyPivots } from './buddySkin';
 
 /** Hard-coded from assets/buddy/manifest.json (fractions of the canvas, y down). Keep in sync. */
@@ -316,6 +316,16 @@ const COMMON: Pick<Record<BuddyPart, Src>, 'eyesOpen' | 'eyesClosed' | 'mouthHap
   zzz: require('../../assets/buddy/common/zzz.png'),
 };
 
+const MOUTH_BY_MUZZLE: Record<'short' | 'long', Src> = {
+  short: require('../../assets/buddy/common/mouth-happy-short.png'),
+  long: require('../../assets/buddy/common/mouth-happy-long.png'),
+};
+
+/** Untinted shared layers (eyes, tongue mouth, zzz) for the fur-zone skin; the open mouth follows the muzzle length. */
+export function buddyCommonSources(muzzle: 'short' | 'medium' | 'long'): typeof COMMON {
+  return muzzle === 'medium' ? COMMON : { ...COMMON, mouthHappy: MOUTH_BY_MUZZLE[muzzle] };
+}
+
 /** Sources for one look. Unknown coat/ear/tail values fall back to the defaults. Size and accent are ignored here. `markings` is only present when the look has markings. */
 export function buddyImageSources(appearance: BuddyAppearance): Partial<Record<BuddyPart, Src>> {
   const a = normalizeAppearance(appearance);
@@ -337,9 +347,32 @@ export function buddyImageSources(appearance: BuddyAppearance): Partial<Record<B
   };
 }
 
+function rgbOf(hex: string): number[] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Legacy coat whose colour is closest to `hex` (sRGB distance; good enough for a stand-in sprite). */
+export function nearestCoat(hex: string): BuddyCoat {
+  const c = rgbOf(hex);
+  let best: BuddyCoat = 'golden';
+  let bestD = Infinity;
+  for (const coat of BUDDY_COATS) {
+    const p = rgbOf(BUDDY_PALETTE.coats[coat]);
+    const d = (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = coat;
+    }
+  }
+  return best;
+}
+
 /** Whole-sprite back poses for the yard gate (same canvas/ground line as the layered Buddy). */
 export function buddyBackPoseSources(appearance: BuddyAppearance): { sitBack: Src; walkBackA: Src; walkBackB: Src } {
   const a = normalizeAppearance(appearance);
-  const extras = EXTRAS[a.coat] ?? EXTRAS[defaultBuddyAppearance().coat];
+  // Back poses are still per legacy coat: a fur-zone dog shows the preset closest to its back colour.
+  const coat = a.fur ? nearestCoat(a.fur.zones.back) : a.coat;
+  const extras = EXTRAS[coat] ?? EXTRAS[defaultBuddyAppearance().coat];
   return { sitBack: extras.sitBack, walkBackA: extras.walkBackA, walkBackB: extras.walkBackB };
 }

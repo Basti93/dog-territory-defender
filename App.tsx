@@ -148,6 +148,7 @@ export default function App() {
         territoryName: outcome.territoryName,
         walkTime: outcome.wildExtra?.closedAt,
         corner: outcome.newCorner,
+        incomeChange: outcome.incomeChange,
       });
     },
   });
@@ -398,6 +399,19 @@ export default function App() {
             distanceMeters: celebration.distanceMeters ?? null,
             walkTime: celebration.walkTime ?? Date.now(),
             manual: celebration.manual ?? false,
+            ...(territoryBeat?.newTerritoryName
+              ? {
+                  newTerritory: {
+                    name: territoryBeat.newTerritoryName,
+                    // Offline players rename their own territory; a household renames by the promoting walk (the id comes with the sync).
+                    rename: (name: string) => {
+                      if (territoryBeat.newTerritoryId) void repos.territoryRepository.renameTerritory(territoryBeat.newTerritoryId, name);
+                      else void syncEngine.enqueueCommand({ kind: 'territory.name', fromWalkId: celebration.walkId, name });
+                    },
+                  },
+                }
+              : {}),
+            ...(celebration.incomeChange ? { incomeChange: celebration.incomeChange } : {}),
             ...(celebration.corner ? { corner: { id: celebration.corner.id, name: cornerDisplayName({ name: null, street: celebration.corner.street }) } } : {}),
           },
           onDone: dismissCelebration,
@@ -434,6 +448,7 @@ export default function App() {
             denEconomyRepository={repos.denEconomyRepository}
             onOpenMap={nav.close}
             onClose={nav.close}
+            onRenamed={(territoryId, name) => void syncEngine.enqueueCommand({ kind: 'territory.name', territoryId, name })}
           />
         </ScreenFrame>
       );

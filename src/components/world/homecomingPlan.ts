@@ -12,7 +12,7 @@ import { planBadgeArrivals } from './fencePlan';
 // how the choreography varies, and which closing sentence is spoken. No React in here.
 
 export type BeatId = 'patch' | 'bowl' | 'extras' | 'rest';
-export type ExtraKind = 'corner' | 'badge' | 'milestone' | 'pennant';
+export type ExtraKind = 'corner' | 'territory' | 'badge' | 'milestone' | 'pennant' | 'income';
 
 /** The slice of a finished walk the homecoming needs. */
 export interface HomecomingWalk {
@@ -30,6 +30,10 @@ export interface HomecomingWalk {
   partnerName?: string;
   /** "Unsere Ecken": this walk completed a corner. `name` is the auto-name the sign shows ("Ecke Lindenstraße"). Beat 3 asks for a real one, once. */
   corner?: { id: string; name: string };
+  /** A far patch became a territory with this walk: the suggested name, and what saves a rename (local or via the household server). Beat 3 shows "Neues Revier!". */
+  newTerritory?: { name: string; rename: (name: string) => void };
+  /** The income the household's ground brings rose with this walk, treats per hour (one decimal each). Beat 3 shows "Euer Boden: 0,4 → 0,5/Std.". */
+  incomeChange?: { from: number; to: number };
 }
 
 /** What a partner's walk (seen through sync) gives the mini homecoming. Treats are already in the shared bowl. */
@@ -70,15 +74,18 @@ export function partnerHomecomingWalk(p: PartnerWalkSummary): HomecomingWalk {
 }
 
 /**
- * Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). A new corner comes first: it is
- * the one thing that is asked once and never again, and it counts as one extra like any other (badges, level, pennant).
+ * Optional beat-3 things, in priority order, at most two ("the rest waits in the yard"). The once-only moments come
+ * first (a new corner, then a new territory: each is asked once and never again), then badges, level, pennant, and
+ * last the income tick ("Euer Boden: 0,4 → 0,5/Std."), the softest of them. All count as extras alike.
  */
-export function planExtras(rewards: WalkRewardsCelebration, hasNewCorner = false): ExtraKind[] {
+export function planExtras(rewards: WalkRewardsCelebration, hasNewCorner = false, hasNewTerritory = false, hasIncomeRise = false): ExtraKind[] {
   const all: ExtraKind[] = [];
   if (hasNewCorner) all.push('corner');
+  if (hasNewTerritory) all.push('territory');
   if (planBadgeArrivals(rewards.unlockedAchievements).length > 0) all.push('badge');
   if (rewards.leveledUpTo !== null) all.push('milestone');
   if (rewards.tease?.affordable) all.push('pennant');
+  if (hasIncomeRise) all.push('income');
   return all.slice(0, 2);
 }
 

@@ -19,12 +19,13 @@ export type BuddyPart =
   | 'mouthHappy'
   | 'zzz'
   | 'markings'
+  | 'fluff'
   | 'poseLying'
   | 'frontLegsWalkA'
   | 'frontLegsWalkB';
 
 /** Parts a skin may omit (the vector skin has none of them except zzz). */
-export type OptionalBuddyPart = 'zzz' | 'markings' | 'poseLying' | 'frontLegsWalkA' | 'frontLegsWalkB';
+export type OptionalBuddyPart = 'zzz' | 'markings' | 'fluff' | 'poseLying' | 'frontLegsWalkA' | 'frontLegsWalkB';
 
 /** All parts share the SAME square canvas, so parts align when stacked. */
 export interface PartBox {

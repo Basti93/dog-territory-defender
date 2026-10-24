@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react-native';
 
 import { advance, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { YardExtras } from '../den/YardExtras';
-import { yardLayout } from '../den/YardScene';
+import { worldYardLayout } from '../world/sceneLayout';
 import { WILD_EXTRA_IDS, WILD_EXTRA_MS } from '../den/wildExtras';
 
 beforeEach(() => jest.useFakeTimers());
@@ -11,7 +11,7 @@ afterEach(() => jest.useRealTimers());
 
 const W = 390;
 const H = 400;
-const layout = yardLayout(W, H, { doghouse: 300, bakery: 300, sniffGarden: 300 });
+const layout = worldYardLayout(W, H);
 
 describe('YardExtras', () => {
   it.each(WILD_EXTRA_IDS)('%s mounts and leaves no timers behind when unmounted', async (id) => {

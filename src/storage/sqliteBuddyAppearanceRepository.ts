@@ -9,6 +9,15 @@ const SINGLETON_ID = 'singleton';
 // No automated test for this file (no expo-sqlite jest harness in the repo);
 // the contract test covers the in-memory fake. Unknown stored values are
 // normalised on read so removing an option later never crashes.
+function parseFur(value: unknown): unknown {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
 export function createSqliteBuddyAppearanceRepository(dbName: string = DEFAULT_DB_NAME): BuddyAppearanceRepository {
   const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
     await db.execAsync(`
@@ -22,6 +31,9 @@ export function createSqliteBuddyAppearanceRepository(dbName: string = DEFAULT_D
         accentColour TEXT NOT NULL
       );
     `);
+    // Zone-colour look (JSON). Older installs get the column once; legacy rows keep NULL and look as before.
+    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(buddy_appearance)');
+    if (!columns.some((c) => c.name === 'fur')) await db.execAsync('ALTER TABLE buddy_appearance ADD COLUMN fur TEXT');
     return db;
   });
 
@@ -32,29 +44,31 @@ export function createSqliteBuddyAppearanceRepository(dbName: string = DEFAULT_D
         'SELECT * FROM buddy_appearance WHERE id = ?',
         SINGLETON_ID
       );
-      return row ? normalizeAppearance(row) : defaultBuddyAppearance();
+      return row ? normalizeAppearance({ ...row, fur: parseFur(row.fur) }) : defaultBuddyAppearance();
     },
 
     async saveAppearance(appearance: BuddyAppearance): Promise<void> {
       const a = normalizeAppearance(appearance);
       const db = await dbPromise;
       await db.runAsync(
-        `INSERT INTO buddy_appearance (id, coat, markings, earStyle, tailStyle, size, accentColour)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO buddy_appearance (id, coat, markings, earStyle, tailStyle, size, accentColour, fur)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            coat = excluded.coat,
            markings = excluded.markings,
            earStyle = excluded.earStyle,
            tailStyle = excluded.tailStyle,
            size = excluded.size,
-           accentColour = excluded.accentColour`,
+           accentColour = excluded.accentColour,
+           fur = excluded.fur`,
         SINGLETON_ID,
         a.coat,
         a.markings,
         a.earStyle,
         a.tailStyle,
         a.size,
-        a.accentColour
+        a.accentColour,
+        a.fur ? JSON.stringify(a.fur) : null
       );
     },
 

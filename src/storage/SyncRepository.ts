@@ -47,6 +47,8 @@ export interface SyncState {
   needsUpdate?: boolean;
   /** The household's IANA timezone from the latest snapshot: the Buddy tap day rolls over there, like on the server. */
   householdTimezone?: string;
+  /** A snapshot has been applied since territories became server-authoritative (2026-10-24): local-only territories are gone. While absent, the next sync loads a snapshot once. */
+  territoriesReconciled?: boolean;
 }
 
 /** A neighbour line from the event feed (Track B): an i18n key plus params, never copy. */

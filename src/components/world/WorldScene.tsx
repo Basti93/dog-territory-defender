@@ -30,13 +30,13 @@ import { BuddyLoading } from '../BuddyLoading';
 import { BuddyMood } from '../buddy/buddyMood';
 import type { AwayStripLine, DoorstepSession } from '../doorstepSession';
 import { MapView } from '../MapView';
-import { BuildingSprite, YARD_ORDER, YardBuildingKey, artTierForLevel, yardWalkGeometry } from '../den/YardScene';
+import { BUILDING_SIZE, BuildingSprite, YardBuildingKey, artTierForLevel, yardWalkGeometry } from '../den/YardScene';
 import { YardBuddy } from '../den/YardBuddy';
 import { YardButterflies } from '../den/YardButterflies';
-import { BEHIND_DOGHOUSE_EXTRAS, YardExtras } from '../den/YardExtras';
+import { YardExtras } from '../den/YardExtras';
 import { useWildExtra } from '../den/useWildExtra';
 import { BowlFill, BowlSignContent, TreatFlights, UpgradeSparkle, useBowlProjection } from './BakeryLife';
-import { BURST_FLIGHT_MS, BURST_STAGGER_MS, bowlAtCap, burstSpriteCount, chimneyAnchor } from './bakeryRules';
+import { BURST_FLIGHT_MS, BURST_STAGGER_MS, bowlAtCap, burstSpriteCount } from './bakeryRules';
 import { useBackAction } from '../../app/backStack';
 import { BENCH_WALK_WINDOW } from '../../postcards/postcards';
 import { usePostcards } from '../../postcards/usePostcards';
@@ -59,6 +59,9 @@ import {
   GATE_BOX,
   GATE_SIGN_H,
   HINT_H,
+  PENNANT_H,
+  buildingSelectOffset,
+  buildingsLayout,
   sceneLayout,
   viertelScrollTarget,
   worldYardLayout,
@@ -66,9 +69,9 @@ import {
 import { skyTintForDate } from './timeOfDay';
 import { useViertelChrome } from './useViertelChrome';
 
-// "Unser Viertel", step 1 of the redesign (handover/redesign/konzept.md): ONE scene with three heights
-// replacing the Doorstep and the Den's yard. Start height = the yard with the gate at the top; scrolling
-// up reveals the Viertel (map portrait) and the sky. Presentation only: every number comes from the same
+// "Unser Viertel", step 1 of the redesign (handover/redesign/konzept.md): ONE scene with three pages
+// replacing the Doorstep and the Den's yard. Start height = the yard (Hof) with the gate at the top; scrolling
+// up reveals the Viertel (map portrait) and the sky, scrolling down the buildings page (upgrades). Presentation only: every number comes from the same
 // economy code the Den used (via useDen).
 
 /** Share of the scroll distance each layer lags (sky, positive) or leads (yard, negative). */
@@ -82,7 +85,7 @@ const PILL_EDGE = 8;
 const PILL_MAX_W = 96;
 const PILL_MIN_W = 60;
 const GATE_SIGN_ROOM = 200;
-/** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides. */
+/** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides; also the buildings page's ground. */
 const GRASS_BASE = '#9BC995';
 const MAX_NOTES = 2;
 const NO_LOCATIONS: never[] = [];
@@ -138,7 +141,7 @@ export interface WorldSceneProps {
   onOpenSettings: () => void;
   /** The dog-name sign under the fence opens Stats & badges. Omitted = the sign is plain decoration. */
   onOpenStats?: () => void;
-  /** The `den` screen alias (notification taps): scroll to the yard and open the next-upgrade panel. */
+  /** The `den` screen alias (notification taps): scroll to the buildings page and open the next-upgrade panel. */
   openDenPanel?: boolean;
   onDenPanelHandled?: () => void;
   /** Treats that landed in the pile since the previous app open (App's launch routine; not re-derived). >= 1 plays the soft welcome-back pop and line once per launch. */
@@ -264,17 +267,21 @@ export function WorldScene(props: WorldSceneProps) {
     homeRangeRepository,
     walkRepository,
     territoryRepository,
+    denEconomyRepository,
     cornerRepository: cornerTools?.repository,
     dogName,
     refreshKey: (homeRangeRefreshKey ?? 0) + cornerEdits,
   });
 
-  const layout = useMemo(() => sceneLayout(height, width, insets.top), [height, width, insets.top]);
+  const layout = useMemo(() => sceneLayout(height, width, insets.top, insets.bottom), [height, width, insets.top, insets.bottom]);
+  const buildings = useMemo(() => buildingsLayout(width, insets.top, layout.buildingsPageH), [width, insets.top, layout.buildingsPageH]);
 
   const scrollRef = useRef<{ scrollTo: (o: { x?: number; y?: number; animated?: boolean }) => void } | null>(null);
   const scrollY = useRef(new Animated.Value(layout.startOffset)).current;
   const [isUp, setIsUp] = useState(false);
   const isUpRef = useRef(false);
+  const [isDown, setIsDown] = useState(false);
+  const isDownRef = useRef(false);
   const onScroll = useMemo(
     () =>
       Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
@@ -286,11 +293,20 @@ export function WorldScene(props: WorldSceneProps) {
             isUpRef.current = up;
             setIsUp(up);
           }
+          const down = y > layout.startOffset + 140;
+          if (down !== isDownRef.current) {
+            isDownRef.current = down;
+            setIsDown(down);
+          }
         },
       }),
     [scrollY, layout.startOffset]
   );
-  const scrollToYard = () => scrollRef.current?.scrollTo({ y: layout.startOffset, animated: true });
+  const scrollToYard = () => {
+    setSelected(null);
+    scrollRef.current?.scrollTo({ y: layout.startOffset, animated: true });
+  };
+  const scrollToBuildings = () => scrollRef.current?.scrollTo({ y: layout.buildingsOffset, animated: true });
   const scrollToViertel = () => scrollRef.current?.scrollTo({ y: viertelScrollTarget(layout), animated: true });
   useEffect(() => {
     // Android ignores the ScrollView's contentOffset prop until content is measured.
@@ -316,13 +332,19 @@ export function WorldScene(props: WorldSceneProps) {
     onUpgradeApplied: wildExtra.playLevelUp,
   });
   const [selected, setSelected] = useState<YardBuildingKey | null>(null);
-  // Android back: close the open building sign first, then bring the Viertel view back down to the yard.
+  // Android back: close the open building sign first, then bring the Viertel or buildings view back to the yard.
   useBackAction(selected !== null, () => setSelected(null));
-  useBackAction(isUp && !homecoming, scrollToYard);
-  const [tap, setTap] = useState<{ building: YardBuildingKey; n: number } | null>(null);
-  const selectBuilding = (building: YardBuildingKey) => {
+  useBackAction((isUp || isDown) && !homecoming, scrollToYard);
+  // The docked upgrade sign never follows the player back to the Hof: it closes when the buildings page scrolls out of view.
+  const wasDown = useRef(false);
+  useEffect(() => {
+    if (wasDown.current && !isDown) setSelected(null);
+    wasDown.current = isDown;
+  }, [isDown]);
+  // Opens a building's upgrade sign and shows the buildings page (the next-upgrade tease and the `den` alias use it).
+  const scrollToBuilding = (building: YardBuildingKey) => {
     setSelected(building);
-    setTap((prev) => ({ building, n: (prev?.n ?? 0) + 1 }));
+    scrollRef.current?.scrollTo({ y: buildingSelectOffset(layout, buildings, building), animated: true });
   };
 
   // ---- Buddy's greeting / sleepy yawn (once per launch, resolved by App.tsx) ----
@@ -354,7 +376,7 @@ export function WorldScene(props: WorldSceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // `den` screen alias: open the next-upgrade panel on the yard.
+  // `den` screen alias: open the next-upgrade panel on the buildings page.
   const denPanelHandled = useRef(false);
   useEffect(() => {
     if (!openDenPanel) {
@@ -363,8 +385,7 @@ export function WorldScene(props: WorldSceneProps) {
     }
     if (!den.state || denPanelHandled.current) return;
     denPanelHandled.current = true;
-    selectBuilding(den.tease?.building ?? den.cheapestAffordable?.building ?? 'doghouse');
-    scrollRef.current?.scrollTo({ y: layout.startOffset, animated: true });
+    scrollToBuilding(den.tease?.building ?? den.cheapestAffordable?.building ?? 'doghouse');
     onDenPanelHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openDenPanel, den.state]);
@@ -448,7 +469,9 @@ export function WorldScene(props: WorldSceneProps) {
 
   // The gate and its sign share one action: start a walk, or (walk already running) go back to its live map.
   // Never start a second walk over the running one. Buddy is not part of it: tapping him only barks (BuddyAvatar).
-  const gateAction = walkActive ? onOpenMap : startWalk;
+  // While the Viertel is scrolled into view the gate sign peeks in at the bottom of the map: a tap there only brings the yard back,
+  // so looking at the map can never start a walk.
+  const gateAction = walkActive ? onOpenMap : isUp ? scrollToYard : startWalk;
 
   // ---- Bowl: shows the treats sign larger for 2 s ----
   const bowlScale = useRef(new Animated.Value(1)).current;
@@ -462,10 +485,10 @@ export function WorldScene(props: WorldSceneProps) {
     ]).start();
   };
 
-  // ---- Bakery life: the pile at the bowl, the harvest, treats flying chimney -> bowl ----
-  // Nothing moves during a walk, the Homecoming, the gate beat or while the Viertel is in view.
+  // ---- Bakery life: the pile at the bowl, the harvest, treats dropping from the top of the Hof into the bowl ----
+  // Nothing moves during a walk, the Homecoming, the gate beat or while the Viertel or the buildings are in view.
   const projecting = ready && !walkActive && !homecoming;
-  const flightsOn = projecting && !leaving && !isUp;
+  const flightsOn = projecting && !leaving && !isUp && !isDown;
   const projection = useBowlProjection({ state: den.state, extraRate: territoryIncomeRate, active: projecting });
   // First Hof view of the launch: if the bakery baked something while the app was closed, the bowl pops softly once and Buddy says so.
   const [welcome, setWelcome] = useState<{ n: number } | null>(null);
@@ -538,11 +561,10 @@ export function WorldScene(props: WorldSceneProps) {
     bakery: getBuildingLevel(state, 'bakery'),
     sniffGarden: getBuildingLevel(state, 'sniffGarden'),
   };
-  const yard = worldYardLayout(width, layout.yardH, levels);
+  const yard = worldYardLayout(width, layout.yardH);
   const geometry = yardWalkGeometry(yard, width);
-  const curiousTarget: YardBuildingKey | null = selected ?? den.cheapestAffordable?.building ?? null;
-  const buddyMoodNow: BuddyMood = den.excited || greetingPlaying ? 'excited' : curiousTarget ? 'curious' : buddyMood;
-  const curiousFacing = curiousTarget === 'doghouse' ? 'left' : 'right';
+  const upgradeReady = !!den.cheapestAffordable && !walkActive && !homecoming;
+  const buddyMoodNow: BuddyMood = den.excited || greetingPlaying ? 'excited' : buddyMood;
   const gardenStage3 = artTierForLevel(levels.sniffGarden) >= 3;
   const showsTerritorySign = state.territoryIncomeRevealed && Math.round(territoryIncomeRate) >= 1;
   const statusCount = [showsTerritorySign, !!coopText, !!partnerWalk].filter(Boolean).length;
@@ -552,27 +574,34 @@ export function WorldScene(props: WorldSceneProps) {
   const bankShown = heldBank ?? state.treats;
   const full = bowlAtCap(state.treats + pileShown, cap);
   const pileCount = formatNumber(Math.floor(pileShown));
-  const chimneySprite = yard.sprites.bakery;
-  const chimney = chimneyAnchor(artTierForLevel(levels.bakery));
-  const chimneyPoint = {
-    x: chimneySprite.left + chimneySprite.size * chimney.fx,
-    y: layout.yardH - chimneySprite.bottom - chimneySprite.size + chimneySprite.size * chimney.fy,
-  };
+  // Ambient cookies drop in from the top of the Hof (behind the fence) into the bowl, off to the side of Buddy.
+  const dropPoint = { x: width / 2 + 70, y: -30 };
   const bowlPoint = { x: width / 2, y: layout.yardH + 54 };
   // The harvest flight lives in the fence layer (it must pass over the Hof and land on the pill): same x, y measured from the fence layer's top.
   const flightFrom = { x: width / 2, y: layout.hofTop + bowlPoint.y };
   const extraEl = wildExtra.active ? (
     <YardExtras id={wildExtra.active} layout={yard} width={width} height={layout.yardH} onDone={wildExtra.onDone} />
   ) : null;
-  const extraBehind = !!wildExtra.active && BEHIND_DOGHOUSE_EXTRAS.includes(wildExtra.active);
   const backPose = buddyBackPoseSources(buddyAppearance);
   const gate = leaving ? artOr('gate-open', null) : artOr('gate-closed', null);
   const startOffset = layout.startOffset;
   // At the top of the scroll the Viertel layer is pushed up by VIERTEL_PARALLAX * startOffset: the map reaches that far
   // below the band so no bare linen shows between it and the fence zone.
   const viertelOverscan = Math.ceil(VIERTEL_PARALLAX * layout.startOffset);
+  // What of that overscan is really hidden where the "zum Viertel" hint rests: the layer has moved down again by the parallax share
+  // of the scroll distance, so only the rest of the map's bottom sits behind the fence zone. The Range fit keeps clear of just that.
+  const viertelHidden = Math.max(0, viertelOverscan - Math.round(VIERTEL_PARALLAX * (layout.startOffset - viertelScrollTarget(layout))));
+  // Above the start offset the layers lag/lead; from the Hof down to the buildings page everything scrolls 1:1 (no ground seams).
   const parallax = (k: number) => ({
-    transform: [{ translateY: scrollY.interpolate({ inputRange: [0, startOffset], outputRange: [-k * startOffset, 0] }) }],
+    transform: [
+      {
+        translateY: scrollY.interpolate({
+          inputRange: [0, startOffset, layout.buildingsOffset],
+          outputRange: [-k * startOffset, 0, 0],
+          extrapolateRight: 'clamp',
+        }),
+      },
+    ],
   });
   const fenceTiles = Math.ceil(width / FENCE_SEG_W) + 1;
   const skyShift = SKY_PARALLAX * startOffset;
@@ -585,6 +614,7 @@ export function WorldScene(props: WorldSceneProps) {
   return (
     <View style={[styles.root, { backgroundColor: sky.base }]}>
       <Animated.ScrollView
+        testID="world-scroll"
         ref={scrollRef as never}
         style={styles.scroll}
         contentContainerStyle={{ height: layout.contentH }}
@@ -622,26 +652,13 @@ export function WorldScene(props: WorldSceneProps) {
               const mat = artOr('doormat', null);
               return mat ? <DecorImage source={mat} resizeMode="contain" style={{ position: 'absolute', ...yard.doormat }} /> : null;
             })()}
-            {YARD_ORDER.filter((k) => k !== 'doghouse').map((k) => (
-              <BuildingSprite
-                key={k}
-                building={{ key: k, level: levels[k] }}
-                size={yard.sprites[k].size}
-                left={yard.sprites[k].left}
-                bottom={yard.sprites[k].bottom}
-                bounceN={den.upgrade && den.upgrade.building === k ? den.upgrade.n : 0}
-              />
-            ))}
             <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, { opacity: leaving || homecoming ? 0 : 1 }]}>
               <YardBuddy
                 appearance={buddyAppearance}
                 name={dog}
                 mood={buddyMoodNow}
-                curiousFacing={curiousFacing}
                 replayKey={den.upgrade?.n}
                 geometry={geometry}
-                butterflies={gardenStage3}
-                tap={tap}
                 onPress={() => void den.handleBuddyTap()}
               />
             </View>
@@ -652,71 +669,7 @@ export function WorldScene(props: WorldSceneProps) {
               emoji={null}
               style={{ position: 'absolute', left: geometry.baseCx - 12, bottom: geometry.bottom + geometry.size * 0.85, zIndex: 7 }}
             />
-            {extraBehind && extraEl}
-            <BuildingSprite
-              building={{ key: 'doghouse', level: levels.doghouse }}
-              size={yard.sprites.doghouse.size}
-              left={yard.sprites.doghouse.left}
-              bottom={yard.sprites.doghouse.bottom}
-              bounceN={den.upgrade && den.upgrade.building === 'doghouse' ? den.upgrade.n : 0}
-            />
-            {YARD_ORDER.map((k) => {
-              const hit = yard.hits[k];
-              return (
-                <Pressable
-                  key={k}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('den.showUpgrade', { name: t(`den.building.${k}.name`) })}
-                  style={[styles.abs, { left: hit.left, bottom: hit.bottom, width: hit.width, height: hit.height, zIndex: 1 }]}
-                  onPress={() => selectBuilding(k)}
-                />
-              );
-            })}
-            {gardenStage3 && <YardButterflies garden={yard.sprites.sniffGarden} />}
-            {!extraBehind && extraEl}
-            {/* Pennant on the cheapest upgrade Buddy can afford. */}
-            {den.cheapestAffordable &&
-              (() => {
-                const pennant = artOr('pennant', null);
-                const w = yard.world[den.cheapestAffordable.building];
-                return pennant ? (
-                  <DecorImage source={pennant} resizeMode="contain" style={{ position: 'absolute', left: w.pennantLeft, bottom: w.pennantBottom, width: 36, height: 72 }} />
-                ) : null;
-              })()}
-            {/* A slow sparkle beside that pennant: this building could grow. Only the affordable one, and only while the scene is calm. */}
-            {den.cheapestAffordable && flightsOn && (
-              <UpgradeSparkle left={yard.world[den.cheapestAffordable.building].pennantLeft + 32} bottom={yard.world[den.cheapestAffordable.building].pennantBottom + 4} />
-            )}
-            {/* A small sign under every building. */}
-            {YARD_ORDER.map((k) => {
-              const w = yard.world[k];
-              const pennantHere = den.cheapestAffordable?.building === k;
-              const name = t(`den.building.${k}.name`);
-              const nextLine = pennantHere ? nextEffectLabel(k, state) : null;
-              return (
-                <View
-                  key={k}
-                  pointerEvents="box-none"
-                  style={[styles.abs, { left: Math.max(4, Math.min(width - 184, w.signCx - 90)), top: w.signTop, width: 180, alignItems: 'center', zIndex: 2 }]}
-                >
-                  <WoodSign
-                    size="small"
-                    onPress={() => selectBuilding(k)}
-                    accessibilityLabel={t('world.buildingLabel', { name, level: levels[k] })}
-                    textStyleOverride={SMALL_SIGN_TEXT}
-                  >
-                    {pennantHere ? (
-                      <View style={styles.upgradeLabel}>
-                        <Text style={[textStyle('sign'), styles.upgradeTitle, SMALL_SIGN_TEXT]}>{t('world.upgradePossible')}</Text>
-                        {nextLine ? <Text style={[textStyle('small'), styles.upgradeNext]}>{nextLine}</Text> : null}
-                      </View>
-                    ) : (
-                      t('world.buildingSign', { name, level: levels[k] })
-                    )}
-                  </WoodSign>
-                </View>
-              );
-            })}
+            {extraEl}
 
             {/* Buddy trots through the gate: sit (looking back), then two stride frames, rising and shrinking. */}
             {leaving && (
@@ -855,17 +808,106 @@ export function WorldScene(props: WorldSceneProps) {
             )}
           </View>
 
-          {/* Treats flying from the bakery chimney into the bowl. */}
+          {/* Treats dropping from the top of the Hof into the bowl while it still grows. */}
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 6 }]}>
-            <TreatFlights active={flightsOn} ratePerHour={projection.ratePerHour} atCap={full} from={chimneyPoint} to={bowlPoint} burst={null} />
+            <TreatFlights active={flightsOn} ratePerHour={projection.ratePerHour} atCap={full} from={dropPoint} to={bowlPoint} burst={null} />
           </View>
 
-          {selected && (
-            <View pointerEvents="box-none" style={[styles.abs, { left: spacing.lg, right: spacing.lg, bottom: insets.bottom + spacing.sm, zIndex: 8 }]}>
-              <BuildingPanel building={selected} state={state} message={den.message} onUpgrade={den.handleUpgrade} onClose={() => setSelected(null)} />
-            </View>
-          )}
+          {/* Down to the buildings page; a small pennant and "Upgrade ready" when an upgrade is affordable (bank + pile). */}
+          {(() => {
+            const pennant = artOr('pennant', null);
+            const label = upgradeReady ? `${t('world.toBuildings')} · ${t('world.upgradeReady')}` : t('world.toBuildings');
+            return (
+              <>
+                <Pressable
+                  onPress={scrollToBuildings}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  style={[styles.hint, { top: layout.hintDownTop, height: HINT_H, zIndex: 5 }]}
+                >
+                  <Text style={[textStyle('hand'), styles.hintText]}>{`↓ ${label}\u00A0\u00A0`}</Text>
+                </Pressable>
+                {upgradeReady && pennant && (
+                  <DecorImage
+                    source={pennant}
+                    resizeMode="contain"
+                    style={{ position: 'absolute', right: 14, top: layout.hintDownTop - 26, width: 18, height: 36, zIndex: 5 }}
+                  />
+                )}
+              </>
+            );
+          })()}
         </Animated.View>
+
+        {/* ---- GEBÄUDE: the buildings page below the Hof; two per row on one ground, the 4th slot is reserved ---- */}
+        <View pointerEvents="box-none" style={[styles.layer, { top: layout.buildingsTop, height: layout.buildingsH, zIndex: 3 }]}>
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: GRASS_BASE }]} />
+          {buildings.slots.map((slot) => {
+            const k = slot.key;
+            if (!k) return null; // the reserved slot (Friend Lounge) draws nothing
+            const w = buildings.world[k];
+            const pennantHere = den.cheapestAffordable?.building === k;
+            const name = t(`den.building.${k}.name`);
+            const nextLine = pennantHere ? nextEffectLabel(k, state) : null;
+            const pennant = artOr('pennant', null);
+            return (
+              <React.Fragment key={k}>
+                <BuildingSprite
+                  building={{ key: k, level: levels[k] }}
+                  size={BUILDING_SIZE}
+                  left={w.sprite.left}
+                  top={w.sprite.top}
+                  bounceN={den.upgrade && den.upgrade.building === k ? den.upgrade.n : 0}
+                />
+                {k === 'sniffGarden' && gardenStage3 && (
+                  <YardButterflies garden={{ left: w.sprite.left, bottom: layout.buildingsH - w.sprite.top - BUILDING_SIZE, size: BUILDING_SIZE }} />
+                )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('den.showUpgrade', { name })}
+                  style={[styles.abs, { left: w.hit.left, top: w.hit.top, width: w.hit.width, height: w.hit.height, zIndex: 1 }]}
+                  onPress={() => scrollToBuilding(k)}
+                />
+                {/* Pennant on the cheapest upgrade Buddy can afford, with a slow sparkle beside it while the scene is calm. */}
+                {pennantHere && pennant && (
+                  <DecorImage source={pennant} resizeMode="contain" style={{ position: 'absolute', left: w.pennantLeft, top: w.pennantTop, width: 36, height: PENNANT_H }} />
+                )}
+                {pennantHere && flightsOn && (
+                  <UpgradeSparkle left={w.pennantLeft + 32} bottom={layout.buildingsH - w.pennantTop - PENNANT_H + 4} />
+                )}
+                {/* A small sign under every building. */}
+                <View
+                  pointerEvents="box-none"
+                  style={[styles.abs, { left: Math.max(4, Math.min(width - 184, w.signCx - 90)), top: w.signTop, width: 180, alignItems: 'center', zIndex: 2 }]}
+                >
+                  <WoodSign
+                    size="small"
+                    onPress={() => scrollToBuilding(k)}
+                    accessibilityLabel={t('world.buildingLabel', { name, level: levels[k] })}
+                    textStyleOverride={SMALL_SIGN_TEXT}
+                  >
+                    {pennantHere ? (
+                      <View style={styles.upgradeLabel}>
+                        <Text style={[textStyle('sign'), styles.upgradeTitle, SMALL_SIGN_TEXT]}>{t('world.upgradePossible')}</Text>
+                        {nextLine ? <Text style={[textStyle('small'), styles.upgradeNext]}>{nextLine}</Text> : null}
+                      </View>
+                    ) : (
+                      t('world.buildingSign', { name, level: levels[k] })
+                    )}
+                  </WoodSign>
+                </View>
+              </React.Fragment>
+            );
+          })}
+          <Pressable
+            onPress={scrollToYard}
+            accessibilityRole="button"
+            accessibilityLabel={t('world.backToYard')}
+            style={[styles.hint, { top: buildings.backTop, height: HINT_H }]}
+          >
+            <Text style={[textStyle('hand'), styles.hintText]}>{`↑ ${t('world.backToYard')}\u00A0\u00A0`}</Text>
+          </Pressable>
+        </View>
 
         {/* ---- ZAUN ---- */}
         <View pointerEvents="box-none" style={[styles.layer, { top: layout.tailTop, height: layout.fenceBottom + FENCE_FOOT_PAD + FENCE_LAYER_ROOM, zIndex: 3 }]}>
@@ -1009,7 +1051,7 @@ export function WorldScene(props: WorldSceneProps) {
               wildSpot={viertelChrome.wildSpot}
               neighbourhood={neighbourhood}
               chrome={viertelChrome}
-              bottomInset={viertelOverscan}
+              bottomInset={viertelHidden}
               homeRangeRefreshKey={homeRangeRefreshKey}
               onEmbeddedPress={onOpenMap}
               onOpenTerritories={onOpenTerritories}
@@ -1066,6 +1108,13 @@ export function WorldScene(props: WorldSceneProps) {
       )}
 
       {cardItem && <NeighbourCard item={cardItem} lines={hood.linesFor(cardItem.id)} onClose={() => setCardBotId(null)} />}
+
+      {/* The upgrade sign docks at the bottom of the screen (the buildings page). */}
+      {selected && (
+        <View pointerEvents="box-none" style={[styles.abs, { left: spacing.lg, right: spacing.lg, bottom: insets.bottom + spacing.sm, zIndex: 8 }]}>
+          <BuildingPanel building={selected} state={state} message={den.message} onUpgrade={den.handleUpgrade} onClose={() => setSelected(null)} />
+        </View>
+      )}
 
       {isUp && !homecoming && (
         <View pointerEvents="box-none" style={[styles.backWrap, { bottom: insets.bottom + spacing.lg }]}>
