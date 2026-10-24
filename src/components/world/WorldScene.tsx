@@ -7,6 +7,7 @@ import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyFeetInset } from '../../buddy/imageSkin';
 import { buddyBackPoseSources } from '../../buddy/imageSkinSources';
 import { ArtKey, artOr } from '../../art/artAssets';
+import { stickDogOf } from '../../economy/sticks';
 import { BuildingKey } from '../../economy/balanceConfig';
 import { dogDisplayName, getBuildingLevel } from '../../economy/denEconomy';
 import { currentTitleForLevel } from '../../economy/milestones';
@@ -15,7 +16,7 @@ import * as haptics from '../../feedback/haptics';
 import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
 import type { NeighbourNote } from '../../sync/householdEvents';
-import { coopSignText } from '../../sync/neighbourhood';
+import { coopSignText, fillsShelfSlot, giftOpenedLine } from '../../sync/neighbourhood';
 import type { NeighbourhoodActions } from '../../sync/neighbourhood';
 import { usePartnerWalk } from '../../sync/presenceStore';
 import { useNeighbourhood } from '../../sync/useNeighbourhood';
@@ -47,6 +48,7 @@ import { signStrip } from './fencePlan';
 import { TreatsPill } from './TreatsPill';
 import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
+import { PILE_H, PILE_W, StickPile } from './StickPile';
 import { NeighbourCard } from './NeighbourCard';
 import { CornerSheet, type CornerTools } from './CornerSheet';
 import { BeatId, HomecomingWalk, homecomingBadgeArrivals } from './homecomingPlan';
@@ -88,6 +90,10 @@ const GATE_SIGN_ROOM = 200;
 /** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides; also the buildings page's ground. */
 const GRASS_BASE = '#9BC995';
 const MAX_NOTES = 2;
+/** Stick pickup: Buddy gets this long to reach the stick before a second tap may start a new errand (a re-layout can cancel one). */
+const ERRAND_STALE_MS = 6000;
+/** Keys of Buddy's stick lines start here so they never collide with App's flash-note keys. */
+const STICK_LINE_KEY_BASE = 1_000_000;
 const NO_LOCATIONS: never[] = [];
 /** The yard's wooden-sign text is smaller than the 20pt default so long names fit under a building. */
 const SMALL_SIGN_TEXT = { fontSize: 15, lineHeight: 18 } as const;
@@ -534,11 +540,19 @@ export function WorldScene(props: WorldSceneProps) {
   const welcomeText = welcome ? t('world.welcomeBack', { n: formatNumber(welcome.n) }) : null;
   const hood = useNeighbourhood(neighbourhood);
   const [cardBotId, setCardBotId] = useState<string | null>(null);
-  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note, flashNote);
+  const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
+  // Sticks (and the odd parcel) the neighbour dogs left in the Hof. A tap sends Buddy; at the stick the gift is opened (`gift.open`).
+  const lawnGifts = hood.unopenedGifts;
+  const [errand, setErrand] = useState<{ key: number; x: number; onArrived: () => void } | null>(null);
+  const errandKey = useRef(0);
+  const errandSince = useRef(0);
+  /** The gift whose gift.open is in flight: a slow answer must never start a second errand or line for it. */
+  const openingGiftId = useRef<string | null>(null);
+  const [stickLine, setStickLine] = useState<{ key: number; text: string } | null>(null);
+  const [stickPop, setStickPop] = useState<{ n: number; amount: number } | null>(null);
+  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note, stickLine ?? flashNote);
   const bubbleNote = notes.find((n) => n.kind === 'line');
   const paperNote = notes.find((n) => n !== bubbleNote);
-  const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
-  const parcelWaiting = hood.unopenedGifts.length > 0;
   const coopText = coopSignText(hood.coop);
   // A household partner is out walking: a small sign by the gate, gone again silently when she is back or silent for 3 min.
   const partnerWalk = usePartnerWalk();
@@ -579,6 +593,37 @@ export function WorldScene(props: WorldSceneProps) {
   const bowlPoint = { x: width / 2, y: layout.yardH + 54 };
   // The harvest flight lives in the fence layer (it must pass over the Hof and land on the pill): same x, y measured from the fence layer's top.
   const flightFrom = { x: width / 2, y: layout.hofTop + bowlPoint.y };
+  // The pile lies right of the doormat, just under Buddy's paws: clear of the bowl, the bench and the mailbox paths.
+  const pileLeft = Math.min(width / 2 + 74, width - PILE_W - 6);
+  const pileTop = yard.doormat.top + 40 - 30;
+  const fetchStick = () => {
+    const gift = lawnGifts.find((g) => g.id !== openingGiftId.current);
+    const busy = errandSince.current > 0 && Date.now() - errandSince.current < ERRAND_STALE_MS;
+    if (!gift || busy || leaving || homecoming) return;
+    errandSince.current = Date.now();
+    errandKey.current += 1;
+    const myKey = errandKey.current;
+    const wasNew = fillsShelfSlot(gift, hood.gifts);
+    setErrand({
+      key: myKey,
+      x: pileLeft + PILE_W / 2,
+      onArrived: () => {
+        openingGiftId.current = gift.id;
+        void hood.openGift(gift).then((ok) => {
+          openingGiftId.current = null;
+          if (errandKey.current === myKey) errandSince.current = 0; // a newer errand keeps its own clock
+          if (ok === 'gone') return; // removed from the store: nothing to retry
+          const n = STICK_LINE_KEY_BASE + myKey;
+          setStickLine({ key: n, text: ok ? giftOpenedLine(gift, wasNew) : t('neighbours.gift.retry') });
+          if (ok && gift.sprinkleTreats) {
+            setStickPop({ n, amount: gift.sprinkleTreats });
+            play('treat');
+            haptics.success();
+          }
+        });
+      },
+    });
+  };
   const extraEl = wildExtra.active ? (
     <YardExtras id={wildExtra.active} layout={yard} width={width} height={layout.yardH} onDone={wildExtra.onDone} />
   ) : null;
@@ -660,6 +705,7 @@ export function WorldScene(props: WorldSceneProps) {
                 replayKey={den.upgrade?.n}
                 geometry={geometry}
                 onPress={() => void den.handleBuddyTap()}
+                errand={errand}
               />
             </View>
             {/* The small bonus pop above Buddy when his tap paid 1-3 treats. */}
@@ -670,6 +716,23 @@ export function WorldScene(props: WorldSceneProps) {
               style={{ position: 'absolute', left: geometry.baseCx - 12, bottom: geometry.bottom + geometry.size * 0.85, zIndex: 7 }}
             />
             {extraEl}
+
+            {/* What the neighbour dogs left: sticks (each dog its own look) lie by the doormat; one tap and Buddy fetches the front one. */}
+            {lawnGifts.length > 0 && (
+              <StickPile
+                gifts={lawnGifts}
+                left={pileLeft}
+                top={pileTop}
+                accessibilityLabel={t(stickDogOf(lawnGifts[0]) ? 'neighbours.stick.label' : 'neighbours.stick.otherLabel', { bot: lawnGifts[0].botName, dog })}
+                onPress={fetchStick}
+              />
+            )}
+            <TreatPop
+              amount={stickPop?.amount ?? 0}
+              trigger={stickPop?.n}
+              emoji={null}
+              style={{ position: 'absolute', left: pileLeft + PILE_W / 2 - 12, top: pileTop - 6, zIndex: 7 }}
+            />
 
             {/* Buddy trots through the gate: sit (looking back), then two stride frames, rising and shrinking. */}
             {leaving && (
@@ -795,17 +858,6 @@ export function WorldScene(props: WorldSceneProps) {
                 {t('world.post')}
               </WoodSign>
             </View>
-            {/* A gift from a neighbour dog waits by the mailbox; tapping opens the Post list where it is unwrapped. */}
-            {parcelWaiting && (
-              <View pointerEvents="box-none" style={[styles.abs, { right: 0, top: 14, alignItems: 'center', zIndex: 2, transform: [{ rotate: '4deg' }] }]}>
-                <WoodSign size="small" onPress={onOpenSettings} accessibilityLabel={t('neighbours.parcel.label')} textStyleOverride={SMALL_SIGN_TEXT} style={styles.parcelSign}>
-                  {t('neighbours.parcel.sign')}
-                </WoodSign>
-                <Pressable onPress={onOpenSettings} accessibilityRole="button" accessibilityLabel={t('neighbours.parcel.label')}>
-                  <Parcel />
-                </Pressable>
-              </View>
-            )}
           </View>
 
           {/* Treats dropping from the top of the Hof into the bowl while it still grows. */}
@@ -1143,17 +1195,6 @@ function ArtDecor({ art, style }: { art: ArtKey; style: React.ComponentProps<typ
   return source ? <DecorImage source={source} resizeMode="contain" style={style} /> : null;
 }
 
-/** A small wrapped parcel drawn with Views (no art yet): kraft box, cream ribbon, a little bow. */
-function Parcel() {
-  return (
-    <View style={styles.parcel}>
-      <View style={styles.parcelRibbonV} />
-      <View style={styles.parcelRibbonH} />
-      <View style={styles.parcelBow} />
-    </View>
-  );
-}
-
 function Cloud({ left, top, w, night }: { left: number; top: number; w: number; night: boolean }) {
   const o = night ? 0.35 : 0.95;
   return (
@@ -1193,10 +1234,5 @@ const styles = StyleSheet.create({
   upgradeLabel: { alignItems: 'center' },
   upgradeTitle: { color: material.ink, textAlign: 'center' },
   upgradeNext: { color: material.muted, textAlign: 'center' },
-  parcel: { width: 48, height: 38, borderRadius: 6, backgroundColor: mix(material.woodLight, material.pathBrown, 0.5), borderWidth: 2, borderColor: material.woodRim, borderBottomWidth: 4, borderBottomColor: material.woodDark, alignItems: 'center', justifyContent: 'center' },
-  parcelRibbonV: { position: 'absolute', top: 0, bottom: 0, width: 8, backgroundColor: material.yarn },
-  parcelRibbonH: { position: 'absolute', left: 0, right: 0, height: 7, backgroundColor: material.yarn },
-  parcelBow: { position: 'absolute', top: -7, width: 16, height: 9, borderRadius: 6, backgroundColor: tokens.warm, borderWidth: 1, borderColor: material.woodDark },
-  parcelSign: { marginBottom: 6 },
   updateButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, justifyContent: 'center' },
 });

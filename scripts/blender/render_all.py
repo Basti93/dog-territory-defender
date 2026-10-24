@@ -9,6 +9,7 @@ import common
 import assets
 import contact_sheet
 import scene_props  # noqa: F401  (registers the scene props + textures)
+import sticks  # noqa: F401  (registers the stick-<dog> sprites)
 
 
 # Output px per asset (on-screen use, keeps decoded memory low); anything else uses the registry size.
@@ -18,7 +19,7 @@ SIZES = {"celebration-burst": (768, 768), "doorstep-sky": (1024, 1024), "yard-gr
 def out_size(name, w, h):
     if name.startswith("icon-"):
         return 256, 256
-    if name.startswith(("prop-", "rosette-")):
+    if name.startswith(("prop-", "rosette-", "stick-")):
         return 256, 256
     if name.startswith(("doghouse-", "bakery-", "garden-")):
         return 512, 512

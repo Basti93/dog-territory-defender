@@ -11,6 +11,7 @@ import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkReposito
 import type { StoredWalk } from '../../storage/WalkRepository';
 import { DAY_MS, manualWalk, newGroundIds, trackedWalk, TUESDAY_AFTERNOON } from '../../test/postcardFixtures';
 import { advance, flush, renderScreen } from '../../test/render';
+import { resetNeighbourhood, setNeighbourhood } from '../../sync/neighbourhoodStore';
 import { AlbumScreen } from '../AlbumScreen';
 import { FLIP_HALF_MS } from '../postcards/PostcardCard';
 
@@ -19,6 +20,7 @@ beforeEach(() => {
   resetBackActions();
 });
 afterEach(() => {
+  resetNeighbourhood();
   jest.useRealTimers();
   jest.restoreAllMocks();
 });
@@ -150,5 +152,33 @@ describe('Album', () => {
     expect(await walkRepository.getWalk('w1')).toBeNull();
     expect(screen.queryByTestId('postcard-overlay')).toBeNull();
     expect(screen.queryByRole('button', { name: t('album.cardLabel', { when: 'Monday afternoon' }) })).toBeNull();
+  });
+});
+
+describe('Album stick shelf (Stock-Regal)', () => {
+  const stick = (id: string, botName: string, cosmeticId: string, openedAt: number | null) => ({ id, botId: `b-${id}`, botName, cosmeticId, sprinkleTreats: null, createdAt: 1, openedAt });
+
+  it('is not there without neighbour dogs or sticks', async () => {
+    await setup(threeWalks());
+    expect(screen.queryByTestId('stick-shelf')).toBeNull();
+  });
+
+  it('shows one slot per dog: fetched sticks by name (also the old oak id), the rest as soft empty slots, no counts', async () => {
+    setNeighbourhood({
+      gifts: [stick('g1', 'Pfote', 'stick-oak', 5), stick('g2', 'Pfote', 'stick-pfote', 6), stick('g3', 'Keks', 'stick-keks', 7), stick('g4', 'Momo', 'stick-momo', null)],
+    });
+    await setup(threeWalks());
+    expect(screen.getByTestId('stick-shelf')).toBeOnTheScreen();
+    expect(screen.getAllByTestId('stick-slot-full')).toHaveLength(2); // Pfote (twice = once) and Keks; Momo's still lies in the yard
+    expect(screen.getAllByTestId('stick-slot-empty')).toHaveLength(4);
+    expect(screen.getByLabelText('Stick from Pfote')).toBeOnTheScreen();
+    expect(screen.queryByText(/\d+ ?(\/|of) ?6/)).toBeNull();
+  });
+
+  it('also sits above the empty-album message', async () => {
+    setNeighbourhood({ gifts: [stick('g1', 'Pfote', 'stick-pfote', 5)] });
+    await setup([]);
+    expect(screen.getByTestId('stick-shelf')).toBeOnTheScreen();
+    expect(screen.getByText(t('album.empty.title'))).toBeOnTheScreen();
   });
 });

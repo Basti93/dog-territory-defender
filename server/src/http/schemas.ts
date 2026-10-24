@@ -63,7 +63,15 @@ export const CommandSchema = Type.Object(
         {
           kind: Type.Literal('dog.update'),
           name: Type.Optional(Type.Union([Str(1, API_LIMITS.maxDogNameLength), Type.Null()])),
-          appearance: Type.Optional(Type.Record(Type.String({ maxLength: 40 }), Type.Unknown())),
+        },
+        { additionalProperties: false }
+      ),
+      Type.Object(
+        {
+          kind: Type.Literal('appearance.set'),
+          // Shape is checked by validateAppearance in the route (one rule set for app and server).
+          appearance: Type.Record(Type.String({ maxLength: 40 }), Type.Unknown()),
+          ifUnset: Type.Optional(Type.Boolean()),
         },
         { additionalProperties: false }
       ),

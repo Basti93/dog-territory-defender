@@ -64,6 +64,13 @@
       "when": 1792839273507,
       "tag": "0008_harvest_pile",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792844069797,
+      "tag": "0009_dog_appearance_rev",
+      "breakpoints": true
     }
   ]
 }

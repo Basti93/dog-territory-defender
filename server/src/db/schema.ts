@@ -89,6 +89,8 @@ export const dogs = pgTable(
     householdId: uuid('household_id').notNull().references(() => households.id, { onDelete: 'cascade' }),
     name: text('name'),
     appearance: jsonb('appearance').notNull().default({}),
+    /** 0 = never set by `appearance.set` (founding import, bots): the stored look is only a candidate. Bumped by every `appearance.set`. */
+    appearanceRev: integer('appearance_rev').notNull().default(0),
     updatedAt: ms('updated_at').notNull(),
   },
   (t) => [index('dogs_household_idx').on(t.householdId)]

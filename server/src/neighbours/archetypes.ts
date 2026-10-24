@@ -1,6 +1,7 @@
 // The six Nachbarhunde: one data file (design Decision 17). Looks use ONLY ids from
 // src/buddy/buddyAppearance.ts (a test pins that). Numbers that tuning touches live in
 // src/economy/neighbourConfig.ts; this file is who they are and when they walk.
+import { STICK_DOGS, stickIdFor } from '@game/economy/sticks';
 import type { EventKind, NeighbourLineKey } from '@game/sync/apiContract';
 
 export type ArchetypeId = 'momo' | 'pfote' | 'bruno' | 'keks' | 'lotte' | 'nebel';
@@ -121,6 +122,7 @@ export interface LineDef {
   kind: EventKind;
   /** Which dog speaks; null = the whole neighbourhood. */
   bot: ArchetypeId | null;
+  /** A `stick` line is left by ANY dog (Stock-Regal); `bot` is only its first author. Everything else is that dog's own. */
   gift?: 'collar' | 'stick' | 'sock';
   /** Counts as the "first weird event" in W4. */
   weird?: boolean;
@@ -149,10 +151,11 @@ export const LINE_BY_KEY: Record<string, LineDef> = Object.fromEntries(LINES.map
 /** Finite cosmetic catalog (design Decision 20). Art and names come from the app; the server only hands out ids. */
 export const COSMETICS = {
   collar: ['collar-meadow', 'collar-sky', 'collar-blossom'],
-  stick: ['stick-oak', 'stick-birch'],
+  /** One stick per neighbour dog (Stock-Regal). The first-generation oak/birch ids are no longer handed out. */
+  stick: STICK_DOGS.map((d) => stickIdFor(d.id)),
   sock: ['sock-odd'],
   /** Exclusive after the dog was met three times. */
-  exclusive: { pfote: 'stick-pfote', lotte: 'cushion-lotte' } as Partial<Record<ArchetypeId, string>>,
+  exclusive: { lotte: 'cushion-lotte' } as Partial<Record<ArchetypeId, string>>,
 } as const;
 
 /** Yard decorations earned by the Viertel-Runde, in order. */

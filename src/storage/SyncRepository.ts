@@ -49,6 +49,10 @@ export interface SyncState {
   householdTimezone?: string;
   /** A snapshot has been applied since territories became server-authoritative (2026-10-24): local-only territories are gone. While absent, the next sync loads a snapshot once. */
   territoriesReconciled?: boolean;
+  /** Revision of the shared dog look last applied here (`dog.appearance`); events and snapshots with a lower or equal rev are ignored. Absent = 0. */
+  appearanceRev?: number;
+  /** A snapshot of a server that knows the shared dog look has been applied; until then the next sync loads one (and seeds the look when the server has none). */
+  appearanceSynced?: boolean;
 }
 
 /** A neighbour line from the event feed (Track B): an i18n key plus params, never copy. */

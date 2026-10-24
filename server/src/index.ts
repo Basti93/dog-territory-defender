@@ -15,7 +15,7 @@ async function main() {
 
   await app.listen({ port: config.port, host: '0.0.0.0' });
   // Idempotent data migration (see services/territoryFold.ts): after listen, never blocks or breaks startup.
-  void foldSmallTerritories(conn.db, bus, (hid, err) => app.log.error({ hid, err: String(err) }, 'territory fold failed for household')).then(
+  void foldSmallTerritories(conn.db, bus, (hid, err) => app.log.error({ hid, err: String(err) }, 'territory fold failed for household'), (hid, reason) => app.log.debug({ hid, reason }, 'territory fold skipped household')).then(
     (n) => app.log.info({ folded: n }, 'territory fold'),
     (err) => app.log.error({ err: String(err) }, 'territory fold failed')
   );

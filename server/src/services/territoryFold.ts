@@ -4,15 +4,31 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { planTerritoryFolds } from '@game/utils/territoryCluster';
 import type { Db } from '../db/client';
-import { cells, households, territories } from '../db/schema';
+import { cells, denState, households, territories } from '../db/schema';
 import { appendEvent, type EventBus } from './events';
 import { lockDen, territoryFromRow } from './state';
 
 /** Returns how many territories were folded across all households. */
-export async function foldSmallTerritories(db: Db, bus?: EventBus, onError: (hid: string, err: unknown) => void = () => undefined): Promise<number> {
+export async function foldSmallTerritories(
+  db: Db,
+  bus?: EventBus,
+  onError: (hid: string, err: unknown) => void = () => undefined,
+  onSkip: (hid: string, reason: 'no-den-state' | 'few-territories') => void = () => undefined
+): Promise<number> {
   const all = await db.select({ id: households.id }).from(households);
   let total = 0;
   for (const { id: hid } of all) {
+    // Bot households have no den_state and no territories: nothing to fold, and not an error.
+    const [den] = await db.select({ id: denState.householdId }).from(denState).where(eq(denState.householdId, hid));
+    if (!den) {
+      onSkip(hid, 'no-den-state');
+      continue;
+    }
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(territories).where(eq(territories.householdId, hid));
+    if (n < 2) {
+      onSkip(hid, 'few-territories');
+      continue;
+    }
     // One household failing must not stop the others (or the server): log and carry on.
     const folded = await db.transaction(async (tx) => {
       const dbx = tx as unknown as Db;

@@ -11,10 +11,13 @@
 //  - dog name:     server wins when it has one
 //  - member.joined: remembered for a one-off Doorstep line
 //  - member.updated: a rename; the new name replaces the old in sync state (Doorstep reads names from there)
+//  - dog look:     the household's shared Buddy look (dogs.appearance + rev) replaces ours when its rev is newer, unless our own change is still in the outbox; rev 0 (import only) is adopted only by a phone still on the default look
 //  - corners:      the household's names ("Unsere Ecken"): last writer wins, the server's name replaces ours unless
 //                  our own rename of that corner is still waiting in the outbox
 
+import { defaultBuddyAppearance, normalizeAppearance, validateAppearance, type BuddyAppearance } from '../buddy/buddyAppearance';
 import type { DenEconomyState } from '../economy/denEconomy';
+import type { BuddyAppearanceRepository } from '../storage/BuddyAppearanceRepository';
 import type { CornerRepository } from '../storage/CornerRepository';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
@@ -24,7 +27,7 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
 import { walkDistanceMeters } from '../utils/geometry';
-import type { ApiCell, ApiCorner, ApiDenState, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, CommandBody, SnapshotResponse } from './apiContract';
+import type { ApiCell, ApiCorner, ApiDenState, ApiDogAppearance, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, CommandBody, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
   walks: WalkRepository;
@@ -34,6 +37,8 @@ export interface ApplyRepos {
   sync: SyncRepository;
   /** "Unsere Ecken". Omitted = corner names from the server are ignored (older tests). */
   corners?: CornerRepository;
+  /** The local Buddy look. Omitted = the household's look is ignored (older tests). */
+  buddyAppearance?: BuddyAppearanceRepository;
 }
 
 export interface ApplyContext {
@@ -68,6 +73,8 @@ export interface ApplyResult {
   neighbourEvents: boolean;
   /** A corner name from the household was stored: the Viertel signs should be read again. */
   cornersChanged: boolean;
+  /** The household's look replaced ours (different from before): the caller refreshes what it shows. */
+  appearance: BuddyAppearance | null;
 }
 
 interface Batch {
@@ -83,6 +90,7 @@ interface Batch {
   memberJoined: { playerName: string; at: number; playerId: string } | null;
   neighbourLines: NeighbourLineEntry[];
   corners: ApiCorner[];
+  dogAppearance: ApiDogAppearance | null;
 }
 
 /** Overlays the server-owned fields onto the local state; per-device fields (backfill flags, manual-log counters, cliffhanger) stay. */
@@ -210,6 +218,33 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     }
   }
 
+  // The shared look: only a newer rev counts. Our own explicit change still in the outbox wins (its push will overwrite the server);
+  // a waiting seed (ifUnset) does not, the server's look is the one it would lose to.
+  let appearance: BuddyAppearance | null = null;
+  const knownRev = state.appearanceRev ?? 0;
+  if (batch.dogAppearance && repos.buddyAppearance && batch.dogAppearance.rev === 0) {
+    // Nobody claimed the look yet (rev 0): the founding import's look is only a candidate. A phone still on the default look
+    // takes it; a phone with a look of its own keeps it (and offers it to the household, see the engine). No rev is recorded.
+    const stored = validateAppearance(batch.dogAppearance.appearance);
+    const current = normalizeAppearance(await repos.buddyAppearance.getAppearance());
+    if (stored && JSON.stringify(current) === JSON.stringify(defaultBuddyAppearance())) {
+      await repos.buddyAppearance.saveAppearance(stored);
+      appearance = stored;
+    }
+  } else if (batch.dogAppearance && repos.buddyAppearance && batch.dogAppearance.rev > knownRev) {
+    const ownChangeWaiting = (await repos.sync.getPending()).some((i) => {
+      const c = i.payload as CommandBody;
+      return c.kind === 'appearance.set' && !c.ifUnset;
+    });
+    if (!ownChangeWaiting) {
+      const incoming = normalizeAppearance(batch.dogAppearance.appearance);
+      const current = await repos.buddyAppearance.getAppearance();
+      await repos.buddyAppearance.saveAppearance(incoming);
+      if (JSON.stringify(normalizeAppearance(current)) !== JSON.stringify(incoming)) appearance = incoming;
+      await repos.sync.saveState({ appearanceRev: batch.dogAppearance.rev });
+    }
+  }
+
   await repos.sync.saveState({
     players,
     ...(batch.memberJoined ? { lastMemberJoined: batch.memberJoined } : {}),
@@ -223,6 +258,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     partnerWalks,
     neighbourEvents: batch.neighbourLines.length > 0,
     cornersChanged,
+    appearance,
   };
 }
 
@@ -243,13 +279,20 @@ export async function applySnapshot(snapshot: SnapshotResponse, repos: ApplyRepo
       memberJoined: null,
       neighbourLines: [],
       corners: snapshot.corners ?? [],
+      dogAppearance: snapshot.dog.appearanceRev !== undefined ? { appearance: snapshot.dog.appearance, rev: snapshot.dog.appearanceRev } : null,
     },
     repos,
     ctx,
     true
   );
   await reconcileTerritories(snapshot.territories, repos);
-  await repos.sync.saveState({ cursor: snapshot.seq, householdTimezone: snapshot.household.timezone, territoriesReconciled: true });
+  await repos.sync.saveState({
+    cursor: snapshot.seq,
+    householdTimezone: snapshot.household.timezone,
+    territoriesReconciled: true,
+    // A server that predates the shared look sends no field at all: stay unsynced so the next snapshot after its update seeds it.
+    ...(snapshot.dog.appearanceRev !== undefined ? { appearanceSynced: true } : {}),
+  });
   return result;
 }
 
@@ -315,6 +358,7 @@ export async function applyEvents(
     memberJoined: null,
     neighbourLines: [],
     corners: [],
+    dogAppearance: null,
   };
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const event of ordered) {
@@ -338,6 +382,9 @@ export async function applyEvents(
         break;
       case 'dog.updated':
         batch.dogName = event.payload.dog.name;
+        break;
+      case 'dog.appearance':
+        if (!batch.dogAppearance || event.payload.rev >= batch.dogAppearance.rev) batch.dogAppearance = event.payload;
         break;
       case 'member.joined':
         batch.players[event.payload.player.id] = event.payload.player.displayName;

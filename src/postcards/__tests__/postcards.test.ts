@@ -12,6 +12,7 @@ import {
   daypartForHour,
   daypartPhrase,
   newStreetsPhrase,
+  LINE_POOL_SIZES,
   pickBuddyLineKey,
   pickFavouriteId,
   postcardForWalk,
@@ -24,7 +25,7 @@ import {
 import en from '../../i18n/en';
 import de from '../../i18n/de';
 
-const plainFacts: PostcardFacts = { firstPlace: false, newTerritory: false, longWalk: false, daypart: 'afternoon' };
+const plainFacts: PostcardFacts = { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: false, daypart: 'afternoon' };
 const territory = (id: string, createdAt: number, name = 'Newt Range'): Territory => ({ id, name, createdAt, walksHere: 1, treatsEarnedHere: 0 });
 
 beforeEach(() => setLocale('en'));
@@ -130,6 +131,8 @@ describe('Buddy line picker', () => {
           firstPlace: i % 2 === 0,
           newTerritory: i % 5 === 0,
           longWalk: i % 3 === 0,
+          shortWalk: i % 4 === 0,
+          weekend: i % 7 === 0,
           daypart: (['morning', 'forenoon', 'midday', 'afternoon', 'evening', 'night'] as const)[i % 6],
         };
         const key = pickBuddyLineKey(entry(`walk-${i}`, facts));
@@ -161,13 +164,20 @@ describe('Buddy line picker', () => {
     }
   });
 
+  it('gives short walks, weekends and named corners their own pools, after the old specials only by seed', () => {
+    expect(pickBuddyLineKey(entry('s1', { shortWalk: true }))).toMatch(/^postcard\.line\.short\./);
+    expect(pickBuddyLineKey(entry('w1', { weekend: true }))).toMatch(/^postcard\.line\.weekend\./);
+    expect(pickBuddyLineKey(entry('c1'), { cornerTouched: true })).toMatch(/^postcard\.line\.corner\./);
+    expect(pickBuddyLineKey(entry('t1', { newTerritory: true, shortWalk: true, weekend: true }), { cornerTouched: true })).toMatch(/newTerritory/);
+  });
+
   it('spreads the plain pool over several lines', () => {
     const keys = new Set(Array.from({ length: 60 }, (_, i) => pickBuddyLineKey(entry(`spread-${i}`))));
     expect(keys.size).toBeGreaterThan(1);
   });
 
   it('has copy for every pool line in en and de, numbered 1..N without gaps', () => {
-    const pools: Array<[string, number]> = [['firstPlace', 3], ['newTerritory', 3], ['long', 3], ['morning', 2], ['evening', 2], ['night', 2], ['plain', 4], ['manual', 3]];
+    const pools = Object.entries(LINE_POOL_SIZES);
     for (const dict of [en, de] as Array<Record<string, string>>) {
       for (const [pool, n] of pools) {
         for (let i = 1; i <= n; i++) expect(dict[`postcard.line.${pool}.${i}`]).toBeDefined();

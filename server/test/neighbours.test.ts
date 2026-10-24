@@ -204,8 +204,13 @@ describe('planner: escalation and caps', () => {
       expect(list.filter((e) => e.kind === 'neighbour.reaction').length).toBeLessThanOrEqual(NEIGHBOUR_CONFIG.caps.reactionsPerWeek);
     }
     for (const e of events) {
-      const repeats = events.filter((o) => o !== e && o.lineKey === e.lineKey && Math.abs(Date.parse(o.day) - Date.parse(e.day)) < NEIGHBOUR_CONFIG.caps.lineRepeatDays * 86_400_000);
+      // the stick line is shared by all dogs, so its repeat gap is per dog
+      const repeats = events.filter((o) => o !== e && o.lineKey === e.lineKey && (e.lineKey !== 'neighbours.line.stickLeft' || o.botHouseholdId === e.botHouseholdId) && Math.abs(Date.parse(o.day) - Date.parse(e.day)) < NEIGHBOUR_CONFIG.caps.lineRepeatDays * 86_400_000);
       expect(repeats).toHaveLength(0);
+      if (e.lineKey === 'neighbours.line.stickLeft') {
+        const near = events.filter((o) => o !== e && o.lineKey === e.lineKey && Math.abs(Date.parse(o.day) - Date.parse(e.day)) < NEIGHBOUR_CONFIG.caps.stickHouseholdGapDays * 86_400_000);
+        expect(near).toHaveLength(0);
+      }
     }
     // average stays well below the 2/day ceiling
     expect(events.length / 35).toBeLessThanOrEqual(1.2);
@@ -231,6 +236,13 @@ describe('planner: escalation and caps', () => {
     expect(canPlan([row('2026-10-19', 'neighbour.invitation', 'z')], invite, '2026-10-27')).toBe(true);
     expect(canPlan([row('2026-10-12', 'neighbour.sniffed', sniff.key)], sniff, '2026-10-21')).toBe(false); // 9 days: still a repeat
     expect(canPlan([row('2026-10-12', 'neighbour.sniffed', sniff.key)], sniff, '2026-10-22')).toBe(true); // 10 days: fine
+    // The stick line is shared by every dog: the repeat gap is per dog.
+    const stick = LINES.find((l) => l.key === 'neighbours.line.stickLeft')!;
+    const stickRow = (d: string, bot: string) => ({ day: d, kind: 'neighbour.gift', lineKey: stick.key, botHouseholdId: bot });
+    expect(canPlan([stickRow('2026-10-12', 'momo')], stick, '2026-10-20', 'momo')).toBe(false); // same dog: 10 days
+    expect(canPlan([stickRow('2026-10-12', 'momo')], stick, '2026-10-20', 'keks')).toBe(true); // another dog, past the household gap
+    expect(canPlan([stickRow('2026-10-12', 'momo')], stick, '2026-10-14', 'keks')).toBe(false); // household gap: 3 days
+    expect(canPlan([stickRow('2026-10-12', 'momo')], stick, '2026-10-15', 'keks')).toBe(true);
   });
 });
 
@@ -484,7 +496,30 @@ describe('gifts', () => {
     expect(stolen.json<CommandResponse>().error).toBe('not-found');
   });
 
-  it('the exclusive cosmetic comes after the dog was met three distinct days', async () => {
+  it('a stick is always that dog\'s own (stick-<dog>); a repeat from the same dog is a duplicate that still arrives', async () => {
+    const m = await household();
+    await postWalk(m, 'walk-aaaaaaaa-0001', { meters: 1500 });
+    const profiles = await botProfiles(m.householdId);
+    for (const [n, archetype] of (['pfote', 'pfote', 'pfote', 'pfote', 'keks'] as const).entries()) {
+      await s.db.insert(schema.neighbourEvents).values({
+        hostHouseholdId: m.householdId,
+        botHouseholdId: profiles.find((p) => p.archetype === archetype)!.householdId,
+        kind: 'neighbour.gift',
+        lineKey: 'neighbours.line.stickLeft',
+        params: { bot: archetype },
+        day: day(n + 1),
+        slotKey: 'test',
+        dueAt: noonUtc(n + 1),
+      });
+    }
+    await tick(noonUtc(6));
+    const list = (await s.app.inject({ method: 'GET', url: '/v1/gifts', headers: m.auth })).json<GiftsResponse>();
+    expect(list.gifts.filter((g) => g.cosmeticId === 'stick-pfote')).toHaveLength(4);
+    expect(list.gifts.filter((g) => g.cosmeticId === 'stick-keks' && g.botName === 'Keks')).toHaveLength(1);
+    expect((await botProfiles(m.householdId)).find((p) => p.archetype === 'pfote')!.metCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('after the dog was met three days a collar line is still a collar (the old exclusive stick is gone)', async () => {
     const m = await household();
     await postWalk(m, 'walk-aaaaaaaa-0001', { meters: 1500 });
     const pfote = (await botProfiles(m.householdId)).find((p) => p.archetype === 'pfote')!;
@@ -492,8 +527,8 @@ describe('gifts', () => {
       await s.db.insert(schema.neighbourEvents).values({
         hostHouseholdId: m.householdId,
         botHouseholdId: pfote.householdId,
-        kind: 'neighbour.gift',
-        lineKey: 'neighbours.line.stickLeft',
+        kind: n < 4 ? 'neighbour.sniffed' : 'neighbour.gift',
+        lineKey: n < 4 ? 'neighbours.line.sniffCorner' : 'neighbours.line.collarGift',
         params: { bot: 'Pfote' },
         day: day(n),
         slotKey: 'test',
@@ -502,8 +537,8 @@ describe('gifts', () => {
     }
     await tick(noonUtc(5));
     const list = (await s.app.inject({ method: 'GET', url: '/v1/gifts', headers: m.auth })).json<GiftsResponse>();
-    expect(list.gifts.filter((g) => g.cosmeticId === 'stick-pfote')).toHaveLength(1);
-    expect((await botProfiles(m.householdId)).find((p) => p.archetype === 'pfote')!.metCount).toBeGreaterThanOrEqual(3);
+    // tick() also plans the day for real (any dog may leave a stick), so look only at Pfote's own gifts
+    expect(list.gifts.filter((g) => g.botName === 'Pfote').map((g) => g.cosmeticId)).toEqual([expect.stringMatching(/^collar-/)]);
   });
 });
 

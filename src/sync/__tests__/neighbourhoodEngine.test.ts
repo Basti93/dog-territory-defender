@@ -3,7 +3,7 @@ import { ApiError } from '../apiClient';
 import type { ApiEvent, ApiGift } from '../apiContract';
 import { getNearby, getNeighbourhood, resetNeighbourhood, setNeighbourhood } from '../neighbourhoodStore';
 import { applyNearby } from '../apply';
-import { coopSignText, giftOpenedLine, giftThing, unopenedGifts } from '../neighbourhood';
+import { coopSignText, fillsShelfSlot, giftOpenedLine, stickShelf, unopenedGifts } from '../neighbourhood';
 import { setLocale } from '../../i18n';
 import { apiDen, IDENTITY, makeEngine, makeRepos, snapshot } from '../../test/syncHelpers';
 
@@ -144,7 +144,9 @@ describe('sync engine and the neighbourhood store', () => {
     const repos = makeRepos();
     await repos.settings.saveSyncIdentity(IDENTITY);
     const denied = makeEngine(repos, { openGift: async (_i, clientId) => ({ clientId, ok: false, error: 'not-found', replayed: false, den: apiDen(), serverTime: 1, seq: 1 }) });
-    await expect(denied.openGift('x')).resolves.toBe(false);
+    setNeighbourhood({ gifts: [gift({ id: 'x' })] });
+    await expect(denied.openGift('x')).resolves.toBe('gone'); // permanent: dropped from the store, no endless retry
+    expect(getNeighbourhood().gifts).toEqual([]);
     const offline = makeEngine(repos, {
       openGift: async () => {
         throw new ApiError('timeout', 'slow');
@@ -164,17 +166,28 @@ describe('sync engine and the neighbourhood store', () => {
 });
 
 describe('neighbour wording', () => {
-  it('names what is in a parcel and words the opening gently (reusing the game-master lines)', () => {
-    expect(giftThing(gift())).toBe('Oak stick');
-    expect(giftThing(gift({ cosmeticId: null }))).toBe('A few treats');
-    expect(giftThing(gift({ cosmeticId: 'hat-from-the-future' }))).toBe('A little surprise');
-    expect(giftOpenedLine(gift())).toBe('Pfote left you a stick.');
+  it('words the pickup gently: a stick names its dog, the first one of a dog says where it hangs', () => {
+    expect(giftOpenedLine(gift())).toBe('A stick from Pfote!');
+    expect(giftOpenedLine(gift(), true)).toBe('A stick from Pfote! It hangs on the stick shelf in the Album now.');
     expect(giftOpenedLine(gift({ cosmeticId: 'collar-sky' }))).toBe('Pfote gifted you a collar. It goes with your fur.');
     expect(giftOpenedLine(gift({ cosmeticId: 'sock-odd', botName: 'Nebel' }))).toBe("Nebel left you a sock. It's from somewhere else.");
     expect(giftOpenedLine(gift({ cosmeticId: null }))).toBe('Pfote rolled a few treats into your bowl.');
     expect(giftOpenedLine(gift({ cosmeticId: 'cushion-lotte', botName: 'Lotte' }))).toBe('Lotte left something lovely for you.');
     setLocale('de');
-    expect(giftOpenedLine(gift())).toBe('Pfote hat dir einen Stock dagelassen.');
+    expect(giftOpenedLine(gift())).toBe('Stock von Pfote!');
+  });
+
+  it('the shelf has one slot per dog, filled by opened sticks only; old oak/birch ids land on the sender; duplicates change nothing', () => {
+    const slots = (gifts: ApiGift[]) => stickShelf(gifts).filter((s) => s.collected).map((s) => s.id);
+    expect(stickShelf([]).map((s) => s.id)).toEqual(['momo', 'pfote', 'bruno', 'keks', 'lotte', 'nebel']);
+    expect(slots([])).toEqual([]);
+    expect(slots([gift()])).toEqual([]); // still lying in the yard
+    expect(slots([gift({ openedAt: 5 })])).toEqual(['pfote']); // the household's existing opened stick-oak
+    expect(slots([gift({ openedAt: 5 }), gift({ id: 'g2', cosmeticId: 'stick-pfote', openedAt: 6 })])).toEqual(['pfote']);
+    expect(slots([gift({ cosmeticId: 'stick-keks', botName: 'Keks', openedAt: 5 }), gift({ id: 'g3', cosmeticId: 'collar-sky', openedAt: 5 })])).toEqual(['keks']);
+    expect(fillsShelfSlot(gift({ cosmeticId: 'stick-momo', botName: 'Momo' }), [gift({ openedAt: 5 })])).toBe(true);
+    expect(fillsShelfSlot(gift({ id: 'g4' }), [gift({ openedAt: 5 })])).toBe(false); // a second Pfote stick
+    expect(fillsShelfSlot(gift({ cosmeticId: 'collar-sky' }), [])).toBe(false);
   });
 
   it('keeps only wrapped gifts, and the co-op sign is one percentage, inactive = no sign', () => {

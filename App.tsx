@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { t } from './src/i18n';
@@ -46,6 +46,7 @@ import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
 import { OnboardingScreen, PermissionPrimerScreen } from './src/components/onboarding';
 import { SettingsScreen } from './src/components/SettingsScreen';
 import { BuddyAppearancePicker } from './src/components/buddy';
+import type { BuddyAppearance } from './src/buddy/buddyAppearance';
 import { useBuddyAppearance } from './src/components/useBuddyAppearance';
 import { useAmbientMusic } from './src/app/useAmbientMusic';
 import { useMusicEnabled } from './src/feedback/feedbackPrefs';
@@ -91,7 +92,14 @@ export default function App() {
   const [panToSpot, setPanToSpot] = useState<(SomewhereWildSpot & { requestId: number }) | null>(null);
 
   const { celebration, showCelebration, dismissCelebration } = useCelebration();
-  const { appearance: buddyAppearance, loaded: buddyAppearanceLoaded, saveAppearance } = useBuddyAppearance(repos.buddyAppearanceRepository);
+  const { appearance: buddyAppearance, loaded: buddyAppearanceLoaded, saveAppearance: saveLocalAppearance, adoptAppearance } = useBuddyAppearance(repos.buddyAppearanceRepository);
+  // A picked look is kept on this phone first, then offered to the household (a no-op while not joined).
+  const saveAppearance = useCallback(
+    (look: BuddyAppearance) => {
+      void saveLocalAppearance(look).then(() => syncEngine.enqueueAppearance(look));
+    },
+    [saveLocalAppearance]
+  );
 
   // Owned here (not in useFirstLaunch) because the walk session needs it and
   // the first-launch flow needs the walk session's error setter.
@@ -106,6 +114,7 @@ export default function App() {
       if (state.dogName) setDogName(state.dogName);
     },
     onRangeChanged: bumpRangeRefresh,
+    onAppearanceChanged: adoptAppearance,
     onPartnerWalks,
     onCommandRejected: (error) => {
       // Gentle, never an error tone (Buddy anti-guilt rule); the Den already shows the server's balance.

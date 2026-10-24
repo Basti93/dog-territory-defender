@@ -377,7 +377,7 @@ describe('commands', () => {
         method: 'POST',
         url: '/v1/commands',
         headers: m.auth,
-        payload: { clientId: 'client-cmd-0005', command: { kind: 'dog.update', name: 'Buddy', appearance: { coat: 'gold' } } },
+        payload: { clientId: 'client-cmd-0005', command: { kind: 'dog.update', name: 'Buddy' } },
       })
     ).json<CommandResponse>();
     expect(dog.dog?.name).toBe('Buddy');
@@ -594,19 +594,25 @@ describe('command replay detection', () => {
   it('treats the same command with different nested key order as a replay, not a conflict', async () => {
     const h = await newHousehold(s);
     const m = await joinNew(s, h.id);
+    const look = (zones: Record<string, string>) => ({
+      coat: 'golden', markings: 'none', earStyle: 'floppy', tailStyle: 'curly', size: 'medium', accentColour: 'cream',
+      fur: { zones, muzzle: 'short', furLength: 'short' },
+    });
+    const names = ['head', 'muzzle', 'eyepatch', 'ears', 'back', 'belly', 'chest', 'legs', 'paws', 'tail'];
+    const zones = (order: string[], head = '#C8A27A') => Object.fromEntries(order.map((z) => [z, z === 'head' ? head : '#C8A27A']));
     const send = (appearance: unknown) =>
       s.app.inject({
         method: 'POST',
         url: '/v1/commands',
         headers: m.auth,
-        payload: { clientId: 'client-dog-000001', command: { kind: 'dog.update', name: 'Buddy', appearance } },
+        payload: { clientId: 'client-dog-000001', command: { kind: 'appearance.set', appearance } },
       });
-    const first = await send({ coat: 'gold', ears: { shape: 'floppy', size: 2 }, tags: [{ b: 1, a: 2 }] });
+    const first = await send(look(zones(names)));
     expect(first.statusCode).toBe(200);
-    const again = await send({ tags: [{ a: 2, b: 1 }], ears: { size: 2, shape: 'floppy' }, coat: 'gold' });
+    const again = await send(look(zones([...names].reverse())));
     expect(again.statusCode).toBe(200);
     expect(again.json<CommandResponse>().replayed).toBe(true);
-    const different = await send({ coat: 'black' });
+    const different = await send(look(zones(names, '#8899AA')));
     expect(different.statusCode).toBe(409);
   });
 });

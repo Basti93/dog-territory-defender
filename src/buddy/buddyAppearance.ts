@@ -220,6 +220,41 @@ export function normalizeAppearance(input: unknown): BuddyAppearance {
   return fur ? { ...base, fur } : base;
 }
 
+/** Largest accepted look as JSON (a full fur block is ~500 bytes). */
+export const MAX_APPEARANCE_JSON_BYTES = 2048;
+
+/**
+ * Strict twin of `normalizeAppearance` for untrusted input (the server): every base field must be a known option and a
+ * `fur` block, when present, must carry a hex for all zones and known shapes. Returns the normalised (clay-softened)
+ * look, or null when anything is off. Pure: the server compiles this file by path, so no React/i18n imports here.
+ */
+export function validateAppearance(input: unknown): BuddyAppearance | null {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
+  const o = input as Record<string, unknown>;
+  const inList = (options: readonly string[], v: unknown) => typeof v === 'string' && options.includes(v);
+  if (
+    !inList(BUDDY_COATS, o.coat) ||
+    !inList(BUDDY_MARKINGS, o.markings) ||
+    !inList(BUDDY_EAR_STYLES, o.earStyle) ||
+    !inList(BUDDY_TAIL_STYLES, o.tailStyle) ||
+    !inList(BUDDY_SIZES, o.size) ||
+    !inList(BUDDY_ACCENTS, o.accentColour)
+  ) {
+    return null;
+  }
+  if (o.fur !== undefined) {
+    const fur = o.fur as Record<string, unknown> | null;
+    if (typeof fur !== 'object' || fur === null) return null;
+    const zones = fur.zones as Record<string, unknown> | null;
+    if (typeof zones !== 'object' || zones === null) return null;
+    if (!FUR_ZONES.every((z) => isHex(zones[z]))) return null;
+    if (!inList(BUDDY_MUZZLES, fur.muzzle) || !inList(BUDDY_FUR_LENGTHS, fur.furLength)) return null;
+  }
+  const json = JSON.stringify(input);
+  if (json === undefined || json.length > MAX_APPEARANCE_JSON_BYTES) return null;
+  return normalizeAppearance(input);
+}
+
 /** Chocolate gets the brown nose, everyone else the dark one. */
 export function noseColourFor(coat: BuddyCoat): string {
   return coat === 'chocolate' ? BUDDY_PALETTE.nose.brown : BUDDY_PALETTE.nose.dark;

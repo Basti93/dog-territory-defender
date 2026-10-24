@@ -50,6 +50,7 @@ export const dogFromRow = (r: typeof dogs.$inferSelect): ApiDog => ({
   id: r.id,
   name: r.name,
   appearance: (r.appearance ?? {}) as Record<string, unknown>,
+  appearanceRev: r.appearanceRev,
   updatedAt: r.updatedAt,
 });
 

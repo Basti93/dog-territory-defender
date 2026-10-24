@@ -1,0 +1,1 @@
+ALTER TABLE "dogs" ADD COLUMN "appearance_rev" integer DEFAULT 0 NOT NULL;

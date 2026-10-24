@@ -674,23 +674,59 @@ describe('WorldScene neighbours', () => {
     await unmountAndExpectNoTimers(b.view);
   });
 
-  it('a parcel with a Post! sign waits by the mailbox while a gift is unopened; tapping goes to the Post list', async () => {
-    seed({ gifts: [gift()] });
-    const { view, onOpenSettings } = await setup({ neighbourhood: actions });
-    const parcel = await screen.findAllByRole('button', { name: t('neighbours.parcel.label') });
-    expect(screen.getByText(t('neighbours.parcel.sign'))).toBeOnTheScreen();
-    await fireEvent.press(parcel[0]);
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  it('a waiting stick lies in the Hof (no sign at the mailbox); a tap sends Buddy, who opens it at the stick and Buddy says the calm line', async () => {
+    seed({ gifts: [gift({ cosmeticId: 'stick-pfote' })] });
+    const openGift = jest.fn(async () => true);
+    const { view, onOpenSettings } = await setup({ neighbourhood: { openGift } });
+    const pile = await screen.findByRole('button', { name: t('neighbours.stick.label', { bot: 'Pfote', dog: 'Rex' }) });
+    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
+    await fireEvent.press(pile);
+    expect(openGift).not.toHaveBeenCalled(); // Buddy has to trot over first
+    await fireEvent.press(pile); // a second tap while he is on his way does nothing
+    await advance(6000);
+    expect(openGift).toHaveBeenCalledTimes(1);
+    expect(openGift).toHaveBeenCalledWith('g1');
+    expect(await screen.findByText(t('neighbours.stick.lineNew', { bot: 'Pfote' }))).toBeOnTheScreen();
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    await advance(4000);
     await unmountAndExpectNoTimers(view);
   });
 
-  it('no parcel when there are no gifts or all are opened', async () => {
+  it('when opening does not work the stick stays and the line is a gentle retry', async () => {
+    seed({ gifts: [gift()] });
+    const { view } = await setup({ neighbourhood: { openGift: async () => false } });
+    await fireEvent.press(await screen.findByTestId('stick-pile'));
+    await advance(6000);
+    expect(await screen.findByText(t('neighbours.gift.retry'))).toBeOnTheScreen();
+    expect(screen.getByTestId('stick-pile')).toBeOnTheScreen();
+    await advance(4000);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('a gift the server no longer knows ("gone") says nothing and is not offered again', async () => {
+    seed({ gifts: [gift()] });
+    const openGift = jest.fn(async () => {
+      seed({ gifts: [] }); // what the engine does for not-found
+      return 'gone' as const;
+    });
+    const { view } = await setup({ neighbourhood: { openGift } });
+    await fireEvent.press(await screen.findByTestId('stick-pile'));
+    await advance(6000);
+    expect(openGift).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(t('neighbours.gift.retry'))).toBeNull();
+    expect(screen.queryByTestId('stick-pile')).toBeNull();
+    await advance(4000);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('no stick pile when there are no gifts or all are opened', async () => {
     seed({ gifts: [gift({ openedAt: 5 })] });
     const a = await setup({ neighbourhood: actions });
-    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
+    expect(screen.queryByTestId('stick-pile')).toBeNull();
     await unmountAndExpectNoTimers(a.view);
+    resetNeighbourhood();
     const b = await setup({ neighbourhood: actions });
-    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
+    expect(screen.queryByTestId('stick-pile')).toBeNull();
     await unmountAndExpectNoTimers(b.view);
   });
 

@@ -10,11 +10,13 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import { EmptyState, Header, material, Screen, spacing, textStyle } from '../ui';
 import { formatDate, t } from '../i18n';
+import { useNeighbourhood } from '../sync/useNeighbourhood';
 import { log } from '../utils/log';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyAvatar } from './buddy';
 import { PostcardOverlay } from './postcards/PostcardOverlay';
 import { PostcardThumb } from './postcards/PostcardThumb';
+import { StickShelf } from './StickShelf';
 
 interface AlbumScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -46,6 +48,9 @@ function tiltFor(id: string): number {
 export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeRepository, territoryRepository, cornerRepository, dogName, onClose, onWalkDeleted }: AlbumScreenProps) {
   const { cards, loaded, favouriteId, forget } = usePostcards({ walkRepository, territoryRepository });
   const [openId, setOpenId] = useState<string | null>(null);
+  // The Stock-Regal sits above the cards. It only appears once there are neighbour dogs (or a stick already hangs on it).
+  const hood = useNeighbourhood(undefined);
+  const shelf = hood.nearby.length > 0 || hood.shelf.some((s) => s.collected) ? <StickShelf slots={hood.shelf} /> : null;
   const { width } = useWindowDimensions();
   const thumbW = Math.floor((width - 2 * spacing.lg - GAP * (COLUMNS - 1)) / COLUMNS);
   const open = openId ? cards.find((c) => c.id === openId) ?? null : null;
@@ -70,14 +75,18 @@ export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeReposito
         {!loaded ? (
           <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
         ) : cards.length === 0 ? (
-          <EmptyState title={t('album.empty.title')} message={t('album.empty.message')}>
-            <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
-          </EmptyState>
+          <>
+            {shelf}
+            <EmptyState title={t('album.empty.title')} message={t('album.empty.message')}>
+              <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
+            </EmptyState>
+          </>
         ) : (
           <FlatList
             data={cards}
             keyExtractor={(item) => item.id}
             numColumns={COLUMNS}
+            ListHeaderComponent={shelf}
             columnWrapperStyle={styles.row}
             showsVerticalScrollIndicator={false}
             initialNumToRender={8}

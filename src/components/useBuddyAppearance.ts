@@ -53,5 +53,8 @@ export function useBuddyAppearance(repository: BuddyAppearanceRepository) {
     [repository]
   );
 
-  return { appearance, loaded, saveAppearance };
+  /** The household's look arrived through sync and is already stored: only the screen state changes. */
+  const adoptAppearance = useCallback((next: BuddyAppearance) => setAppearance(next), []);
+
+  return { appearance, loaded, saveAppearance, adoptAppearance };
 }

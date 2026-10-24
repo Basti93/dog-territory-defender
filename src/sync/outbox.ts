@@ -2,6 +2,7 @@
 // Decision 9): enqueue walk uploads and economy commands with client ids, and
 // the retry/backoff policy.
 
+import type { BuddyAppearance } from '../buddy/buddyAppearance';
 import type { BuildingKey, CommandBody, WalkUploadRequest } from './apiContract';
 import { newClientId } from './ids';
 import type { SyncRepository } from '../storage/SyncRepository';
@@ -67,4 +68,9 @@ export function harvestCommand(at: number): CommandBody {
 
 export function buddyTapsCommand(taps: number, treats: number): CommandBody {
   return { kind: 'den.buddyTaps', taps, treats };
+}
+
+/** `ifUnset`: a seed from a phone that never saw the household's look; the server ignores it when one is stored. */
+export function appearanceCommand(appearance: BuddyAppearance, ifUnset = false): CommandBody {
+  return { kind: 'appearance.set', appearance: appearance as unknown as Record<string, unknown>, ...(ifUnset ? { ifUnset: true } : {}) };
 }

@@ -43,7 +43,19 @@ export interface PostcardFacts {
   /** A territory was created during this walk. */
   newTerritory: boolean;
   longWalk: boolean;
+  /** Under `SHORT_WALK_KM`: sweet, never lesser. */
+  shortWalk: boolean;
+  /** Started on a Saturday or Sunday (local time). */
+  weekend: boolean;
   daypart: Daypart;
+}
+
+/** A very short walk gets its own cosy lines ("kurz, aber voller Gerüche"). */
+export const SHORT_WALK_KM = 0.8;
+
+function isWeekend(timestamp: number): boolean {
+  const day = new Date(timestamp).getDay();
+  return day === 0 || day === 6;
 }
 
 export interface PostcardEntry {
@@ -75,7 +87,7 @@ export function postcardForWalk(walk: StoredWalk, territories: readonly Territor
       startTime: walk.startTime,
       distanceMeters: 0,
       newStreets: 0,
-      facts: { firstPlace: false, newTerritory: false, longWalk: false, daypart },
+      facts: { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: isWeekend(walk.startTime), daypart },
     };
   }
   if (!walkHasMovement(walk)) return null;
@@ -91,7 +103,14 @@ export function postcardForWalk(walk: StoredWalk, territories: readonly Territor
     startTime: walk.startTime,
     distanceMeters,
     newStreets: firstPlace ? streetsKnown(newGroundCount) : 0,
-    facts: { firstPlace, newTerritory, longWalk: distanceMeters >= LONG_WALK_KM * 1000, daypart },
+    facts: {
+      firstPlace,
+      newTerritory,
+      longWalk: distanceMeters >= LONG_WALK_KM * 1000,
+      shortWalk: distanceMeters < SHORT_WALK_KM * 1000,
+      weekend: isWeekend(walk.startTime),
+      daypart,
+    },
   };
 }
 
@@ -133,7 +152,19 @@ export function pickFavouriteId(cards: readonly PostcardEntry[]): string | null 
 
 // ---- Buddy's line ----
 
-const LINE_POOL_SIZES = { firstPlace: 3, newTerritory: 3, long: 3, morning: 2, evening: 2, night: 2, plain: 4, manual: 3 } as const;
+export const LINE_POOL_SIZES = {
+  firstPlace: 9,
+  newTerritory: 9,
+  long: 9,
+  morning: 6,
+  evening: 6,
+  night: 6,
+  plain: 12,
+  manual: 9,
+  weekend: 6,
+  short: 6,
+  corner: 6,
+} as const;
 type LinePool = keyof typeof LINE_POOL_SIZES;
 
 function hashOf(seed: string): number {
@@ -145,10 +176,10 @@ function hashOf(seed: string): number {
 /**
  * The i18n key of Buddy's handwritten line. Seeded by the walk id, so a card always says the same thing.
  * A handwritten card gets its own pool. A new territory is rare and always wins; otherwise one of the special things
- * (first-time place, long walk, morning/evening/night) is chosen by the seed, and an ordinary walk draws from the fallback pool.
+ * (first-time place, long or short walk, a named corner, weekend, morning/evening/night) is chosen by the seed, and an ordinary walk draws from the fallback pool.
  * Rain is not offered: the app has no weather data.
  */
-export function pickBuddyLineKey(entry: { id: string; kind: PostcardEntry['kind']; facts: PostcardFacts }): string {
+export function pickBuddyLineKey(entry: { id: string; kind: PostcardEntry['kind']; facts: PostcardFacts }, opts: { cornerTouched?: boolean } = {}): string {
   const hash = hashOf(entry.id);
   const pick = (pool: LinePool, offset = 0) => `postcard.line.${pool}.${((Math.floor(hash / 7) + offset) % LINE_POOL_SIZES[pool]) + 1}`;
   if (entry.kind === 'handwritten') return pick('manual');
@@ -157,6 +188,9 @@ export function pickBuddyLineKey(entry: { id: string; kind: PostcardEntry['kind'
   const specials: LinePool[] = [];
   if (facts.firstPlace) specials.push('firstPlace');
   if (facts.longWalk) specials.push('long');
+  if (facts.shortWalk) specials.push('short');
+  if (opts.cornerTouched) specials.push('corner');
+  if (facts.weekend) specials.push('weekend');
   if (facts.daypart === 'morning' || facts.daypart === 'forenoon') specials.push('morning');
   else if (facts.daypart === 'evening') specials.push('evening');
   else if (facts.daypart === 'night') specials.push('night');
@@ -188,7 +222,7 @@ export function postcardWords(entry: PostcardEntry, opts: { dog: string; territo
     when: handwritten ? formatDate(entry.startTime, { weekday: 'long' }) : daypartPhrase(entry.startTime),
     distance: handwritten ? null : formatDistanceKm(entry.distanceMeters / 1000, 1),
     streets: newStreetsPhrase(entry.newStreets),
-    buddyLine: t(pickBuddyLineKey(entry)),
+    buddyLine: t(pickBuddyLineKey(entry, { cornerTouched: !handwritten && !!opts.cornerName })),
     signature: t('postcard.signature', { dog: opts.dog }),
     postmark: handwritten ? t('postcard.postmark.manual') : opts.cornerName ?? opts.territoryName ?? t('postcard.postmark.fallback'),
   };

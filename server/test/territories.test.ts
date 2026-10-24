@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { CommandResponse, SnapshotResponse, WalkUploadRequest, WalkUploadResponse } from '@game/sync/apiContract';
-import { cells, territories } from '../src/db/schema';
+import { cells, denState, territories } from '../src/db/schema';
 import { foldSmallTerritories } from '../src/services/territoryFold';
 import { joinNew, makeServer, newHousehold, straightWalk, type Member, type TestServer } from './helpers';
 
@@ -102,6 +102,17 @@ describe('foldSmallTerritories (start-up data migration)', () => {
     expect(snap.cells.every((c) => c.territoryId === home)).toBe(true);
     const rows = await s.db.select().from(territories).where(eq(territories.householdId, h.id));
     expect(rows[0].walksHere).toBe(24);
+  });
+
+  it('skips households without den_state or territories quietly (bots), without calling onError', async () => {
+    const h = await newHousehold(s, 'Bot');
+    await s.db.delete(denState).where(eq(denState.householdId, h.id));
+    await newHousehold(s, 'NoTerritories');
+    const errors: string[] = [];
+    const skipped: string[] = [];
+    expect(await foldSmallTerritories(s.db, undefined, (hid) => errors.push(hid), (_hid, reason) => skipped.push(reason))).toBe(0);
+    expect(errors).toEqual([]);
+    expect(skipped.sort()).toEqual(['few-territories', 'no-den-state']);
   });
 
   it('one failing household does not stop the others', async () => {

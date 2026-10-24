@@ -26,7 +26,7 @@ export function formatLocalTime(ms: number, tz: string): string {
 }
 
 /** Cap check shared by the daily planner and the reaction scheduler. `rows` are everything planned or emitted. */
-export function canPlan(rows: EventRow[], def: LineDef, day: string): boolean {
+export function canPlan(rows: EventRow[], def: LineDef, day: string, botHouseholdId?: string): boolean {
   const onDay = rows.filter((r) => r.day === day);
   if (onDay.length >= CAPS.eventsPerDay) return false;
   if (def.kind === 'neighbour.gift' && onDay.some((r) => r.kind === 'neighbour.gift')) return false;
@@ -35,7 +35,10 @@ export function canPlan(rows: EventRow[], def: LineDef, day: string): boolean {
   if (def.kind === 'neighbour.invitation' && inWeek.some((r) => r.kind === 'neighbour.invitation')) return false;
   if (def.kind === 'neighbour.reaction' && inWeek.filter((r) => r.kind === 'neighbour.reaction').length >= CAPS.reactionsPerWeek) return false;
   const repeatDays = def.key === 'neighbours.line.sockLeft' ? CAPS.sockRepeatDays : CAPS.lineRepeatDays;
-  if (rows.some((r) => r.lineKey === def.key && Math.abs(daysBetween(r.day, day)) < repeatDays)) return false;
+  // The stick line is shared by all dogs: a household-wide short gap, and the usual repeat gap per dog.
+  if (def.gift === 'stick' && rows.some((r) => r.lineKey === def.key && Math.abs(daysBetween(r.day, day)) < CAPS.stickHouseholdGapDays)) return false;
+  const sameOwner = (r: EventRow) => def.gift !== 'stick' || r.botHouseholdId === botHouseholdId;
+  if (rows.some((r) => r.lineKey === def.key && sameOwner(r) && Math.abs(daysBetween(r.day, day)) < repeatDays)) return false;
   return true;
 }
 
@@ -102,17 +105,23 @@ export async function planDay(dbx: Db, hostId: string, day: string): Promise<{ p
   const byArchetype = new Map(active.map((p) => [p.archetype as ArchetypeId, p]));
   const hasNebelEvent = rows.some((r) => r.botHouseholdId && byArchetype.get('nebel')?.householdId === r.botHouseholdId);
 
-  const candidates = (): Array<{ def: LineDef; bot: BotProfile }> => {
-    const out: Array<{ def: LineDef; bot: BotProfile }> = [];
+  const candidates = (): Array<{ def: LineDef; bots: BotProfile[] }> => {
+    const out: Array<{ def: LineDef; bots: BotProfile[] }> = [];
     for (const def of LINES) {
       if (!def.planned || !def.bot) continue;
-      const bot = byArchetype.get(def.bot);
-      if (!bot || !walkEnds.has(bot.householdId)) continue; // a dog only leaves a trace on a day it walked
-      if (def.kind === 'neighbour.invitation' && week < NEIGHBOUR_CONFIG.escalation.invitationsFromWeek) continue;
-      if (def.weird && week < NEIGHBOUR_CONFIG.escalation.weirdFromWeek) continue;
-      if (def.bot === 'nebel' && !hasNebelEvent && def.key !== 'neighbours.line.moonHello') continue; // the first weird event is the moon
-      if (!canPlan(rows, def, day)) continue;
-      out.push({ def, bot });
+      const owners = def.gift === 'stick' ? [...byArchetype.keys()] : [def.bot];
+      const eligible: BotProfile[] = [];
+      for (const owner of owners) {
+        const bot = byArchetype.get(owner);
+        if (!bot || !walkEnds.has(bot.householdId)) continue; // a dog only leaves a trace on a day it walked
+        if (def.kind === 'neighbour.invitation' && week < NEIGHBOUR_CONFIG.escalation.invitationsFromWeek) continue;
+        if (def.weird && week < NEIGHBOUR_CONFIG.escalation.weirdFromWeek) continue;
+        if (owner === 'nebel' && !hasNebelEvent && def.key !== 'neighbours.line.moonHello') continue; // the first weird event is the moon
+        if (!canPlan(rows, def, day, bot.householdId)) continue;
+        eligible.push(bot);
+      }
+      // One candidate per line (a stick is ONE candidate however many dogs walked); the dog is drawn from the pool after the pick.
+      if (eligible.length) out.push({ def, bots: eligible });
     }
     return out;
   };
@@ -121,7 +130,8 @@ export async function planDay(dbx: Db, hostId: string, day: string): Promise<{ p
     let pool = candidates();
     if (firstDay && i === 0) pool = pool.filter((c) => c.def.key === 'neighbours.line.sniffCorner'); // milestone M2
     if (pool.length === 0) break;
-    const pick = pool[rng.int(0, pool.length - 1)];
+    const picked = pool[rng.int(0, pool.length - 1)];
+    const pick = { def: picked.def, bot: picked.bots[picked.bots.length > 1 ? rng.int(0, picked.bots.length - 1) : 0] };
     const walkEnd = walkEnds.get(pick.bot.householdId)!;
     const walkStart = walkStarts.get(pick.bot.householdId)!;
     const params: Record<string, string | number> = { bot: pick.bot.name };

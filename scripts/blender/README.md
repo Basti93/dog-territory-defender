@@ -33,3 +33,6 @@ Building stages 4-5 (`doghouse|bakery|garden-4/5`, 512px, fill ~93%): treehouse 
 - Signs straight-on, face `#E9C98E`, rim `#B08D5E`, bottom edge `#7A5C3A`: `sign-small` 256x128, `sign-medium` 512x192, `sign-wide` 768x224. Margin 4 px, rim 12 px, bottom edge 6 px in all three, so **one capInsets works: `{top: 20, left: 20, right: 20, bottom: 28}`** (PNG px; scale by display factor). Face is a flat rectangle, corner radius ~14 px.
 - Flat assets (signs, postcard, pennant, fence family, doormat) render with `Standard` view transform and slight self-emission (`scene_props.lit`/`standard`, via `common.render` reading scene props `view_transform`/`exposure`) so colours match the tokens instead of being desaturated by AgX.
 - Textures (flat, opaque, 256x256, tile exactly, no scene): `patch-usual` `#9FD79A`+dots `#8CCB88`, `patch-fresh` `#4FBF6B`+dots `#45B261`, `patch-wild` `#DCE8BE`+blades `#C6D6A0`, `linen` `#EFE7D6` basket weave.
+
+## Stock-Regal sticks (2026-10-24)
+`sticks.py` registers `stick-momo|pfote|bruno|keks|lotte|nebel` (256 px, camera `STICKCAM`, one chunky clay stick per neighbour dog: birch + bow, golden fork, stout log, mint-striped twig, choc stick with leaves, lilac driftwood with a star). `-- --only stick`. Read via `artOr('stick-<dog>')`.

@@ -19,6 +19,8 @@ export const NEIGHBOUR_CONFIG = {
     reactionsPerWeek: 3,
     /** A given line is not repeated within this many days. */
     lineRepeatDays: 10,
+    /** Sticks come from any dog: one per household at most every this many days (each dog still obeys lineRepeatDays), so collars and socks keep their share. */
+    stickHouseholdGapDays: 3,
     /** The sock line is the "once a month" weird event. */
     sockRepeatDays: 30,
     /** Chance (out of 100) of 0, 1 or 2 planned events on a normal day. Average ~0.95/day. */

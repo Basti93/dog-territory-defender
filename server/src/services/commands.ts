@@ -2,6 +2,7 @@
 // stored outcome and never re-executes. All of them run under the household's den_state row lock.
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { CommandRequest, CommandResponse, CommandErrorCode } from '@game/sync/apiContract';
+import { validateAppearance } from '@game/buddy/buddyAppearance';
 import type { Config } from '../config';
 import type { Db } from '../db/client';
 import { corners, dogs, economyCommands, gifts, households, players, territories, walks } from '../db/schema';
@@ -107,11 +108,23 @@ export async function runCommand(
       case 'dog.update': {
         const patch: Partial<typeof dogs.$inferInsert> = { updatedAt: now };
         if (cmd.name !== undefined) patch.name = cmd.name;
-        if (cmd.appearance !== undefined) patch.appearance = cmd.appearance;
         const [row] = await dbx.update(dogs).set(patch).where(eq(dogs.householdId, hid)).returning();
         dogApi = dogFromRow(row);
         outcome = { ok: true, dogChanged: true };
         await appendEvent(dbx, hid, 'dog.updated', auth.playerId, { dog: dogApi });
+        break;
+      }
+      case 'appearance.set': {
+        // The route validated it; normalising again keeps what we store clay-softened and free of unknown keys.
+        const look = validateAppearance(cmd.appearance);
+        if (!look) throw new Error('appearance.set reached the service unvalidated');
+        const [d] = await dbx.select({ rev: dogs.appearanceRev }).from(dogs).where(eq(dogs.householdId, hid));
+        if (cmd.ifUnset && d.rev > 0) break; // a seed that lost the race: the look claimed first stays
+        const rev = d.rev + 1;
+        const [row] = await dbx.update(dogs).set({ appearance: look, appearanceRev: rev, updatedAt: now }).where(eq(dogs.householdId, hid)).returning();
+        await appendEvent(dbx, hid, 'dog.appearance', auth.playerId, { appearance: look as unknown as Record<string, unknown>, rev });
+        dogApi = dogFromRow(row);
+        outcome = { ok: true, dogChanged: true };
         break;
       }
       case 'walk.delete': {

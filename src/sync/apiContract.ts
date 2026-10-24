@@ -20,7 +20,7 @@ export const API_PREFIX = '/v1';
  * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
  * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
  * Additive inside level 2 (no bump): live presence (M4), named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`)
- * and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`).
+ * the shared dog look (`appearance.set`, `dog.appearance`, `ApiDog.appearanceRev`) and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`).
  */
 export const API_LEVEL = 2;
 
@@ -196,10 +196,21 @@ export interface ApiTerritory {
   treatsEarnedHere: number;
 }
 
+/** Payload of `dog.appearance`: the household's shared Buddy look (a `BuddyAppearance`, validated and clay-softened by the server) and its rev. */
+export interface ApiDogAppearance {
+  appearance: Record<string, unknown>;
+  rev: number;
+}
+
 export interface ApiDog {
   id: string;
   name: string | null;
   appearance: Record<string, unknown>;
+  /**
+   * Rises with every `appearance.set`. 0 = nobody set the look through the app yet: `appearance` is then only what the founding
+   * import stored (or `{}`). Absent from servers that predate the shared look.
+   */
+  appearanceRev?: number;
   updatedAt: number;
 }
 
@@ -450,7 +461,13 @@ export type CommandBody =
    * trims to 30 rewarded taps per household day and to the storage cap; it never fails.
    */
   | { kind: 'den.buddyTaps'; taps: number; treats: number }
-  | { kind: 'dog.update'; name?: string | null; appearance?: Record<string, unknown> }
+  | { kind: 'dog.update'; name?: string | null }
+  /**
+   * Sets the household's shared Buddy look. The server validates it like `validateAppearance` (400 when invalid), stores
+   * it, bumps the rev and emits `dog.appearance`. Last writer wins; `ifUnset` makes it a seed that does nothing when a
+   * phone already claimed the look (rev above 0). Always ok.
+   */
+  | { kind: 'appearance.set'; appearance: Record<string, unknown>; ifUnset?: boolean }
   /**
    * Walks are soft-deleted; the cells they painted STAY (the Range never shrinks, so a delete cannot
    * be used to undo or game the shared map). Emits `walk.deleted`.
@@ -505,6 +522,7 @@ export type EventKind =
   | 'territory.changed'
   | 'den.updated'
   | 'dog.updated'
+  | 'dog.appearance'
   | 'member.joined'
   | 'member.updated'
   | 'corner.updated'
@@ -553,6 +571,7 @@ export interface EventPayloads {
   'territory.changed': { upserted: ApiTerritory[]; removedIds: string[] };
   'den.updated': { den: ApiDenState };
   'dog.updated': { dog: ApiDog };
+  'dog.appearance': ApiDogAppearance;
   'member.joined': { player: ApiPlayer };
   'member.updated': { player: ApiPlayer };
   'corner.updated': { corner: ApiCorner };

@@ -21,3 +21,10 @@ The Pack is the AI dog companion collection metagame: horizontal variety on top 
 ## Roster display
 
 - A long-term player's full Pack roster is visible on their profile or Den as bragging rights, while the mechanical advantage still respects the +30% total Pack cap, so new players are never outmatched beyond the capped advantage.
+
+## Stick shelf (Stock-Regal)
+
+A small collection that is not a power: each of the six neighbour dogs (Momo, Pfote, Bruno, Keks, Lotte, Nebel) leaves its own stick (own wood, shape and colour, `src/economy/sticks.ts`, art `stick-<dog>`).
+- A waiting stick lies in the Hof right of the doormat (up to 3 shown as a pile; other gifts show as a parcel there). One tap: Buddy trots over, picks it up, plays a happy beat, a calm line "Stock von {Hund}!" and the gift's treat sprinkle (unchanged numbers) land. Sticks never expire; no "you missed" copy.
+- The shelf has one slot per dog and hangs at the top of the Album (bench). It shows once neighbour dogs exist. Fetched sticks carry the dog's name, empty slots are soft silhouettes; no counts, no "x of 6". A repeat stick from a dog is a duplicate: same pickup and sprinkle, shelf unchanged. The first stick of a dog adds "... hängt jetzt im Stock-Regal im Album".
+- Every dog can leave a stick: planner draws ONE stick candidate per round and then the dog; household gap 3 days between sticks, 10 days per dog, still max 1 gift per day (collars and socks keep their share). Old: Pfote only, 10-day line gap. The shelf is derived from opened gifts, nothing extra is stored. Old ids (`stick-oak`, `stick-birch`, `stick-pfote`) count for the dog that sent them.

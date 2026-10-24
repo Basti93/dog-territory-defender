@@ -2,7 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
 import type { ApiGift, CoopWeekResponse, NearbyItem } from './apiContract';
 import { linesAboutBot, NeighbourNote, resolveNeighbourNote } from './householdEvents';
-import { NeighbourhoodActions, unopenedGifts } from './neighbourhood';
+import { NeighbourhoodActions, ShelfSlot, stickShelf, unopenedGifts } from './neighbourhood';
 import { getNeighbourhood, subscribeNeighbourhood } from './neighbourhoodStore';
 
 export interface Neighbourhood {
@@ -11,11 +11,15 @@ export interface Neighbourhood {
   note: NeighbourNote | null;
   /** The last two worded lines about one dog, for its profile card. */
   linesFor: (botId: string) => string[];
-  /** Parcels waiting at the mailbox. */
+  /** Gifts lying in the Hof, newest first (sticks and the odd parcel). */
   unopenedGifts: ApiGift[];
+  /** All gifts, newest first (the shelf and the "new on the shelf" check read them). */
+  gifts: ApiGift[];
+  /** The Stock-Regal: one slot per neighbour dog. */
+  shelf: ShelfSlot[];
   /** The Viertel-Runde, only while it is active. */
   coop: CoopWeekResponse | null;
-  openGift: (gift: ApiGift) => Promise<boolean>;
+  openGift: (gift: ApiGift) => Promise<boolean | 'gone'>;
 }
 
 /**
@@ -28,5 +32,6 @@ export function useNeighbourhood(actions: NeighbourhoodActions | undefined, now:
   const linesFor = useCallback((botId: string) => linesAboutBot(lines, botId, 2), [lines]);
   const openGift = useCallback(async (gift: ApiGift) => (actions ? actions.openGift(gift.id).catch(() => false) : false), [actions]);
   const unopened = useMemo(() => unopenedGifts(gifts), [gifts]);
-  return { nearby, note, linesFor, unopenedGifts: unopened, coop: coop && coop.active ? coop : null, openGift };
+  const shelf = useMemo(() => stickShelf(gifts), [gifts]);
+  return { nearby, note, linesFor, unopenedGifts: unopened, gifts, shelf, coop: coop && coop.active ? coop : null, openGift };
 }

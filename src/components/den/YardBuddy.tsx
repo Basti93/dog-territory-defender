@@ -46,6 +46,11 @@ interface YardBuddyProps {
   rng?: () => number;
   /** Called after Buddy's own tap reaction. The world scene passes nothing: tapping Buddy never starts a walk. */
   onPress?: () => void;
+  /**
+   * A fetch errand (the stick in the Hof): Buddy trots to `x` (centre, yard px), calls `onArrived` there, plays a short happy beat,
+   * then wanders again. A new `key` starts a new errand; the same key never replays.
+   */
+  errand?: { key: number; x: number; onArrived: () => void } | null;
 }
 
 interface BehaviourView {
@@ -57,12 +62,15 @@ const REST_VIEW: BehaviourView = { mood: null, walk: null };
 interface Engine {
   pause(): void;
   resume(): void;
+  fetch(x: number, onArrived: () => void): void;
 }
 
 type Timer = ReturnType<typeof setTimeout>;
 const sine = Easing.inOut(Easing.sin);
+/** How long Buddy is happy (tail wag / shake) after picking something up. */
+const ERRAND_HAPPY_MS = 1800;
 
-export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = Math.random, onPress }: YardBuddyProps) {
+export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = Math.random, onPress, errand }: YardBuddyProps) {
   const v = useRef({ x: new Animated.Value(0) }).current;
   const [view, setView] = useState<BehaviourView>(REST_VIEW);
   const [facing, setFacing] = useState<'left' | 'right'>('right');
@@ -139,8 +147,9 @@ export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = M
       else if (spot === 'mailbox') setFacing('right');
     };
 
-    const goTo = (spot: SpotId, then: () => void) => {
-      const target = clampX(geo.spots[spot], geo.range);
+    /** Walk to `x`; `spot` is where he counts as being afterwards (null = none of the three). */
+    const goToX = (x: number, spot: SpotId | null, then: () => void) => {
+      const target = clampX(x, geo.range);
       const from = xRef.current ?? geo.baseCx;
       if (Math.abs(target - from) < 2) {
         atRef.current = spot;
@@ -159,6 +168,7 @@ export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = M
         then();
       });
     };
+    const goTo = (spot: SpotId, then: () => void) => goToX(geo.spots[spot], spot, then);
 
     const doActivity = (spot: SpotId) => {
       const act = pickActivity(r, spot);
@@ -179,6 +189,15 @@ export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = M
         loop.pause();
       },
       resume: () => loop.resume(),
+      fetch: (x, onArrived) => {
+        abort();
+        loop.hold();
+        goToX(x, null, () => {
+          onArrived();
+          setView({ ...REST_VIEW, mood: 'happy' });
+          later(finish, ERRAND_HAPPY_MS);
+        });
+      },
     };
     if (moodRef.current === 'excited') loop.pause();
     loop.arm();
@@ -197,6 +216,14 @@ export function YardBuddy({ appearance, name, mood, replayKey, geometry, rng = M
     if (mood === 'excited') engineRef.current?.pause();
     else engineRef.current?.resume();
   }, [mood, replayKey]);
+
+  // One errand per key; the callback is read through a ref so a re-render never restarts it.
+  const errandRef = useRef(errand);
+  errandRef.current = errand;
+  useEffect(() => {
+    const e = errandRef.current;
+    if (e) engineRef.current?.fetch(e.x, () => (errandRef.current ?? e).onArrived());
+  }, [errand?.key]);
 
   const avatarMood: BuddyMood = mood === 'excited' ? 'excited' : view.mood ?? mood;
 

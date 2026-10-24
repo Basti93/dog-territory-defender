@@ -8,6 +8,7 @@
 // The engine never throws from syncNow and never produces user-facing error
 // copy: offline just means "later" (Buddy anti-guilt rule).
 
+import { defaultBuddyAppearance, normalizeAppearance, type BuddyAppearance } from '../buddy/buddyAppearance';
 import type { DenEconomyState } from '../economy/denEconomy';
 import type { CornerRepository } from '../storage/CornerRepository';
 import type { DenEconomyRepository } from '../storage/DenEconomyRepository';
@@ -31,7 +32,7 @@ import type { NeighbourhoodActions } from './neighbourhood';
 import { pickPartnerName } from './partnerName';
 import { createStatsSync } from './statsSync';
 import { getNeighbourhood, resetNeighbourhood, setNeighbourhood, setNeighbourLines } from './neighbourhoodStore';
-import { buddyTapsCommand, enqueueEconomyCommand, enqueueWalkUpload, planFailure, renameCommand } from './outbox';
+import { buddyTapsCommand, enqueueEconomyCommand, enqueueWalkUpload, appearanceCommand, planFailure, renameCommand } from './outbox';
 import type { Walk } from '../types';
 
 export interface SyncEngineDeps {
@@ -83,6 +84,8 @@ export interface SyncCallbacks {
   /** Walks by other household members that were just fetched (the mini homecoming matches them to a presence that ended). */
   onPartnerWalks?: (walks: PartnerWalkAdded[]) => void;
   /** A command got ok:false (e.g. the partner spent the treats first). The caller shows a gentle line; state was already corrected silently. */
+  /** The household's shared Buddy look replaced this phone's (already saved locally): show it. */
+  onAppearanceChanged?: (appearance: BuddyAppearance) => void;
   onCommandRejected?: (error: CommandErrorCode) => void;
 }
 
@@ -107,6 +110,8 @@ export interface SyncEngine extends NeighbourhoodActions {
   leave(): Promise<void>;
   /** Queues an economy command (no-op when not joined) and kicks off a sync without waiting for it. */
   enqueueCommand(command: CommandBody): Promise<void>;
+  /** The player picked a new look (already saved locally): queues `appearance.set` for the household (no-op when not joined). */
+  enqueueAppearance(appearance: BuddyAppearance): Promise<void>;
   /** Queues a finished tracked walk or a manual log for upload (no-op when not joined). */
   enqueueWalk(walk: Walk, territoryNameHint: string | null): Promise<void>;
   /**
@@ -141,7 +146,7 @@ export interface SyncEngine extends NeighbourhoodActions {
 function isOptionalDenCommand(item: { kind: string; payload: unknown }): boolean {
   if (item.kind !== 'command') return false;
   const kind = (item.payload as CommandBody).kind;
-  return kind === 'den.harvest' || kind === 'den.buddyTaps' || kind === 'territory.name';
+  return kind === 'den.harvest' || kind === 'den.buddyTaps' || kind === 'territory.name' || kind === 'appearance.set';
 }
 
 /** Safety cap on pages per run; the rest arrives on the next sync. */
@@ -169,6 +174,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     denEconomy: deps.denEconomy,
     sync: deps.sync,
     corners: deps.corners,
+    buddyAppearance: deps.buddyAppearance,
   };
   const listeners = new Set<() => void>();
   let callbacks: SyncCallbacks = {};
@@ -178,6 +184,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
   let busy = false;
   let unauthorized = false;
   let foregroundRequested = false;
+  let lookCheckTried = false;
   const statsSync = deps.stats ? createStatsSync({ stats: deps.stats, now }) : null;
 
   const notify = () => listeners.forEach((l) => l());
@@ -188,6 +195,7 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     if (result.walksAdded > 0) callbacks.onHouseholdNews?.();
     if (result.partnerWalks.length > 0) callbacks.onPartnerWalks?.(result.partnerWalks);
     if (result.cornersChanged) callbacks.onRangeChanged?.();
+    if (result.appearance) callbacks.onAppearanceChanged?.(result.appearance);
   }
 
   /** Walks of other members were stored: look for corners they completed, then let the signs re-read. Never breaks the sync. */
@@ -199,6 +207,20 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
     } catch (err) {
       log('CORNERS_AFTER_SYNC_ERROR', { error: String(err) });
     }
+  }
+
+  /**
+   * Nobody claimed the shared look yet (rev 0): a phone with a look of its own offers it (`ifUnset`: the first phone wins, a later
+   * seed does nothing). A phone still on the default look (never chose, or skipped) offers nothing, so it can never overwrite a stored look.
+   */
+  async function seedHouseholdLook() {
+    if (!deps.buddyAppearance || !(await deps.buddyAppearance.hasChosen())) return;
+    const mine = normalizeAppearance(await deps.buddyAppearance.getAppearance());
+    if (JSON.stringify(mine) === JSON.stringify(defaultBuddyAppearance())) return;
+    const waiting = (await deps.sync.getPending()).some((i) => (i.payload as CommandBody).kind === 'appearance.set');
+    if (waiting) return;
+    const look = await deps.buddyAppearance.getAppearance();
+    await enqueueEconomyCommand(deps.sync, appearanceCommand(look, true), now());
   }
 
   /** A first sync or a fresh snapshot: names this phone gave before the household knew them go up (the snapshot's own names have already replaced ours). */
@@ -220,6 +242,13 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       await deps.sync.saveState({ needsUpdate: false });
       notify();
     }
+  }
+
+  /** An own look change will never reach the server: take the household's look again, from one fresh snapshot, instead of staying diverged. */
+  async function reAdoptHouseholdLook(item: { kind: string; payload: unknown }) {
+    if (item.kind !== 'command' || (item.payload as CommandBody).kind !== 'appearance.set') return;
+    await deps.sync.saveState({ appearanceSynced: false, appearanceRev: 0 });
+    lookCheckTried = false;
   }
 
   /** Sends due outbox items in order. Returns true when the whole outbox is drained or dead-lettered. */
@@ -270,12 +299,14 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           // An older server does not know den.harvest / den.buddyTaps (schema 400 'bad_request'; a 404 household is a normal failure): the local result stands, the next pull corrects it. Drop the row.
           await deps.sync.remove(item.id);
           log('SYNC_COMMAND_DROPPED', { kind: (item.payload as CommandBody).kind, status: err.status });
+          await reAdoptHouseholdLook(item);
           continue;
         }
         const plan = planFailure(item.attempts, err.retryable, now());
         await deps.sync.recordFailure(item.id, err.message, plan.nextAttemptAt, plan.deadAt);
         log('SYNC_PUSH_FAILED', { id: item.id, kind: item.kind, error: err.message, dead: plan.deadAt !== null });
         if (plan.deadAt === null) return false; // will retry: stop here, keep order
+        await reAdoptHouseholdLook(item);
         // dead-lettered (permanent rejection or too many attempts): keep going with the rest
       }
     }
@@ -397,7 +428,10 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       },
     };
     // Also once for a phone that synced before territories were server-authoritative: its local-only territories go.
-    const needsSnapshot = (state.cursor === 0 && state.lastSyncAt === null) || state.territoriesReconciled !== true;
+    // Likewise once after the shared dog look arrived (a snapshot is the only place that says "the server has none yet");
+    // tried once per launch, so a server that predates it is not asked every time.
+    const needsLookCheck = !!deps.buddyAppearance && state.appearanceSynced !== true && !lookCheckTried;
+    const needsSnapshot = (state.cursor === 0 && state.lastSyncAt === null) || state.territoriesReconciled !== true || needsLookCheck;
     if (!needsSnapshot) {
       try {
         let cursor = state.cursor;
@@ -419,11 +453,13 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       }
     }
     const snapshot = await seedOrSnapshot(client);
+    lookCheckTried = true;
     await noteServerTime(snapshot.serverTime);
     const appliedSnapshot = await applySnapshot(snapshot, applyRepos, ctx);
     reportApplied(appliedSnapshot);
     await afterWalks(appliedSnapshot);
     await sendLocalCornerNames(snapshot.corners ?? []);
+    if (snapshot.dog.appearanceRev === 0 && !appliedSnapshot.appearance) await seedHouseholdLook(); // an adopted look is the household's already
     await mergeServerStats(snapshot.myStats);
     await refreshNeighbourhood(client);
     await publishLines();
@@ -630,6 +666,14 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       void syncNow();
     },
 
+    async enqueueAppearance(appearance) {
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity) return;
+      await enqueueEconomyCommand(deps.sync, appearanceCommand(appearance), now());
+      notify();
+      void syncNow();
+    },
+
     async renamePlayer(rawName) {
       const name = rawName.trim().slice(0, API_LIMITS.maxRenameLength).trim();
       const identity = await deps.settings.getSyncIdentity();
@@ -676,7 +720,12 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       try {
         // A fresh clientId per tap is safe: the server lets the first opener win and a second open credits nothing.
         const response = await makeClient(identity.serverUrl, identity.token).openGift(giftId, newClientId());
-        if (!response.ok) return false;
+        if (!response.ok) {
+          // not-found is permanent (the gift is gone): drop it locally instead of offering it forever.
+          if (response.error !== 'not-found') return false;
+          setNeighbourhood({ gifts: getNeighbourhood().gifts.filter((g) => g.id !== giftId) });
+          return 'gone';
+        }
         const applied = await applyServerDenState(applyRepos, response.den);
         if (applied) callbacks.onDenChanged?.(applied);
         setNeighbourhood({ gifts: getNeighbourhood().gifts.map((g) => (g.id === giftId ? { ...g, openedAt: now() } : g)) });

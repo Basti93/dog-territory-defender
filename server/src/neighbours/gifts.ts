@@ -2,6 +2,7 @@
 // gift is opened (commands.ts, gift.open), outside the reward formulas: no Beginner's Luck, no multipliers.
 import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { NEIGHBOUR_CONFIG, sprinkleTreats } from '@game/economy/neighbourConfig';
+import { stickIdFor, type StickDogId } from '@game/economy/sticks';
 import type { ApiGift, GiftsResponse } from '@game/sync/apiContract';
 import type { Db } from '../db/client';
 import { botProfiles, gifts, walks } from '../db/schema';
@@ -21,15 +22,18 @@ export async function recentWalkTreats(db: Db, hostId: string): Promise<number[]
 }
 
 /**
- * Creates the gift that belongs to a gift line. Cosmetic: the line's category, first one the household does not own
- * yet (seeded order); exclusive piece once the dog was met enough times; none left = sprinkle only. Sprinkle:
+ * Creates the gift that belongs to a gift line. Stick: always that dog's own stick (a repeat is a duplicate the shelf
+ * ignores, the pickup and the sprinkle still happen). Other cosmetics: the line's category, first one the household does
+ * not own yet (seeded order); exclusive piece once the dog was met enough times; none left = sprinkle only. Sprinkle:
  * only for the first gift of a local day. Returns the new gift row.
  */
 export async function createGift(dbx: Db, hostId: string, bot: BotProfile, def: LineDef, day: string, now: number, exclusiveDue: boolean) {
   const owned = new Set((await dbx.select({ c: gifts.cosmeticId }).from(gifts).where(eq(gifts.hostHouseholdId, hostId))).map((r) => r.c));
   let cosmeticId: string | null = null;
   const exclusive = COSMETICS.exclusive[bot.archetype as ArchetypeId];
-  if (exclusiveDue && exclusive && !owned.has(exclusive)) {
+  if (def.gift === 'stick') {
+    cosmeticId = stickIdFor(bot.archetype as StickDogId);
+  } else if (exclusiveDue && exclusive && !owned.has(exclusive)) {
     cosmeticId = exclusive;
   } else if (def.gift) {
     const rng = makeRng(hashSeed(bot.seed, day, 'cosmetic'));

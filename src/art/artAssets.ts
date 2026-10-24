@@ -1,5 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 
+import type { StickDogId } from '../economy/sticks';
+
 // Registry of pre-rendered 3D sprites (see docs/decisions/buddy-comes-alive.md, Decision 12).
 // Generation checklist: assets/art/README.md.
 
@@ -52,7 +54,9 @@ export type ArtKey =
   | 'prop-moon-cheese'
   | 'prop-firefly'
   | 'prop-lightbulb'
-  | 'prop-question';
+  | 'prop-question'
+  // Stock-Regal: one stick per neighbour dog.
+  | `stick-${StickDogId}`;
 
 export function buildingArt(building: BuildingId, level: BuildingLevel): ArtKey {
   return `${building}-${level}`;
@@ -131,6 +135,12 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'rosette-distance': require('../../assets/art/rosette-distance.png'),
   'rosette-treats': require('../../assets/art/rosette-treats.png'),
   'rosette-den': require('../../assets/art/rosette-den.png'),
+  'stick-momo': require('../../assets/art/stick-momo.png'),
+  'stick-pfote': require('../../assets/art/stick-pfote.png'),
+  'stick-bruno': require('../../assets/art/stick-bruno.png'),
+  'stick-keks': require('../../assets/art/stick-keks.png'),
+  'stick-lotte': require('../../assets/art/stick-lotte.png'),
+  'stick-nebel': require('../../assets/art/stick-nebel.png'),
 };
 
 export function hasArt(key: ArtKey): boolean {
