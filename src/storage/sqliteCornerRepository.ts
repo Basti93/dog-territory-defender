@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { CornerRepository, cornerCoords, NewCorner, StoredCorner } from './CornerRepository';
 
@@ -31,7 +32,7 @@ export function createSqliteCornerRepository(dbName: string = DEFAULT_DB_NAME): 
     async addCorners(incoming: NewCorner[]) {
       if (incoming.length === 0) return;
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const c of incoming) {
           await db.runAsync('INSERT OR IGNORE INTO corners (id, ix, iy, createdAt, walkId) VALUES (?, ?, ?, ?, ?)', c.id, c.ix, c.iy, c.createdAt, c.walkId);
         }

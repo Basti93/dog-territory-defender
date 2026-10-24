@@ -43,6 +43,7 @@ import { BenchPostcards } from '../postcards/BenchPostcards';
 import { BuildingPanel } from './BuildingPanel';
 import { FenceBadges } from './FenceBadges';
 import { signStrip } from './fencePlan';
+import { TreatsPill } from './TreatsPill';
 import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
 import { NeighbourCard } from './NeighbourCard';
@@ -75,6 +76,11 @@ const VIERTEL_PARALLAX = 0.15;
 const YARD_PARALLAX = -0.06;
 const GATE_SWING_MS = 600;
 const BOWL_ZOOM_HOLD_MS = 2000;
+/** Treats pill beside the gate sign: edge gap, widest/narrowest, and the width reserved for the centred gate sign. */
+const PILL_EDGE = 8;
+const PILL_MAX_W = 96;
+const PILL_MIN_W = 60;
+const GATE_SIGN_ROOM = 200;
 /** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides. */
 const GRASS_BASE = '#9BC995';
 const MAX_NOTES = 2;
@@ -526,6 +532,8 @@ export function WorldScene(props: WorldSceneProps) {
   const skyShift = SKY_PARALLAX * startOffset;
   const gateBoxLeft = width / 2 - GATE_BOX / 2;
   const gateHitTop = layout.gateBoxTop + GATE_BOX * 0.36;
+  // The pill takes the space left of the (centred, ~200 pt) gate sign; on very narrow windows it is left out.
+  const pillW = Math.min(PILL_MAX_W, width / 2 - GATE_SIGN_ROOM / 2 - PILL_EDGE - 4);
 
   return (
     <View style={[styles.root, { backgroundColor: sky.base }]}>
@@ -858,6 +866,19 @@ export function WorldScene(props: WorldSceneProps) {
             onPress={gateAction}
             style={[styles.abs, { left: gateBoxLeft, top: gateHitTop, width: GATE_BOX, height: GATE_BOX * 0.6 }]}
           />
+          {/* Treats counter: beside the gate sign, in the free corner between the hint band and the picket band. */}
+          {pillW >= PILL_MIN_W && (
+            <View pointerEvents="box-none" style={[styles.abs, { left: PILL_EDGE, top: layout.gateSignTop + 2 }]}>
+              <TreatsPill
+                shown={shownTreats}
+                cap={cap}
+                ratePerHour={walkActive || homecoming ? 0 : projection.ratePerHour}
+                welcomeFrom={welcome ? Math.max(0, Math.floor(state.treats - welcome.n)) : null}
+                width={pillW}
+                onPress={zoomBowl}
+              />
+            </View>
+          )}
           <View pointerEvents="box-none" style={[styles.abs, { left: 0, right: 0, top: layout.gateSignTop, alignItems: 'center' }]}>
             <WoodSign size="wide" onPress={gateAction} accessibilityLabel={walkActive ? t('walk.gateBackLabel') : t('world.gateLabel')}>
               <View style={styles.gateSignRow}>

@@ -18,6 +18,7 @@ Exactly these; a new colour needs a `docs/decisions/LOG.md` entry explaining why
 - No gamey chrome (XP bars everywhere, battle UI, power meters). No dog photos: dogs are illustrations/avatars (inclusivity, playfulness).
 
 ## Key screens
+- **Map tiles:** soft spring wash, not grey: parks, water and paths stay recognisable (`MAP_TILE_FILTER` in `src/web/mapTheme.ts`, linen tint and paper weave at 0.15) so the felt patches stay readable on top.
 - **Map View:** map dominates full screen. Active walk: state obvious (time, distance), Finish/Cancel easy to reach but not accidental. Idle: shows the player's full Home Range (Range outline plus Bloom fill, every walk ever recorded, not only the latest) as the soft rounded outline / colour-only freshness fill from `docs/decisions/2026-08-21-home-range.md`, not per-walk shapes.
 - **Territory Claimed (Homecoming / Heimkehr, plays over the home scene; no separate celebration screen):** peak-joy moment; shows what was claimed and the dog's XP/level progress; ends with a clear call to the next walk.
 - **Dog Profile:** dog is the star; stats about walks and community, not power creep; badges feel earned.

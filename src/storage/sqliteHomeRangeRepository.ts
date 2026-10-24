@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { CellId, parseCellKey } from '../utils/grid';
 import { calendarDayKey } from '../utils/manualWalkLog';
@@ -97,7 +98,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
       // Single transaction for the whole batch — see design.md's "no DB
       // write per fix" cost budget: this is the one write at Finish Walk
       // (or the one-time migration backfill), never per GPS fix.
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const { ix, iy, refreshedAt, tracked, territoryId } of input) {
           const existing = await db.getFirstAsync<CellRow>(
             'SELECT * FROM home_range_cells WHERE ix = ? AND iy = ?',
@@ -203,7 +204,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
     async assignTerritoryToCells(cellIds: CellId[], territoryId: TerritoryId): Promise<void> {
       if (cellIds.length === 0) return;
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const id of cellIds) {
           const { ix, iy } = parseCellKey(id);
           await db.runAsync('UPDATE home_range_cells SET territoryId = ? WHERE ix = ? AND iy = ?', territoryId, ix, iy);
@@ -213,7 +214,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
 
     async mergeCells(incoming: Cell[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const c of incoming) {
           const existing = await db.getFirstAsync<CellRow>(
             'SELECT * FROM home_range_cells WHERE ix = ? AND iy = ?',
@@ -250,7 +251,7 @@ export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME
 
     async replaceAll(cells: Cell[], newGroundEvent: NewGroundEvent | null): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM home_range_cells');
         await db.runAsync('DELETE FROM home_range_new_ground_event');
         for (const c of cells) {

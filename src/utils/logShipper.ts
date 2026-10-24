@@ -8,6 +8,9 @@
 import { ApiError } from '../sync/apiClient';
 import type { ApiLogEntry, LogUploadRequest } from '../sync/apiContract';
 import type { SyncIdentity } from '../storage/SettingsRepository';
+import { Platform } from 'react-native';
+import * as Updates from 'expo-updates';
+import appJson from '../../app.json';
 
 export const SHIPPER_LIMITS = {
   /** Unsent entries kept in memory; the oldest are dropped first. */
@@ -23,11 +26,13 @@ export const SHIPPER_LIMITS = {
   /** Serialized batch size; the server limit is 64 KB, this leaves headroom. */
   maxBatchBytes: 60 * 1024,
   maxBatchEntries: 200,
+  /** Requests per flush: a long backlog drains over several flushes, so the server's per-10-minute limit is not hit in one burst. */
+  maxBatchesPerFlush: 2,
 } as const;
 
 /**
  * Per-fix events are shipped 1 in N only (the local Debug Log keeps every line). The server refuses a device more than
- * 2000 rows per rolling 24 h; at one GPS_UPDATE per second that was used up within the first walk of the day and every
+ * 2000 rows per rolling 24 h (now 6000); at one GPS_UPDATE per second that was used up within the first walk of the day and every
  * later log (WALK_*, GPS_GAP, RESTORE) was refused until the next morning.
  */
 export const SAMPLED_EVENTS: Record<string, number> = { GPS_UPDATE: 20, GPS_FIX_REJECTED: 10 };
@@ -127,6 +132,8 @@ export interface LogShipperDeps {
   send(identity: SyncIdentity, request: LogUploadRequest): Promise<void>;
   /** Sequence number of the first entry. The default is time based so numbers keep rising across app restarts. */
   initialSeq?: number;
+  /** Stamped into every entry's payload (appVersion, platform), so a log line says which build wrote it. Additive: no server change. */
+  meta?: Record<string, string | number>;
 }
 
 export interface LogShipper {
@@ -182,7 +189,7 @@ export function createLogShipper(deps: LogShipperDeps): LogShipper {
       }
       const identity = await deps.getIdentity();
       if (!identity) return; // not joined: keep the (capped) buffer for when we are
-      while (buffer.length > 0) {
+      for (let sentBatches = 0; buffer.length > 0 && sentBatches < L.maxBatchesPerFlush; sentBatches++) {
         const batch = takeBatch();
         const lastSeq = batch[batch.length - 1].seq;
         try {
@@ -214,7 +221,7 @@ export function createLogShipper(deps: LogShipperDeps): LogShipper {
           sampledCounts.set(event, seen + 1);
           if (seen % every !== 0) return; // the first one always ships
         }
-        const entry: ApiLogEntry = { t: deps.now(), event, payload: redact(event, payload), appState };
+        const entry: ApiLogEntry = { t: deps.now(), event, payload: { ...redact(event, payload), ...deps.meta }, appState };
         const bytes = utf8Length(JSON.stringify(entry));
         if (bytes > L.maxEntryBytes) return;
         buffer.push({ seq: nextSeq++, bytes, entry });
@@ -244,8 +251,16 @@ export function configureLogShipper(deps: NonNullable<typeof configured>): void 
   configured = deps;
 }
 
+// Which build wrote a line: store/native version from app.json, the OTA update id (first 8 chars) when one is running.
+const appMeta: Record<string, string | number> = {
+  appVersion: appJson.expo.version,
+  platform: Platform.OS,
+  ...(Updates.updateId ? { otaId: Updates.updateId.slice(0, 8) } : {}),
+};
+
 const appShipper = createLogShipper({
   now: Date.now,
+  meta: appMeta,
   getIdentity: async () => (configured ? configured.getIdentity() : null),
   isEnabled: async () => (configured ? configured.isEnabled() : false),
   setEnabled: async (enabled) => configured?.setEnabled(enabled),

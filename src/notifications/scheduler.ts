@@ -227,3 +227,16 @@ export async function scheduleWalkEndedNotification(dogName: string | null): Pro
   log('WALK_ENDED_NOTIFICATION_SENT');
   return true;
 }
+
+/**
+ * A plain, immediate, calm notification (no deep link). Never asks for permission: returns false when it is not already
+ * granted. Used when the app needs to be opened for a moment (a walk that could not start its GPS service in the background).
+ */
+export async function scheduleInfoNotification(title: string, body: string): Promise<boolean> {
+  await ensureAndroidChannels();
+  const perm = await Notifications.getPermissionsAsync();
+  if (!perm.granted) return false;
+  await Notifications.scheduleNotificationAsync({ content: { title, body }, trigger: { channelId: WALK_ENDED_CHANNEL_ID } });
+  log('INFO_NOTIFICATION_SENT');
+  return true;
+}

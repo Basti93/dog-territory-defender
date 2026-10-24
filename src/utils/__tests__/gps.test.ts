@@ -1,19 +1,76 @@
-jest.mock('expo-location', () => ({ Accuracy: { High: 4 } }));
-jest.mock('expo-task-manager', () => ({ defineTask: jest.fn(), isTaskRegisteredAsync: jest.fn() }));
+import { AppState, Platform } from 'react-native';
+import * as Location from 'expo-location';
+
+import { describeError, getInitialLocation, startWatchingLocation, stopWatchingLocation } from '../gps';
+import { scheduleInfoNotification } from '../../notifications/scheduler';
+
+jest.mock('expo-location', () => ({
+  Accuracy: { High: 4, Highest: 5 },
+  ActivityType: { Fitness: 3 },
+  startLocationUpdatesAsync: jest.fn(),
+  hasStartedLocationUpdatesAsync: jest.fn().mockResolvedValue(true),
+  getCurrentPositionAsync: jest.fn(),
+  watchPositionAsync: jest.fn(),
+}));
+jest.mock('expo-task-manager', () => ({ defineTask: jest.fn(), isTaskRegisteredAsync: jest.fn().mockResolvedValue(false) }));
+jest.mock('../../notifications/scheduler', () => ({ scheduleInfoNotification: jest.fn().mockResolvedValue(true) }));
 jest.mock('../log', () => ({ log: jest.fn() }));
 
-import { isAccurateEnough } from '../gps';
+const location = Location as jest.Mocked<typeof Location>;
+const BACKGROUND_ERROR = new Error('Foreground service cannot be started when the application is in the background');
 
-describe('isAccurateEnough', () => {
-  it('accepts fixes at or under the 50m trail threshold (pocket fixes are 30-50m)', () => {
-    expect(isAccurateEnough(5)).toBe(true);
-    expect(isAccurateEnough(30)).toBe(true);
-    expect(isAccurateEnough(48)).toBe(true);
-    expect(isAccurateEnough(50)).toBe(true);
+describe('describeError', () => {
+  it('never produces [object Object]', () => {
+    expect(describeError(new Error('boom'))).toBe('Error: boom');
+    expect(describeError({ code: 'E_TASK', message: 'task failed' })).toBe('[E_TASK] task failed');
+    expect(describeError({ foo: 1 })).toBe('{"foo":1}');
+    expect(describeError('plain')).toBe('plain');
+  });
+});
+
+describe('a walk started while the app is in the background (Android)', () => {
+  let listener: ((state: string) => void) | null = null;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Platform.OS = 'android';
+    (AppState as { currentState: string }).currentState = 'background';
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, cb: (s: string) => void) => {
+      listener = cb;
+      return { remove: () => undefined };
+    }) as never);
+  });
+  afterEach(async () => {
+    await stopWatchingLocation();
+    jest.restoreAllMocks();
   });
 
-  it('rejects fixes worse than 50m', () => {
-    expect(isAccurateEnough(51)).toBe(false);
-    expect(isAccurateEnough(205)).toBe(false);
+  it('keeps the walk, asks calmly to open the app, and starts the task once the app is in front', async () => {
+    location.startLocationUpdatesAsync.mockRejectedValueOnce(BACKGROUND_ERROR);
+    expect(await startWatchingLocation(jest.fn())).toBe(true);
+    expect(scheduleInfoNotification).toHaveBeenCalledTimes(1);
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+
+    location.startLocationUpdatesAsync.mockResolvedValueOnce(undefined);
+    (AppState as { currentState: string }).currentState = 'active';
+    listener?.('active');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(location.startLocationUpdatesAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('still reports other start failures as failures', async () => {
+    location.startLocationUpdatesAsync.mockRejectedValueOnce(new Error('permission denied'));
+    location.watchPositionAsync.mockRejectedValueOnce(new Error('nope'));
+    expect(await startWatchingLocation(jest.fn())).toBe(false);
+  });
+});
+
+describe('getInitialLocation', () => {
+  const position = (ageMs: number) => ({ coords: { latitude: 1, longitude: 2, accuracy: 8 }, timestamp: Date.now() - ageMs });
+
+  it('asks again when the OS hands out a cached position', async () => {
+    location.getCurrentPositionAsync.mockResolvedValueOnce(position(120_000) as never).mockResolvedValueOnce(position(500) as never);
+    const fix = await getInitialLocation();
+    expect(location.getCurrentPositionAsync).toHaveBeenCalledTimes(2);
+    expect(Date.now() - (fix?.timestamp ?? 0)).toBeLessThan(5_000);
   });
 });

@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { EMPTY_SYNC_STATE, NewOutboxItem, OutboxItem, SyncRepository, SyncState } from './SyncRepository';
 
@@ -105,7 +106,7 @@ export function createSqliteSyncRepository(dbName: string = DEFAULT_DB_NAME): Sy
     },
     async clear() {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM sync_outbox');
         await db.runAsync('DELETE FROM sync_state');
       });

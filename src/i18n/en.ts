@@ -151,7 +151,7 @@ const en: Record<string, string> = {
   "viertel.stats.streets.other": "{count} streets",
   "viertel.stats.corners.one": "{count} corner",
   "viertel.stats.corners.other": "{count} corners",
-  "viertel.note.today": "stitched today",
+  "viertel.note.today": "you were here today",
   "viertel.note.wild": "time for a sniff",
   "viertel.note.explore": "room to explore",
   "viertel.territories": "Territories ›",
@@ -172,6 +172,9 @@ const en: Record<string, string> = {
   "world.buildingSign": "{name} · Lv\u00A0{level}",
   "world.buildingLabel": "{name}, level {level}",
   "world.panelClose": "Close",
+  "world.treatsPillLabel": "Treat counter: {count} of {cap}",
+  "world.treatsFull": "full",
+  "world.treatsRate": "+{rate}/h",
   "world.ratePerHour": "+{rate} per hour",
   "world.welcomeBack": "The bakery kept busy: +{n}",
   "world.nextEffect.storage": "→ room for {count}",
@@ -397,6 +400,7 @@ const en: Record<string, string> = {
 
   // ---- walk tracking notification (Android foreground service)
   "gps.trackingBody": "Tracking your walk…",
+  "gps.needsFrontBody": "Open the app for a moment and your walk keeps counting.",
   // ---- first-launch onboarding + permission primer
   "onboarding.card1.title": "The gate",
   "onboarding.card1.body": "Every walk starts at the gate, and your path is traced along the way.",
@@ -516,7 +520,7 @@ const en: Record<string, string> = {
 
   "homecoming.hint": "tap for the next moment",
   "homecoming.tapLabel": "Next moment",
-  "homecoming.stitching": "being stitched ...",
+  "homecoming.stitching": "drawing it in ...",
   "homecoming.partner.back": "{name} and {dog} are back.",
   "homecoming.number.territory": "First walk: {name}",
   "homecoming.number.streets.one": "+{count}",
@@ -533,14 +537,14 @@ const en: Record<string, string> = {
   "homecoming.pennantCaption": "Something to build",
   "homecoming.line.place.1": "The corner at {place} is really yours now.",
   "homecoming.line.place.2": "{when}, and {place} knows you now.",
-  "homecoming.line.place.3": "{place} has a new stitch in it. A {dog}-shaped one.",
+  "homecoming.line.place.3": "{place} has a new mark on it. A {dog}-shaped one.",
   "homecoming.line.place.4": "{when} at {place}: that goes in the memory box.",
   "homecoming.line.place.5": "{dog} is sure {place} smelled better than yesterday.",
   "homecoming.line.when.1": "{when}, and {dog} is home with a full nose.",
   "homecoming.line.when.2": "{when} is a good time for a walk. {dog} agrees.",
   "homecoming.line.when.3": "{dog} lies down like someone who earned it.",
   "homecoming.line.when.4": "The yard missed you both, a little.",
-  "homecoming.line.when.5": "{when}: stitched in, signed, sniffed.",
+  "homecoming.line.when.5": "{when}: drawn in, signed, sniffed.",
   // Live sharing (M4, opt-in): the Settings switch and the one-time question at the first walk start.
   "liveShare.partnerFallback": "your household",
   "liveShare.switch": "Share walks live",

@@ -677,7 +677,7 @@ describe('WorldScene partner presence', () => {
     await advance(16_000); // the next re-check after the 3 minutes
     expect(screen.queryByTestId('partner-sign')).toBeNull();
     await unmountAndExpectNoTimers(view);
-  });
+  }, 20_000); // minutes of fake time: slow under a full parallel run
 
   it('a fresh heartbeat keeps the sign up', async () => {
     const { view } = await setup();
@@ -687,7 +687,7 @@ describe('WorldScene partner presence', () => {
     await advance(100_000);
     expect(screen.getByTestId('partner-sign')).toBeOnTheScreen();
     await unmountAndExpectNoTimers(view);
-  });
+  }, 20_000);
 
   it('plays the mini homecoming: patch star, treats into the bowl, then her return line; one tap per beat, then hands back', async () => {
     const onDone = jest.fn();

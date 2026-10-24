@@ -109,6 +109,26 @@ describe('sampling of per-fix events', () => {
   });
 });
 
+describe('build info', () => {
+  it('stamps meta (appVersion, platform) into every entry payload', async () => {
+    const sent: LogUploadRequest[] = [];
+    const shipper = createLogShipper({
+      now: () => 1_000_000,
+      getIdentity: async () => IDENTITY,
+      isEnabled: async () => true,
+      setEnabled: async () => undefined,
+      send: async (_id, req) => {
+        sent.push(req);
+      },
+      initialSeq: 1,
+      meta: { appVersion: '0.2.0', platform: 'android' },
+    });
+    for (let i = 0; i < 25; i++) shipper.append('WALK_START', { id: 'w' }, 'active');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent[0].entries[0].payload).toEqual({ id: 'w', appVersion: '0.2.0', platform: 'android' });
+  });
+});
+
 describe('shipping', () => {
   it('flushes automatically at 25 pending entries, with consecutive seq numbers', async () => {
     const { sent, add, settle } = setup();
@@ -143,9 +163,14 @@ describe('shipping', () => {
   });
 
   it('splits big buffers into batches under the size limit', async () => {
-    const { shipper, sent, add } = setup();
+    const { shipper, sent, add, state } = setup();
     add(300, 'E', { pad: 'x'.repeat(900) }); // ~1 KB each, 300 KB total; the 25th entry already started a flush
     await new Promise((r) => setTimeout(r, 20));
+    expect(sent.length).toBe(SHIPPER_LIMITS.maxBatchesPerFlush); // one flush sends a few batches only
+    for (let i = 0; i < 10 && shipper.pendingCount() > 0; i++) {
+      state.now += 61_000;
+      await shipper.flush();
+    }
     expect(sent.length).toBeGreaterThan(4);
     for (const req of sent) {
       expect(JSON.stringify(req).length).toBeLessThanOrEqual(SHIPPER_LIMITS.maxBatchBytes);

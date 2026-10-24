@@ -12,7 +12,7 @@ import type { Walk } from '../types';
 export interface RestorableWalkSession {
   isBusy: () => boolean;
   resumeWalk: (walk: Walk, autoFinish: AutoFinishState) => Promise<boolean>;
-  finishRestoredWalk: (walk: Walk, endedBy: WalkEndedBy) => Promise<boolean>;
+  finishRestoredWalk: (walk: Walk, endedBy: WalkEndedBy, trimAfter?: number) => Promise<boolean>;
 }
 
 export interface WalkRestoreDeps {
@@ -82,7 +82,7 @@ export async function restoreActiveWalk(deps: Omit<WalkRestoreDeps, 'gate'>): Pr
   if (decision.kind === 'finish') {
     check('finish', true, walk.locations.length, ageMin);
     log('WALK_RESTORE_FINISHED', { id: walk.id, points: walk.locations.length, ageMin, reason: decision.reason });
-    return (await deps.session.finishRestoredWalk(walk, decision.endedBy)) ? 'finished' : 'skipped';
+    return (await deps.session.finishRestoredWalk(walk, decision.endedBy, decision.trimAfter)) ? 'finished' : 'skipped';
   }
   check('resume', true, walk.locations.length, ageMin);
   const resumed = await deps.session.resumeWalk(walk, decision.autoFinish);

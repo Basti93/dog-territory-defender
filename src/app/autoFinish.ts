@@ -1,3 +1,4 @@
+import type { Walk } from '../types';
 import { getDistance } from '../utils/geometry';
 import { PAINT_MAX_ACCURACY_M } from '../utils/grid';
 
@@ -135,4 +136,14 @@ export function homeCountdownMinutes(state: AutoFinishState, now: number): numbe
   const dwellLeft = HOME_DWELL_MS - (now - state.homeSince);
   const walkLeft = AUTO_FINISH_MIN_WALK_MS - (now - state.startedAt);
   return Math.max(1, Math.ceil(Math.max(dwellLeft, walkLeft) / 60000));
+}
+
+/**
+ * A walk that ended as "still": drops the fixes after the last moment it moved (`anchorAt`, the time the still clock
+ * started), so the idle tail does not stretch its duration or its stats. Keeps at least the first fix. Other endings
+ * (home, button, stale restore) are never trimmed.
+ */
+export function trimStillTail(walk: Walk, anchorAt: number): Walk {
+  const kept = walk.locations.filter((fix, i) => i === 0 || fix.timestamp <= anchorAt);
+  return kept.length === walk.locations.length ? walk : { ...walk, locations: kept };
 }

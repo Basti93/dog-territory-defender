@@ -14,7 +14,7 @@ export const RESTORE_MAX_AGE_MS = 3 * 60 * 60 * 1000;
 export type RestoreDecision =
   | { kind: 'resume'; autoFinish: AutoFinishState }
   /** Finish through the normal path. `endedBy` is what the walk record and the homecoming say. */
-  | { kind: 'finish'; endedBy: WalkEndedBy; reason: 'stale' | AutoFinishDecision }
+  | { kind: 'finish'; endedBy: WalkEndedBy; reason: 'stale' | AutoFinishDecision; trimAfter?: number }
   /** Nothing worth keeping: too little data and too old, or no movement (walkHasMovement). Dropped without a word. */
   | { kind: 'discard' };
 
@@ -62,7 +62,13 @@ export function decideWalkRestore(walk: Walk, now: number, autoFinishEnabled: bo
   if (replay.decision) {
     // The walk would have ended while the app was away; with no movement that means "never was a walk".
     if (!walkHasMovement(walk)) return { kind: 'discard' };
-    return { kind: 'finish', endedBy: replay.decision === 'home' ? 'auto-home' : 'auto-still', reason: replay.decision };
+    return {
+      kind: 'finish',
+      endedBy: replay.decision === 'home' ? 'auto-home' : 'auto-still',
+      reason: replay.decision,
+      // "Still" ends the walk where it stopped moving (autoFinish.ts trimStillTail).
+      ...(replay.decision === 'still' ? { trimAfter: replay.state.anchorAt } : {}),
+    };
   }
   return { kind: 'resume', autoFinish: replay.state };
 }

@@ -9,12 +9,12 @@ describe('live map HTML', () => {
   });
 
   it('applies the pastel filter on the tile images themselves, not the pane', () => {
-    expect(mapHTML).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*saturate\(0\.2\)/);
+    expect(mapHTML).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*saturate\(0\.75\)/);
     expect(mapHTML).not.toMatch(/\.leaflet-tile-pane\s*\{\s*filter/);
   });
 
   it('embedded band filters the tile layer, not each tile (no seam lines at fractional zoom); full map keeps per-tile', () => {
-    expect(mapHTMLEmbedded).toMatch(/\.leaflet-layer\s*\{\s*filter:\s*saturate\(0\.2\)/);
+    expect(mapHTMLEmbedded).toMatch(/\.leaflet-layer\s*\{\s*filter:\s*saturate\(0\.75\)/);
     expect(mapHTMLEmbedded).toMatch(/img\.leaflet-tile\s*\{\s*filter:\s*none/);
     expect(mapHTML).not.toMatch(/\.leaflet-layer\s*\{\s*filter/);
   });

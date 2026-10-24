@@ -79,7 +79,7 @@ export const API_LIMITS = {
   /** Device log shipping: entries per batch, serialized size per entry (bytes) and the per-device daily row cap. */
   maxLogEntriesPerBatch: 200,
   maxLogEntryBytes: 2048,
-  maxLogRowsPerDayPerDevice: 2000,
+  maxLogRowsPerDayPerDevice: 6000,
   /** Live presence: points kept per walk (the server simplifies down to this), points in one heartbeat, minimum gap between heartbeats per device. */
   maxPresencePoints: 400,
   maxPresencePointsPerBeat: 400,

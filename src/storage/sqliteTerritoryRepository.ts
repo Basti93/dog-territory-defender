@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { generateTerritoryId, IncrementTerritoryStatsInput, Territory, TerritoryId, TerritoryRepository } from './TerritoryRepository';
 
@@ -68,7 +69,7 @@ export function createSqliteTerritoryRepository(dbName: string = DEFAULT_DB_NAME
 
     async mergeTerritoryStats(survivorId: TerritoryId, absorbedId: TerritoryId): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         const absorbed = await db.getFirstAsync<TerritoryRow>('SELECT * FROM territories WHERE id = ?', absorbedId);
         if (!absorbed) return;
         await db.runAsync(
@@ -83,7 +84,7 @@ export function createSqliteTerritoryRepository(dbName: string = DEFAULT_DB_NAME
 
     async upsertTerritories(incoming: Territory[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const t of incoming) {
           await db.runAsync(
             `INSERT INTO territories (id, name, createdAt, walksHere, treatsEarnedHere) VALUES (?, ?, ?, ?, ?)
@@ -102,14 +103,14 @@ export function createSqliteTerritoryRepository(dbName: string = DEFAULT_DB_NAME
 
     async removeTerritories(ids: TerritoryId[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const id of ids) await db.runAsync('DELETE FROM territories WHERE id = ?', id);
       });
     },
 
     async replaceAll(territories: Territory[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM territories');
         for (const t of territories) {
           await db.runAsync(

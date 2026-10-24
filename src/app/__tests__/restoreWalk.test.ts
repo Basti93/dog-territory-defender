@@ -76,7 +76,8 @@ describe('decideWalkRestore', () => {
   it('finishes when the dog stood still for the still limit (fixes arrived the whole time)', () => {
     const fixes = [fixAt(0, 0), fixAt(100, 2 * MIN), ...standingFixes(100, 6, 26)];
     const decision = decideWalkRestore(walkOf(fixes), T0 + 27 * MIN, true);
-    expect(decision).toEqual({ kind: 'finish', endedBy: 'auto-still', reason: 'still' });
+    // trimAfter: where the dog stopped moving (the 100 m fix at 2 min), so the idle tail is cut off
+    expect(decision).toEqual({ kind: 'finish', endedBy: 'auto-still', reason: 'still', trimAfter: T0 + 2 * MIN });
   });
 
   it('never auto-finishes a fresh walk when auto-finish is switched off', () => {

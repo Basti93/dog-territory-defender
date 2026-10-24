@@ -47,7 +47,7 @@ describe('Viertel signs and notes follow the language', () => {
     await flush();
     await flush();
     expect(screen.getByText('1 street')).toBeOnTheScreen();
-    expect(notePosts().pop().payload.notes.map((n: { text: string }) => n.text)).toEqual(['stitched today']);
+    expect(notePosts().pop().payload.notes.map((n: { text: string }) => n.text)).toEqual(['you were here today']);
     const postsBefore = notePosts().length;
     const readsBefore = getCells.mock.calls.length;
 
@@ -59,7 +59,7 @@ describe('Viertel signs and notes follow the language', () => {
     expect(screen.getByText(t('viertel.territories'))).toBeOnTheScreen(); // 'Reviere ›'
     const posts = notePosts();
     expect(posts.length).toBe(postsBefore + 1); // re-posted on the locale change only
-    expect(posts.pop().payload.notes.map((n: { text: string }) => n.text)).toEqual(['heute genäht']);
+    expect(posts.pop().payload.notes.map((n: { text: string }) => n.text)).toEqual(['hier wart ihr heute']);
     expect(getCells.mock.calls.length).toBe(readsBefore); // the texts were rebuilt, nothing was loaded again
   });
 

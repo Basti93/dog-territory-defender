@@ -202,3 +202,36 @@ describe('useWalkSession restore', () => {
     expect(stored?.locations).toHaveLength(1);
   });
 });
+
+describe('useWalkSession fixes stored by the location task', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('replays them on the timer tick: still is detected while backgrounded and the idle tail is trimmed off', async () => {
+    jest.useFakeTimers({ now: Date.now() });
+    const start = Date.now() - 60 * 60_000; // the app has seen no fix for an hour, the store has
+    const moving = (i: number): Location => ({ latitude: 52 + i * 0.0003, longitude: 13, timestamp: start + 10_000 * i, accuracy: 5 });
+    const walk: Walk = { id: 'w1', startTime: start, startSource: 'button', closed: false, locations: [moving(0), moving(1), moving(2)] };
+    mocked.startWatchingLocation.mockResolvedValue(true);
+    const { result, repo } = await setup();
+    await repo.start({ id: 'w1', startTime: start, startSource: 'button' }, walk.locations);
+    await act(async () => {
+      await result.current.resumeWalk(walk, startAutoFinish(walk.locations[0], start, true));
+    });
+    expect(finishTrackedWalk).not.toHaveBeenCalled(); // a silent hour alone never ends the walk
+    // The task stored a fix every 30 s for 25 minutes, all at the spot where the dog stopped.
+    const standing = Array.from({ length: 50 }, (_, i) => ({ ...moving(2), timestamp: start + 30_000 + 30_000 * i }));
+    await repo.appendFixes('w1', standing);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(finishTrackedWalk).toHaveBeenCalledTimes(1);
+    const finished = (finishTrackedWalk as jest.Mock).mock.calls[0][0] as Walk;
+    expect(finished.endedBy).toBe('auto-still');
+    // 3 moving fixes + the first standing one (the moment it stopped); the rest of the 25 idle minutes is cut off.
+    expect(finished.locations).toHaveLength(4);
+    expect(finished.locations[3].timestamp).toBe(start + 30_000);
+  });
+});

@@ -4,6 +4,8 @@ import { AppState, PermissionsAndroid, Platform } from 'react-native';
 import { Location as LocationType } from '../types';
 import { log } from './log';
 import { t } from '../i18n';
+import { isStaleFix, STALE_FIX_MS } from './startFix';
+import { scheduleInfoNotification } from '../notifications/scheduler';
 
 const LOCATION_TASK_NAME = 'dog-territory-location-task';
 
@@ -17,6 +19,41 @@ const UNKNOWN_ACCURACY_M = 30;
 
 let currentSubscriber: ((location: LocationType) => void) | null = null;
 
+/**
+ * Errors from expo modules are often objects, not Error instances: String(error) then logs "[object Object]".
+ * Message first, plus code/name when there are any.
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    const code = (error as Error & { code?: unknown }).code;
+    return code !== undefined ? `${error.name}[${String(code)}]: ${error.message}` : `${error.name}: ${error.message}`;
+  }
+  if (error && typeof error === 'object') {
+    const { message, code, name } = error as { message?: unknown; code?: unknown; name?: unknown };
+    const parts = [name, code !== undefined ? `[${String(code)}]` : null, message].filter((p) => p !== undefined && p !== null);
+    if (parts.length > 0) return parts.join(' ');
+    try {
+      return JSON.stringify(error).slice(0, 300);
+    } catch {
+      return Object.prototype.toString.call(error);
+    }
+  }
+  return String(error);
+}
+
+// Android only lets a foreground service start while the app is in front. A walk started from the background (restore
+// after a headless relaunch, a late tap on a notification) must not die on that: the start stays pending, the walk goes
+// on, and the next time the app comes to the front the task is started again.
+let startPending = false;
+let appStateSubscription: { remove: () => void } | null = null;
+const DEFERRED_START_MAX_TRIES = 3;
+/** The exact expo-location refusal (Android): "Foreground service cannot be started when the application is in the background". */
+const FOREGROUND_SERVICE_BACKGROUND_ERROR = /foreground service cannot be started/i;
+
+export function isBackgroundStartError(error: unknown): boolean {
+  return FOREGROUND_SERVICE_BACKGROUND_ERROR.test(describeError(error));
+}
+
 // Foreground fallback: if the background task cannot start (or delivers
 // nothing), a plain watchPositionAsync keeps the walk tracked while the app is
 // open. Both sources feed deliver(), which drops duplicate timestamps.
@@ -24,6 +61,11 @@ const FALLBACK_AFTER_MS = 15000;
 let fallbackSubscription: Location.LocationSubscription | null = null;
 let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 let lastDeliveredTimestamp = 0;
+// When this runtime started the task (0 in a headless runtime that never did: nothing is judged stale there).
+let watchStartedAt = 0;
+// Only the start of a FRESH walk drops cached positions, and only until its first accepted fix. A resumed walk keeps every
+// fix (the OS buffers fixes from the suspended period; they belong to the walk and must reach the recorder).
+let staleFilterActive = false;
 
 // Live sharing (sync/presenceSender.ts) listens here, NOT through the walk session: the task callback below runs in
 // the app's own JS runtime even with the screen off, so every accepted fix reaches the observer synchronously, with no
@@ -49,16 +91,23 @@ function deliver(raw: LocationType): void {
   // 1 ms apart collapse into one (the second is dropped), and a zero time step can never reach the distance rule.
   const location = { ...raw, timestamp: Math.round(raw.timestamp) };
   if (location.timestamp <= lastDeliveredTimestamp) return;
+  if (staleFilterActive) {
+    if (location.timestamp < watchStartedAt - STALE_FIX_MS) {
+      log('GPS_FIX_STALE', { ageSec: Math.round((watchStartedAt - location.timestamp) / 1000) });
+      return;
+    }
+    staleFilterActive = false;
+  }
   lastDeliveredTimestamp = location.timestamp;
   try {
     fixRecorder?.(location);
   } catch (error) {
-    log('GPS_RECORDER_ERROR', { error: String(error) });
+    log('GPS_RECORDER_ERROR', { error: describeError(error) });
   }
   try {
     fixObserver?.(location);
   } catch (error) {
-    log('GPS_OBSERVER_ERROR', { error: String(error) });
+    log('GPS_OBSERVER_ERROR', { error: describeError(error) });
   }
   currentSubscriber?.(location);
 }
@@ -83,7 +132,7 @@ async function startForegroundFallback(reason: string): Promise<boolean> {
     log('GPS_FALLBACK_STARTED', { reason });
     return true;
   } catch (error) {
-    log('GPS_FALLBACK_ERROR', { error: String(error) });
+    log('GPS_FALLBACK_ERROR', { error: describeError(error) });
     return false;
   }
 }
@@ -112,7 +161,7 @@ function toLocationType(position: Location.LocationObject): LocationType {
 // fires while the app was relaunched headlessly by the OS.
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
-    log('GPS_TASK_ERROR', { error: String(error) });
+    log('GPS_TASK_ERROR', { error: describeError(error) });
     return;
   }
   const { locations } = data as { locations: Location.LocationObject[] };
@@ -168,38 +217,100 @@ export async function requestLocationPermission(): Promise<boolean> {
  * watchPositionAsync subscription. Callers keep the same callback-based API;
  * the task-manager plumbing is entirely internal.
  */
-export async function startWatchingLocation(callback: (location: LocationType) => void): Promise<boolean> {
+export async function startWatchingLocation(
+  callback: (location: LocationType) => void,
+  options: { fresh?: boolean } = {}
+): Promise<boolean> {
+  currentSubscriber = callback;
+  lastDeliveredTimestamp = 0;
+  watchStartedAt = Date.now();
+  staleFilterActive = options.fresh === true;
+  clearDeferredStart();
+  stopForegroundFallback();
   try {
-    currentSubscriber = callback;
-    lastDeliveredTimestamp = 0;
-    stopForegroundFallback();
-    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.High,
-      timeInterval: 1000,
-      distanceInterval: 2,
-      // iOS only (ignored on Android): keep updates flowing with the screen off, as a walk (not "other"), and show
-      // the system's blue background-location pill. Without pausesUpdatesAutomatically:false iOS stops the task
-      // when the dog stands still for a while and the partner's thread silently freezes.
-      activityType: Location.ActivityType.Fitness,
-      pausesUpdatesAutomatically: false,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'Tails Up',
-        notificationBody: t('gps.trackingBody'),
-        notificationColor: '#2ECC71',
-      },
-    });
-    log('GPS_WATCH_STARTED');
-    await logForegroundServiceState();
+    await startLocationTask();
     // Safety net: if the task delivers no accepted fix soon, also watch in the foreground.
     fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
     return true;
   } catch (error) {
     console.error('Error watching location:', error);
-    log('GPS_WATCH_ERROR', { error: String(error) });
+    log('GPS_WATCH_ERROR', { error: describeError(error), appState: AppState.currentState });
+    if (Platform.OS === 'android' && AppState.currentState !== 'active' && isBackgroundStartError(error)) {
+      // Not a failure of the walk: keep it, retry when the app is in front, and ask (once, calmly) to open the app.
+      deferStartUntilFront();
+      // If the task cannot start for good, the plain watcher still covers the time the app is open.
+      fallbackTimer = setTimeout(() => void startForegroundFallback('task-silent'), FALLBACK_AFTER_MS);
+      return true;
+    }
     const ok = await startForegroundFallback('task-start-failed');
     if (!ok) currentSubscriber = null;
     return ok;
+  }
+}
+
+async function startLocationTask(): Promise<void> {
+  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+    accuracy: Location.Accuracy.High,
+    timeInterval: 1000,
+    distanceInterval: 2,
+    // iOS only (ignored on Android): keep updates flowing with the screen off, as a walk (not "other"), and show
+    // the system's blue background-location pill. Without pausesUpdatesAutomatically:false iOS stops the task
+    // when the dog stands still for a while and the partner's thread silently freezes.
+    activityType: Location.ActivityType.Fitness,
+    pausesUpdatesAutomatically: false,
+    showsBackgroundLocationIndicator: true,
+    foregroundService: {
+      notificationTitle: 'Tails Up',
+      notificationBody: t('gps.trackingBody'),
+      notificationColor: '#2ECC71',
+      // Android: the service (and with it the process) stays up when the player swipes the app away from the recents.
+      killServiceOnDestroy: false,
+    },
+  });
+  log('GPS_WATCH_STARTED');
+  await logForegroundServiceState();
+}
+
+function clearDeferredStart(): void {
+  startPending = false;
+  appStateSubscription?.remove();
+  appStateSubscription = null;
+}
+
+function deferStartUntilFront(): void {
+  clearDeferredStart();
+  startPending = true;
+  log('GPS_WATCH_DEFERRED', { why: 'android-background-start' });
+  void notifyOpenApp();
+  let tries = 0;
+  let starting = false;
+  const tryStart = () => {
+    if (!startPending || !currentSubscriber || starting || AppState.currentState !== 'active') return;
+    starting = true;
+    tries++;
+    startLocationTask()
+      .then(() => {
+        log('GPS_WATCH_RESUMED_IN_FRONT', { tries });
+        clearDeferredStart();
+      })
+      .catch((error) => {
+        log('GPS_WATCH_ERROR', { error: describeError(error), appState: AppState.currentState, retry: tries });
+        starting = false;
+        if (tries >= DEFERRED_START_MAX_TRIES) {
+          clearDeferredStart();
+          void startForegroundFallback('deferred-start-failed');
+        }
+      });
+  };
+  appStateSubscription = AppState.addEventListener('change', tryStart);
+  tryStart(); // the app may have come to the front while the first start was failing
+}
+
+async function notifyOpenApp(): Promise<void> {
+  try {
+    await scheduleInfoNotification('Tails Up', t('gps.needsFrontBody'));
+  } catch (error) {
+    log('GPS_OPEN_APP_NOTIFY_ERROR', { error: describeError(error) });
   }
 }
 
@@ -223,6 +334,7 @@ async function logForegroundServiceState(): Promise<void> {
 
 export async function stopWatchingLocation(): Promise<void> {
   currentSubscriber = null;
+  clearDeferredStart();
   stopForegroundFallback();
   const isRunning = await TaskManager.isTaskRegisteredAsync(LOCATION_TASK_NAME);
   if (isRunning) {
@@ -233,14 +345,17 @@ export async function stopWatchingLocation(): Promise<void> {
 
 export async function getInitialLocation(): Promise<LocationType | null> {
   try {
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
+    let position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    // iOS may answer with a cached position (all iPhone walks showed a ~200 m jump after the first fix). Ask once more.
+    if ((isStaleFix(toLocationType(position), Date.now()) || (position.coords.accuracy ?? 0) > MAX_ACCEPTABLE_ACCURACY_M)) {
+      log('GPS_INITIAL_FIX_STALE', { ageSec: Math.round((Date.now() - position.timestamp) / 1000), accuracy: position.coords.accuracy ?? null });
+      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+    }
     log('GPS_INITIAL_FIX', { lat: position.coords.latitude, lon: position.coords.longitude });
     return toLocationType(position);
   } catch (error) {
     console.error('Error getting initial location:', error);
-    log('GPS_INITIAL_FIX_ERROR', { error: String(error) });
+    log('GPS_INITIAL_FIX_ERROR', { error: describeError(error) });
     return null;
   }
 }

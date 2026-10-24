@@ -61,17 +61,17 @@ describe('POST /v1/logs', () => {
     expect((await post(body)).json()).toEqual({ stored: 2 });
   });
 
-  it('caps a device at 2000 rows per day with 429 daily_cap, and frees up a day later', async () => {
-    for (let i = 0; i < 10; i++) expect((await post(batch(i * 200, 200))).statusCode).toBe(200);
-    const over = await post(batch(5000, 1));
+  it('caps a device at 6000 rows per day with 429 daily_cap, and frees up a day later', async () => {
+    for (let i = 0; i < 30; i++) expect((await post(batch(i * 200, 200))).statusCode).toBe(200);
+    const over = await post(batch(50000, 1));
     expect(over.statusCode).toBe(429);
     expect(over.json()).toEqual({ error: 'daily_cap' });
     s.setNow(NOW + 25 * 3600_000);
-    expect((await post(batch(5000, 1))).statusCode).toBe(200);
+    expect((await post(batch(50000, 1))).statusCode).toBe(200);
   });
 
-  it('limits a device to 30 requests per 10 minutes', async () => {
-    for (let i = 0; i < 30; i++) expect((await post(batch(i, 1))).statusCode).toBe(200);
+  it('limits a device to 60 requests per 10 minutes', async () => {
+    for (let i = 0; i < 60; i++) expect((await post(batch(i, 1))).statusCode).toBe(200);
     expect((await post(batch(100, 1))).statusCode).toBe(429);
     s.setNow(NOW + 11 * 60_000);
     expect((await post(batch(100, 1))).statusCode).toBe(200);

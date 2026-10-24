@@ -8,6 +8,7 @@ import {
   homeCountdownMinutes,
   startAutoFinish,
   STILL_MS,
+  trimStillTail,
 } from '../autoFinish';
 
 // 0.001 deg latitude is about 111 m.
@@ -165,5 +166,25 @@ describe('homeCountdownMinutes', () => {
     expect(homeCountdownMinutes(state, 14 * MIN_MS)).toBe(3);
     expect(homeCountdownMinutes(state, 16.5 * MIN_MS)).toBe(1);
     expect(homeCountdownMinutes(state, 18 * MIN_MS)).toBe(1);
+  });
+});
+
+describe('trimStillTail', () => {
+  const walk = (stamps: number[]) => ({
+    id: 'w',
+    startTime: 0,
+    closed: false,
+    startSource: 'button' as const,
+    locations: stamps.map((t) => ({ latitude: 52, longitude: 13, timestamp: t, accuracy: 5 })),
+  });
+
+  it('drops the fixes after the moment the dog stopped moving', () => {
+    expect(trimStillTail(walk([0, 10, 20, 30, 40]), 20).locations.map((l) => l.timestamp)).toEqual([0, 10, 20]);
+  });
+
+  it('keeps the first fix even when the anchor is before it, and returns the same walk when nothing is cut', () => {
+    expect(trimStillTail(walk([5, 10]), 1).locations.map((l) => l.timestamp)).toEqual([5]);
+    const full = walk([0, 10]);
+    expect(trimStillTail(full, 100)).toBe(full);
   });
 });

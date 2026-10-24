@@ -4,8 +4,9 @@ import * as Location from 'expo-location';
 import { play } from '../feedback/sounds';
 import { createWalkCueTracker } from '../feedback/walkCues';
 import { AppState, Location as WalkLocation, Walk } from '../types';
+import { isStaleFix } from '../utils/startFix';
 import { getInitialLocation, requestLocationPermission, startWatchingLocation, stopWatchingLocation } from '../utils/gps';
-import { cellKey, MIN_CELLS_FOR_REWARD } from '../utils/grid';
+import { cellKey, MIN_CELLS_FOR_REWARD, PAINT_MAX_ACCURACY_M } from '../utils/grid';
 import { walkHasMovement } from '../utils/geometry';
 import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { log } from '../utils/log';
@@ -21,13 +22,16 @@ import {
   AutoFinishState,
   evaluateAutoFinish,
   homeCountdownMinutes,
+  GPS_GAP_MS,
   startAutoFinish,
+  trimStillTail,
   WalkEndedBy,
 } from './autoFinish';
 import { notifyAutoFinishedIfBackgrounded } from './autoFinishNotify';
 import { applyLocationToCues, createWalkCueState, resumeWalkCueState, startWalkCueState } from './walkSessionHelpers';
 import type { ActiveWalkRecorder } from './activeWalkRecorder';
 import { mergeNewerFixes } from './restoreWalk';
+import { appendStoredFixes } from './storedFixes';
 
 /** How long the GPS-gap note stays on the live map once the app is in front. */
 const GPS_GAP_NOTE_SHOWN_MS = 20_000;
@@ -72,7 +76,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   // True only while a finish is actually running (finishingRef also stays true after a finished walk until the next reset).
   // Cancel is refused then: a finish that already started saves the walk, so a late "Verwerfen" must not claim otherwise.
   const finishInFlightRef = useRef(false);
-  const finishRef = useRef<(endedBy?: WalkEndedBy) => Promise<FinishOutcome>>(async () => 'ignored');
+  const finishRef = useRef<(endedBy?: WalkEndedBy, trimAfter?: number) => Promise<FinishOutcome>>(async () => 'ignored');
   const [autoFinishEnabled, setAutoFinishEnabled] = useState(false);
   const [homeCountdownMin, setHomeCountdownMin] = useState<number | null>(null);
 
@@ -87,10 +91,11 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   };
 
   /** Run one evaluation (fix or timer tick); finishes the walk when the rules say so. */
-  const runAutoFinish = (fix: { latitude: number; longitude: number; accuracy?: number } | null) => {
+  // `now` is the moment the fix counts as arrived: the wall clock for live fixes, the fix's own timestamp when fixes the
+  // background task stored are replayed (so a gap or a still stretch is measured on the phone's real timeline).
+  const runAutoFinish = (fix: { latitude: number; longitude: number; accuracy?: number } | null, now: number = Date.now()) => {
     const current = autoFinishRef.current;
     if (!current || !walkRef.current || finishingRef.current) return;
-    const now = Date.now();
     const result = evaluateAutoFinish(current, fix, now);
     autoFinishRef.current = result.state;
     setHomeCountdownMin(homeCountdownMinutes(result.state, now));
@@ -115,10 +120,51 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const runAutoFinishRef = useRef(runAutoFinish);
   runAutoFinishRef.current = runAutoFinish;
 
+  /**
+   * Fixes the location task stored while this JS side saw nothing (another runtime, a frozen app) are in the active-walk
+   * store, not in memory. Takes them over and replays them through the auto-finish rules on their own timestamps, so the
+   * gap log is true and "still" works while backgrounded. Only looks when memory has been quiet for a GPS gap (or on
+   * coming back to the front), because the load reads the whole stored walk.
+   */
+  const syncStoredFixes = async (force: boolean) => {
+    const current = walkRef.current;
+    const auto = autoFinishRef.current;
+    if (!activeWalk || !current || !auto || finishingRef.current) return;
+    if (!force && Date.now() - auto.lastFixAt < GPS_GAP_MS) return;
+    try {
+      const snapshot = await activeWalk.load();
+      const latest = walkRef.current;
+      if (!snapshot || !latest || snapshot.meta.id !== latest.id || finishingRef.current) return;
+      const { walk: merged, added } = appendStoredFixes(latest, snapshot.locations);
+      if (added.length === 0) return;
+      walkRef.current = merged;
+      setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: merged } : prev));
+      log('WALK_FIXES_FROM_STORE', { id: merged.id, count: added.length });
+      // Only fixes newer than what auto-finish has already seen are replayed; older ones (a live fix arrived while the
+      // store was being read) just join the trail.
+      const seenUntil = autoFinishRef.current?.lastFixAt ?? Number.POSITIVE_INFINITY;
+      for (const fix of added.filter((f) => f.timestamp > seenUntil)) {
+        walkCueState.last = fix.accuracy <= PAINT_MAX_ACCURACY_M ? fix : walkCueState.last;
+        runAutoFinishRef.current(fix, fix.timestamp);
+        if (finishingRef.current) return;
+      }
+    } catch (error) {
+      log('WALK_STORE_SYNC_ERROR', { error: String(error) });
+    }
+  };
+  const tickRef = useRef(async (force: boolean) => {
+    await syncStoredFixes(force);
+    runAutoFinishRef.current(null);
+  });
+  tickRef.current = async (force: boolean) => {
+    await syncStoredFixes(force);
+    runAutoFinishRef.current(null);
+  };
+
   // Timer tick: GPS may stop delivering while the phone lies still.
   useEffect(() => {
     if (!appState.isTracking) return;
-    const timer = setInterval(() => runAutoFinishRef.current(null), AUTO_FINISH_TICK_MS);
+    const timer = setInterval(() => void tickRef.current(false), AUTO_FINISH_TICK_MS);
     return () => clearInterval(timer);
   }, [appState.isTracking]);
 
@@ -127,7 +173,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   useEffect(() => {
     const subscription = RNAppState.addEventListener('change', (next) => {
       setAppInFront(next === 'active');
-      if (next === 'active') runAutoFinishRef.current(null);
+      if (next === 'active') void tickRef.current(true);
     });
     return () => subscription.remove();
   }, []);
@@ -171,6 +217,21 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       if (cue) play(cue);
       const current = walkRef.current;
       if (!current) return;
+      // The start point itself was stale or rough (iOS hands out a cached position): the first real fix replaces it,
+      // so the walk never opens with a jump from where the phone was some minutes ago.
+      if (current.locations.length === 1 && isStaleFix(current.locations[0], current.startTime) && !isStaleFix(location, current.startTime)) {
+        const fresh = { ...current, locations: [location] };
+        walkRef.current = fresh;
+        const enabled = autoFinishRef.current?.enabled ?? true;
+        autoFinishRef.current = startAutoFinish(location, current.startTime, enabled);
+        const range = walkCueState.range;
+        startWalkCueState(walkCueState, location);
+        walkCueState.range = range;
+        void activeWalk?.begin(fresh);
+        log('WALK_START_FIX_REPLACED', { id: current.id });
+        setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: fresh } : prev));
+        return;
+      }
       walkRef.current = { ...current, locations: [...current.locations, location] };
       const next = walkRef.current;
       setAppState((prev) => (prev.walk || prev.isTracking ? { ...prev, walk: next } : prev));
@@ -225,7 +286,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       setAutoFinishEnabled(autoEnabled);
       setHomeCountdownMin(null);
       await activeWalk?.begin(newWalk); // before the watcher: the first stored fix must find the walk row
-      const watching = await startWatchingLocation(makeFixHandler());
+      const watching = await startWatchingLocation(makeFixHandler(), { fresh: true });
       if (!watching) {
         // Previously swallowed: the walk then "tracked" with only its first point.
         log('WALK_WATCH_FAILED', { id: newWalk.id });
@@ -267,24 +328,27 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     }
   };
 
-  const runFinish = async (endedBy?: WalkEndedBy): Promise<FinishOutcome> => {
+  const runFinish = async (endedBy?: WalkEndedBy, trimAfter?: number): Promise<FinishOutcome> => {
     if (finishingRef.current) return 'ignored';
     finishInFlightRef.current = true;
     try {
-      return await runFinishSteps(endedBy);
+      return await runFinishSteps(endedBy, trimAfter);
     } finally {
       finishInFlightRef.current = false;
     }
   };
 
-  const runFinishSteps = async (endedBy?: WalkEndedBy): Promise<FinishOutcome> => {
+  const runFinishSteps = async (endedBy?: WalkEndedBy, trimAfter?: number): Promise<FinishOutcome> => {
     finishingRef.current = true;
+    // "Still" ends a walk at the moment it stopped moving: the idle tail (up to 20 min and more) is not part of it.
+    const stillSince = endedBy === 'auto-still' ? (trimAfter ?? autoFinishRef.current?.anchorAt) : undefined;
     autoFinishRef.current = null;
     setHomeCountdownMin(null);
     resetGapState();
     await stopWatchingLocation();
 
-    const walkToFinish = walkRef.current && endedBy ? { ...walkRef.current, endedBy } : walkRef.current;
+    const endedWalk = walkRef.current && endedBy ? { ...walkRef.current, endedBy } : walkRef.current;
+    const walkToFinish = endedWalk && stillSince !== undefined ? trimStillTail(endedWalk, stillSince) : endedWalk;
     if (!walkToFinish) {
       setAppState((prev) => ({ ...prev, isTracking: false }));
       void activeWalk?.end();
@@ -407,13 +471,13 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
    * Cold-start restore of a walk that is over (stale, or the auto-finish rules say so): the normal finish path
    * (stops the task, saves once, rewards once, celebration), then the session is reset for the next walk.
    */
-  const finishRestoredWalk = async (restored: Walk, endedBy: WalkEndedBy): Promise<boolean> => {
+  const finishRestoredWalk = async (restored: Walk, endedBy: WalkEndedBy, trimAfter?: number): Promise<boolean> => {
     if (walkRef.current || startingRef.current) return false;
     walkRef.current = restored;
     walkCueState.active = false;
     finishingRef.current = false;
     try {
-      await runFinish(endedBy);
+      await runFinish(endedBy, trimAfter);
     } finally {
       walkRef.current = null;
       setAppState({ walk: null, isTracking: false, error: null });

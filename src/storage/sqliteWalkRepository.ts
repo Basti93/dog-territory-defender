@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { Walk } from '../types';
 import { StoredWalk, WalkRepository } from './WalkRepository';
@@ -102,7 +103,7 @@ export function createSqliteWalkRepository(dbName: string = DEFAULT_DB_NAME): Wa
 
     async replaceAll(walks: Walk[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM walks');
         for (const walk of walks) {
           await db.runAsync(

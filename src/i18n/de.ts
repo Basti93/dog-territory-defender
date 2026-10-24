@@ -165,7 +165,7 @@ const de: Record<string, string> = {
   "viertel.stats.streets.other": "{count} Straßen",
   "viertel.stats.corners.one": "{count} Ecke",
   "viertel.stats.corners.other": "{count} Ecken",
-  "viertel.note.today": "heute genäht",
+  "viertel.note.today": "hier wart ihr heute",
   "viertel.note.wild": "Zeit zum Schnuppern",
   "viertel.note.explore": "Platz zum Entdecken",
   "viertel.territories": "Reviere ›",
@@ -186,6 +186,9 @@ const de: Record<string, string> = {
   "world.buildingSign": "{name} · Lv\u00A0{level}",
   "world.buildingLabel": "{name}, Stufe {level}",
   "world.panelClose": "Schließen",
+  "world.treatsPillLabel": "Leckerlis-Zähler: {count} von {cap}",
+  "world.treatsFull": "voll",
+  "world.treatsRate": "+{rate}/Std.",
   "world.ratePerHour": "+{rate} pro Stunde",
   "world.welcomeBack": "Die Bäckerei war fleißig: +{n}",
   "world.nextEffect.storage": "→ Platz für {count}",
@@ -411,6 +414,7 @@ const de: Record<string, string> = {
 
   // ---- walk tracking notification (Android foreground service)
   "gps.trackingBody": "Eure Gassirunde läuft…",
+  "gps.needsFrontBody": "Öffne die App kurz, dann zählt eure Runde weiter mit.",
   // ---- first-launch onboarding + permission primer
   "onboarding.card1.title": "Das Tor",
   "onboarding.card1.body": "Hinter dem Tor beginnt jede Runde. Euer Weg wird dabei aufgezeichnet.",
@@ -530,7 +534,7 @@ const de: Record<string, string> = {
 
   "homecoming.hint": "tippen für den nächsten Moment",
   "homecoming.tapLabel": "Nächster Moment",
-  "homecoming.stitching": "wird genäht ...",
+  "homecoming.stitching": "wird eingezeichnet ...",
   "homecoming.partner.back": "{name} und {dog} sind zurück.",
   "homecoming.number.territory": "Erste Runde: {name}",
   "homecoming.number.streets.one": "+{count}",
@@ -554,7 +558,7 @@ const de: Record<string, string> = {
   "homecoming.line.when.2": "{when} ist ein guter Zeitpunkt für eine Runde, findet {dog}.",
   "homecoming.line.when.3": "{dog} legt sich hin wie jemand, der es sich verdient hat.",
   "homecoming.line.when.4": "Der Hof hat euch beide ein bisschen vermisst.",
-  "homecoming.line.when.5": "{when}: eingenäht, unterschrieben, beschnuppert.",
+  "homecoming.line.when.5": "{when}: eingezeichnet, unterschrieben, beschnuppert.",
   // Live teilen (M4, Opt-in): Schalter in den Einstellungen und die einmalige Frage beim ersten Rundenstart.
   "liveShare.partnerFallback": "dein Haushalt",
   "liveShare.switch": "Runde live teilen",

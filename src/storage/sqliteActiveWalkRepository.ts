@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import type { Location } from '../types';
 import type { ActiveWalkRepository, ActiveWalkSnapshot } from './ActiveWalkRepository';
@@ -51,7 +52,7 @@ export function createSqliteActiveWalkRepository(dbName: string = DEFAULT_DB_NAM
   return {
     async start(meta, locations) {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM active_walk_fixes');
         await db.runAsync(
           'INSERT OR REPLACE INTO active_walk (slot, id, startTime, startSource) VALUES (?, ?, ?, ?)',
@@ -67,7 +68,7 @@ export function createSqliteActiveWalkRepository(dbName: string = DEFAULT_DB_NAM
     async appendFixes(walkId, fixes) {
       if (fixes.length === 0) return;
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         const active = await db.getFirstAsync<{ id: string }>('SELECT id FROM active_walk WHERE slot = ?', SINGLE_ROW);
         if (!active || active.id !== walkId) return;
         const newest = await db.getFirstAsync<{ newest: number | null }>(
@@ -102,7 +103,7 @@ export function createSqliteActiveWalkRepository(dbName: string = DEFAULT_DB_NAM
 
     async clear() {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM active_walk_fixes');
         await db.runAsync('DELETE FROM active_walk');
       });

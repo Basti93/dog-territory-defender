@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { runInTransaction } from './dbLock';
 
 import { AchievementId, defaultPersonalStatsState, PersonalStatsState } from '../economy/personalStats';
 import { PersonalStatsRepository, UnlockedAchievement } from './PersonalStatsRepository';
@@ -115,7 +116,7 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
 
     async replaceUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         await db.runAsync('DELETE FROM achievements');
         for (const a of list) {
           await db.runAsync('INSERT OR REPLACE INTO achievements (id, unlockedAt) VALUES (?, ?)', a.id, a.unlockedAt);
@@ -126,7 +127,7 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
     async mergeUnlockedAchievements(list: UnlockedAchievement[]): Promise<void> {
       if (list.length === 0) return;
       const db = await dbPromise;
-      await db.withTransactionAsync(async () => {
+      await runInTransaction(db, async () => {
         for (const a of list) {
           await db.runAsync(
             'INSERT INTO achievements (id, unlockedAt) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET unlockedAt = MIN(unlockedAt, excluded.unlockedAt)',

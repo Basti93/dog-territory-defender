@@ -104,8 +104,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
   });
 
   const deviceLimiter = new FixedWindowLimiter(config.limits.devicePerMin, 60_000);
-  // Log shipping: 30 requests / 10 min per device (the daily row cap lives in ingestLogs).
-  const logLimiter = new FixedWindowLimiter(30, 10 * 60_000);
+  // Log shipping: 60 requests / 10 min per device (the daily row cap lives in ingestLogs).
+  const logLimiter = new FixedWindowLimiter(60, 10 * 60_000);
   // Live presence heartbeats: 1 request / 10 s per device (the closing `ended` heartbeat is exempt, see the route).
   const presenceLimiter = new FixedWindowLimiter(1, API_LIMITS.presenceMinIntervalMs);
   const joinDayLimiter = new FixedWindowLimiter(config.limits.joinPerDayPerIp, 24 * 3600_000);

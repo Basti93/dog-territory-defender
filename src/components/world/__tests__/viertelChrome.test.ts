@@ -28,7 +28,7 @@ describe('statsSignParts', () => {
 });
 
 describe('pickViertelNotes', () => {
-  it('puts "heute genäht" at the cell painted most recently today, below it', () => {
+  it('puts "hier wart ihr heute" at the cell painted most recently today, below it', () => {
     const cells = [cell(10, 10, NOW - 30 * HOUR), cell(11, 10, NOW - 5 * HOUR), cell(12, 10, NOW - 1 * HOUR)];
     const [lat, lon] = cellCentre(12, 10);
     expect(pickViertelNotes({ cells, wildSpot: null, now: NOW })).toEqual([{ text: t('viertel.note.today'), lat, lon, anchor: 'below' }]);

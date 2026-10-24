@@ -33,15 +33,15 @@ export const MATERIAL = {
 } as const;
 
 /**
- * Quiet cream map: wash the HOT tiles toward grey-cream so blocks land near
- * MATERIAL.blockCream, streets stay near white and labels stay readable.
+ * Soft spring map: keep the HOT greens, blues and paths recognisable but gentle,
+ * so the felt patches on top stay readable.
  * Used as CSS on img.leaflet-tile and (where supported) as canvas ctx.filter.
  */
-export const MAP_TILE_FILTER = 'saturate(0.2) sepia(0.2) brightness(1.16) contrast(0.8)';
+export const MAP_TILE_FILTER = 'saturate(0.75) sepia(0.08) brightness(1.05) contrast(0.92)';
 export const MAP_TINT_COLOR = MATERIAL.linen;
-export const MAP_TINT_ALPHA = 0.35;
+export const MAP_TINT_ALPHA = 0.15;
 /** Linen weave "paper" over the tiles, under the patches. */
-export const MAP_PAPER_ALPHA = 0.3;
+export const MAP_PAPER_ALPHA = 0.15;
 const LINEN_WEAVE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="6" height="6"><rect width="6" height="6" fill="${MATERIAL.linen}"/><path d="M0 3 H6 M3 0 V6" stroke="${MATERIAL.linenThread}" stroke-width="1"/></svg>`;
 
 /** Trampelpfad: walked routes as a worn dirt path with paw stamps (live trail + walk portrait). */
