@@ -77,6 +77,13 @@ describe('autoFinishEnabled (in-memory)', () => {
     expect(await repo.getLiveShareEnabled()).toBe(false);
   });
 
+  it('dog photo consent is off by default and round-trips', async () => {
+    const repo = createInMemorySettingsRepository();
+    expect(await repo.getDogPhotoConsent()).toBe(false);
+    await repo.saveDogPhotoConsent(true);
+    expect(await repo.getDogPhotoConsent()).toBe(true);
+  });
+
   it('shown partner walk ids default to [], round-trip and drop junk', async () => {
     const repo = createInMemorySettingsRepository();
     expect(await repo.getShownPartnerWalkIds()).toEqual([]);

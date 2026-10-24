@@ -35,6 +35,11 @@ export interface Walk {
    */
   newGroundCellIds?: string[];
   /**
+   * Neighbour dogs (archetype ids: momo, pfote, bruno, keks, lotte, nebel; at most 3) that were out while this walk ran.
+   * Server-derived and filled in from the upload response or a pull; absent on old walks and when none were met.
+   */
+  metNeighbourIds?: string[];
+  /**
    * Treats earned by this walk, written via a second `saveWalk` patch right
    * after `awardWalkRewards` resolves (see docs/decisions/walk-portrait.md
    * design.md Decision 5). Undefined for a walk that never qualified for a

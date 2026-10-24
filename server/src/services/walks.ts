@@ -23,6 +23,7 @@ import type { Db } from '../db/client';
 import { cells, households, territories, walks } from '../db/schema';
 import { applyPassiveAccrual, awardWalkTreats, awardWalkXp, dailyRewardMultiplier } from '../economy/denTransitions';
 import { dayKeyInZone, sameLocalDay } from '../lib/time';
+import { metNeighbourIds } from '../neighbours/met';
 import { onHostWalkAccepted } from '../neighbours/reactions';
 import { paintCells } from './cellPaint';
 import { appendEvent, currentSeq, type EventBus } from './events';
@@ -68,6 +69,7 @@ export async function ingestWalk(
           walkId: existing.id,
           duplicate: true,
           reward: existing.reward as WalkReward,
+          metNeighbourIds: (existing.metNeighbourIds ?? []) as string[],
           den: denFromRow(denRow),
           serverTime: now,
           seq: await currentSeq(dbx, hid),
@@ -386,6 +388,9 @@ export async function ingestWalk(
       ...(isManual ? { routeRefreshed: refreshRoute !== null } : {}),
     };
 
+    // Tracked walks only: a handwritten log has no moment to have met anyone in.
+    const met = isManual || req.locations.length === 0 ? [] : await metNeighbourIds(dbx, config, hid, req.startTime, req.locations[req.locations.length - 1].timestamp);
+
     const [stored] = await dbx
       .insert(walks)
       .values({
@@ -397,6 +402,7 @@ export async function ingestWalk(
         route: req.locations,
         closed: qualifies,
         newGroundCellIds: Array.from(newGround),
+        metNeighbourIds: met,
         treatsEarned: qualifies ? treatsEarned : null,
         reward,
         createdAt: new Date(now), // the quota queries compare created_at with `now`; the DB clock would break tests with a fixed clock
@@ -432,7 +438,7 @@ export async function ingestWalk(
 
     return {
       kind: 'ok',
-      response: { walkId: req.id, duplicate: false, reward, den: denApi, serverTime: now, seq: await currentSeq(dbx, hid) },
+      response: { walkId: req.id, duplicate: false, reward, metNeighbourIds: met, den: denApi, serverTime: now, seq: await currentSeq(dbx, hid) },
     };
   });
 

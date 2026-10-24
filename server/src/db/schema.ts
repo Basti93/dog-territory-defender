@@ -109,6 +109,8 @@ export const walks = pgTable(
     route: jsonb('route').notNull(),
     closed: boolean('closed').notNull(),
     newGroundCellIds: jsonb('new_ground_cell_ids').notNull().default([]),
+    /** Archetype ids (momo..nebel) of the neighbour dogs out at the same time as this walk, at most 3. Derived at upload. */
+    metNeighbourIds: jsonb('met_neighbour_ids').notNull().default([]),
     treatsEarned: integer('treats_earned'),
     reward: jsonb('reward').notNull(), // stored result, returned verbatim on re-upload
     /** Track B: written by the neighbour generator. Every human-facing query also filters on this. */

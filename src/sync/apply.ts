@@ -127,6 +127,10 @@ export async function applyServerDenState(
   return merged;
 }
 
+function sameIds(a: readonly string[] | undefined, b: readonly string[]): boolean {
+  return !!a && a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 function toLocalWalk(full: ApiWalkFull, playerName: string | undefined): Walk {
   return {
     id: full.id,
@@ -135,6 +139,7 @@ function toLocalWalk(full: ApiWalkFull, playerName: string | undefined): Walk {
     closed: full.closed,
     startSource: full.startSource,
     newGroundCellIds: full.newGroundCellIds,
+    ...(full.metNeighbourIds?.length ? { metNeighbourIds: full.metNeighbourIds } : {}),
     ...(full.treatsEarned !== null ? { treatsEarned: full.treatsEarned } : {}),
     playerId: full.playerId,
     ...(playerName ? { playerName } : {}),
@@ -178,6 +183,9 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
           manual: full.startSource === 'manual-log',
         });
       }
+    } else if (meta.metNeighbourIds?.length && !sameIds(existing.metNeighbourIds, meta.metNeighbourIds)) {
+      const { syncedAt: _syncedAt, ...walk } = existing;
+      await repos.walks.saveWalk({ ...walk, metNeighbourIds: meta.metNeighbourIds });
     }
     // The server has it either way (we sent it, or it sent it to us).
     if (!existing || existing.syncedAt === null) await repos.walks.markSynced(meta.id, ctx.now);

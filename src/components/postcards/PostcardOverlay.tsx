@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import type { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { useBackAction } from '../../app/backStack';
 import { dogDisplayName } from '../../economy/denEconomy';
 import { cornerNameForWalk, daypartPhrase, territoryNameForWalk, type PostcardEntry } from '../../postcards/postcards';
@@ -15,6 +16,7 @@ interface PostcardOverlayProps {
   entry: PostcardEntry;
   favourite: boolean;
   dogName: string | null;
+  buddyAppearance?: BuddyAppearance;
   homeRangeRepository: HomeRangeRepository;
   territoryRepository?: TerritoryRepository;
   /** "Unsere Ecken": a walk through a named corner is postmarked with its name. Omitted = territory names only. */
@@ -30,7 +32,7 @@ const MAX_CARD_W = 440;
  * One card, big, over the Album. Android back (and the iOS edge swipe) turn a flipped card face-up first, then close it.
  * Holds the only WebView of the Album, mounted while a tracked card is open.
  */
-export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository, territoryRepository, cornerRepository, onClose, onRemove }: PostcardOverlayProps) {
+export function PostcardOverlay({ entry, favourite, dogName, buddyAppearance, homeRangeRepository, territoryRepository, cornerRepository, onClose, onRemove }: PostcardOverlayProps) {
   const { width } = useWindowDimensions();
   const [side, setSide] = useState<PostcardSide>('front');
   const [territoryName, setTerritoryName] = useState<string | null>(null);
@@ -84,6 +86,7 @@ export function PostcardOverlay({ entry, favourite, dogName, homeRangeRepository
             territoryName={territoryName}
             cornerName={cornerName}
             favourite={favourite}
+            buddyAppearance={buddyAppearance}
           />
           {twoSided && <Text style={[textStyle('hand'), styles.hint]}>{t('album.flipHint')}</Text>}
         </View>

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
+import type { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { postcardWords, type PostcardEntry } from '../../postcards/postcards';
 import type { HomeRangeRepository } from '../../storage/HomeRangeRepository';
 import { material } from '../../ui';
 import { t } from '../../i18n';
 import { PostcardBack } from './PostcardBack';
+import { PostcardCompany } from './PostcardCompany';
 import { PostcardMap } from './PostcardMap';
 import { POSTCARD_ASPECT } from './PostcardThumb';
 
@@ -28,6 +30,8 @@ interface PostcardCardProps {
   /** The corner the walk ran through (its name replaces the territory on the postmark), or null. */
   cornerName?: string | null;
   favourite: boolean;
+  /** Our dog's look: it stands on the front of the card with the neighbours met. Omitted = no dogs on the card. */
+  buddyAppearance?: BuddyAppearance;
 }
 
 /**
@@ -36,7 +40,7 @@ interface PostcardCardProps {
  * while the back is up (no reload when it turns again); the back is just paper and text, covering it.
  * A handwritten card (a logged walk) is the writing side only and does not turn.
  */
-export function PostcardCard({ entry, width, side, onFlip, homeRangeRepository, dog, territoryName, cornerName, favourite }: PostcardCardProps) {
+export function PostcardCard({ entry, width, side, onFlip, homeRangeRepository, dog, territoryName, cornerName, favourite, buddyAppearance }: PostcardCardProps) {
   const height = Math.round(width * POSTCARD_ASPECT);
   const twoSided = entry.kind === 'tracked';
   const words = postcardWords(entry, { dog, territoryName, cornerName });
@@ -81,6 +85,7 @@ export function PostcardCard({ entry, width, side, onFlip, homeRangeRepository, 
           {twoSided && (
             <View style={styles.picture} testID="postcard-front">
               <PostcardMap walk={entry.walk} homeRangeRepository={homeRangeRepository} />
+              {buddyAppearance && <PostcardCompany appearance={buddyAppearance} metIds={entry.facts.metNeighbours} cardWidth={width} />}
             </View>
           )}
           {shown === 'back' && (

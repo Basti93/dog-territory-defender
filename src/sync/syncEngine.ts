@@ -21,6 +21,7 @@ import type { WalkRepository } from '../storage/WalkRepository';
 import { cleanCornerName } from '../utils/cornerName';
 import { parseCornerId } from '../utils/cornerDetection';
 import { log } from '../utils/log';
+import { resultFromError, resultFromResponse, type DogPhotoResult } from '../dogPhoto/dogPhoto';
 import { ApiClient, ApiError, createApiClient, normalizeBaseUrl } from './apiClient';
 import type { ApiCorner, ApiDenState, CommandBody, CommandErrorCode, ImportRequest, SnapshotResponse, WalkUploadRequest } from './apiContract';
 import { API_LIMITS } from './apiContract';
@@ -112,6 +113,8 @@ export interface SyncEngine extends NeighbourhoodActions {
   enqueueCommand(command: CommandBody): Promise<void>;
   /** The player picked a new look (already saved locally): queues `appearance.set` for the household (no-op when not joined). */
   enqueueAppearance(appearance: BuddyAppearance): Promise<void>;
+  /** Dog photos (base64 JPEG) -> a proposed look from the server. Not joined = `unavailable`. Photos are only sent, never kept. */
+  analyzeDogPhotos(photos: string[]): Promise<DogPhotoResult>;
   /** Queues a finished tracked walk or a manual log for upload (no-op when not joined). */
   enqueueWalk(walk: Walk, territoryNameHint: string | null): Promise<void>;
   /**
@@ -265,6 +268,14 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
           lastDen = response.den;
           await noteServerTime(response.serverTime);
           await deps.walks.markSynced(request.id, now());
+          if (response.metNeighbourIds?.length) {
+            // The server works out who was out on the walk; the postcard shows them.
+            const local = await deps.walks.getWalk(request.id);
+            if (local) {
+              const { syncedAt: _syncedAt, ...walk } = local;
+              await deps.walks.saveWalk({ ...walk, metNeighbourIds: response.metNeighbourIds });
+            }
+          }
         } else {
           const response = await client.command({ clientId: item.id, command: item.payload as CommandBody });
           lastDen = response.den;
@@ -664,6 +675,16 @@ export function createSyncEngine(deps: SyncEngineDeps): SyncEngine {
       await enqueueWalkUpload(deps.sync, walk, territoryNameHint, now());
       notify();
       void syncNow();
+    },
+
+    async analyzeDogPhotos(photos) {
+      const identity = await deps.settings.getSyncIdentity();
+      if (!identity) return { kind: 'unavailable' };
+      try {
+        return resultFromResponse(await makeClient(identity.serverUrl, identity.token).analyzeDog({ photos }));
+      } catch (err) {
+        return resultFromError(err);
+      }
     },
 
     async enqueueAppearance(appearance) {

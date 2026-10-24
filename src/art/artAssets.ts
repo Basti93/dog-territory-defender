@@ -5,6 +5,7 @@ import type { StickDogId } from '../economy/sticks';
 // Registry of pre-rendered 3D sprites (see docs/decisions/buddy-comes-alive.md, Decision 12).
 // Generation checklist: assets/art/README.md.
 
+export type NeighbourPose = 'sit' | 'trot';
 export type BuildingId = 'doghouse' | 'bakery' | 'garden';
 export type BuildingLevel = 1 | 2 | 3 | 4 | 5;
 export const BUILDING_LEVELS: readonly BuildingLevel[] = [1, 2, 3, 4, 5];
@@ -56,7 +57,9 @@ export type ArtKey =
   | 'prop-lightbulb'
   | 'prop-question'
   // Stock-Regal: one stick per neighbour dog.
-  | `stick-${StickDogId}`;
+  | `stick-${StickDogId}`
+  // Neighbour-dog portraits for postcards (Blender, scripts/blender/neighbour_portraits.py).
+  | `dog-${StickDogId}-${NeighbourPose}`;
 
 export function buildingArt(building: BuildingId, level: BuildingLevel): ArtKey {
   return `${building}-${level}`;
@@ -141,6 +144,18 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'stick-keks': require('../../assets/art/stick-keks.png'),
   'stick-lotte': require('../../assets/art/stick-lotte.png'),
   'stick-nebel': require('../../assets/art/stick-nebel.png'),
+  'dog-momo-sit': require('../../assets/art/dog-momo-sit.png'),
+  'dog-momo-trot': require('../../assets/art/dog-momo-trot.png'),
+  'dog-pfote-sit': require('../../assets/art/dog-pfote-sit.png'),
+  'dog-pfote-trot': require('../../assets/art/dog-pfote-trot.png'),
+  'dog-bruno-sit': require('../../assets/art/dog-bruno-sit.png'),
+  'dog-bruno-trot': require('../../assets/art/dog-bruno-trot.png'),
+  'dog-keks-sit': require('../../assets/art/dog-keks-sit.png'),
+  'dog-keks-trot': require('../../assets/art/dog-keks-trot.png'),
+  'dog-lotte-sit': require('../../assets/art/dog-lotte-sit.png'),
+  'dog-lotte-trot': require('../../assets/art/dog-lotte-trot.png'),
+  'dog-nebel-sit': require('../../assets/art/dog-nebel-sit.png'),
+  'dog-nebel-trot': require('../../assets/art/dog-nebel-trot.png'),
 };
 
 export function hasArt(key: ArtKey): boolean {

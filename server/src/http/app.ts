@@ -11,6 +11,8 @@ import type {
   JoinRequest,
   LogUploadRequest,
   CoopWeekResponse,
+  DogAnalyzeRequest,
+  DogAnalyzeResponse,
   GiftsResponse,
   NearbyResponse,
   PresenceResponse,
@@ -36,11 +38,14 @@ import { importHousehold } from '../services/importSeed';
 import { pullPresenceLongPoll, recordPresence } from '../services/presence';
 import { putMyStats } from '../services/stats';
 import { getWalk, ingestWalk, type AuthCtx } from '../services/walks';
+import { analyzeDogPhotos } from '../vision/visionClient';
+import { AnalysisUsage } from '../vision/usage';
 import { DeviceTokenAuthenticator, type Authenticator } from './auth';
 import { IpBanList } from './ipBan';
 import { normalizeImport, normalizeLogUpload, normalizeMyStats, normalizePresence, normalizeWalkUpload } from './clientTimes';
 import {
   CommandSchema,
+  DogAnalyzeSchema,
   GiftOpenBodySchema,
   GiftParamsSchema,
   ImportSchema,
@@ -68,11 +73,17 @@ export interface AppDeps {
   logger?: false;
   authenticator?: Authenticator;
   now?: () => number;
+  /** Tests: the fetch used for the Gemini call (default: global fetch). */
+  visionFetch?: typeof fetch;
+  /** Tests: capture log lines (only used when `logger` is not false). */
+  logStream?: { write(msg: string): void };
 }
 
 const UNAUTHORIZED: ApiError = { error: 'unauthorized' };
 const WALK_BODY_LIMIT = 1024 * 1024;
 const IMPORT_BODY_LIMIT = 5 * 1024 * 1024;
+// Up to 5 base64 JPEGs; the app sends ~200 KB each, 5 MB is the ceiling.
+const ANALYZE_BODY_LIMIT = 5 * 1024 * 1024;
 
 function isPublic(method: string, path: string): boolean {
   return (method === 'GET' && path === API_PATHS.healthz) || (method === 'POST' && path === API_PATHS.join);
@@ -92,8 +103,9 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
         ? false
         : {
             level: config.logLevel,
+            stream: deps.logStream,
             redact: {
-              paths: ['req.headers.authorization', 'headers.authorization', '*.token', '*.code', '*.locations', '*.route', '*.points'],
+              paths: ['req.headers.authorization', 'headers.authorization', '*.token', '*.code', '*.locations', '*.route', '*.points', '*.photos'],
               censor: '[redacted]',
             },
           },
@@ -110,6 +122,8 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
   // Live presence heartbeats: 1 request / 10 s per device (the closing `ended` heartbeat is exempt, see the route).
   const presenceLimiter = new FixedWindowLimiter(1, API_LIMITS.presenceMinIntervalMs);
   const joinDayLimiter = new FixedWindowLimiter(config.limits.joinPerDayPerIp, 24 * 3600_000);
+  const analysisUsage = new AnalysisUsage(config.vision);
+  const vision = config.vision;
   const joinHourGlobal = new FixedWindowLimiter(config.limits.joinPerHourGlobal, 3600_000);
 
   // Fastify ships a default text/plain parser; this API is JSON only (415 for everything else).
@@ -274,6 +288,36 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
       return result.response;
     }
   );
+
+  // Dog photo look: photos live in this request's memory only. They are never stored, and neither the body nor any
+  // part of it is logged (request logging is off, the access line has route + status only, the error handler logs
+  // name + message). A household uses at most perHouseholdPerDay / perHouseholdPerMonth analyses, and the whole
+  // server stops at GEMINI_MONTHLY_CAP_USD; the app then falls back to the manual picker (calm codes, no scolding).
+  app.post(API_PATHS.dogAnalyze, { schema: { body: DogAnalyzeSchema }, bodyLimit: ANALYZE_BODY_LIMIT }, async (req, reply): Promise<DogAnalyzeResponse> => {
+    if (!vision.apiKey || !vision.baseUrl) return reply.code(503).send({ error: 'analysis_unavailable' } satisfies ApiError) as never;
+    const { photos } = req.body as DogAnalyzeRequest;
+    // JPEG magic bytes (FF D8 FF => base64 "/9j/"): refuse anything else before it costs money.
+    if (!photos.every((p) => p.startsWith('/9j/') && /^[A-Za-z0-9+/]+={0,2}$/.test(p))) {
+      return reply.code(400).send({ error: 'bad_request' } satisfies ApiError) as never;
+    }
+    const t = now();
+    const householdId = req.auth!.householdId;
+    if (analysisUsage.reserve(householdId, t) !== 'ok') {
+      return reply.code(429).send({ error: 'analysis_limit' } satisfies ApiError) as never;
+    }
+    const outcome = await analyzeDogPhotos(photos, { baseUrl: vision.baseUrl, apiKey: vision.apiKey, model: vision.model, fetchImpl: deps.visionFetch });
+    if (outcome.kind === 'failed') {
+      analysisUsage.release(householdId, t);
+      req.log.warn({ providerStatus: outcome.status ?? null, photoCount: photos.length }, 'dog-analyze-failed');
+      return reply.code(502).send({ error: 'analysis_failed' } satisfies ApiError) as never;
+    }
+    const spent = outcome.usage
+      ? (outcome.usage.inputTokens * vision.inputUsdPerMTokens + outcome.usage.outputTokens * vision.outputUsdPerMTokens) / 1_000_000
+      : vision.flatCostUsd;
+    analysisUsage.settle(t, spent);
+    if (outcome.kind === 'no-dog') return reply.code(422).send({ error: 'analysis_no_dog' } satisfies ApiError) as never;
+    return { appearance: outcome.appearance as unknown as Record<string, unknown>, confidence: outcome.confidence };
+  });
 
   app.post(API_PATHS.logs, { schema: { body: LogUploadSchema }, bodyLimit: 64 * 1024 }, async (req, reply) => {
     const t = now();

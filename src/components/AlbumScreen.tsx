@@ -116,6 +116,7 @@ export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeReposito
           entry={open}
           favourite={open.id === favouriteId}
           dogName={dogName}
+          buddyAppearance={buddyAppearance}
           homeRangeRepository={homeRangeRepository}
           territoryRepository={territoryRepository}
           cornerRepository={cornerRepository}

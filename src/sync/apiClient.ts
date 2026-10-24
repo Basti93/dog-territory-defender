@@ -13,6 +13,8 @@ import {
   CommandRequest,
   CommandResponse,
   CoopWeekResponse,
+  DogAnalyzeRequest,
+  DogAnalyzeResponse,
   GiftsResponse,
   NearbyResponse,
   PresenceResponse,
@@ -80,6 +82,8 @@ export interface ApiClient {
   coopWeek(): Promise<CoopWeekResponse>;
   /** Uploads the FULL personal stats; the answer is the server's merged state. A 404 (`client` error) means the server predates this. */
   putMyStats(request: ApiMyStats): Promise<ApiMyStats>;
+  /** Dog photos -> proposed look. Slow (a vision model): own 45 s timeout. Never retried or queued. */
+  analyzeDog(request: DogAnalyzeRequest): Promise<DogAnalyzeResponse>;
   /** Device diagnostics batch (log shipping). */
   uploadLogs(request: LogUploadRequest): Promise<LogUploadResponse>;
   /** Live-walk heartbeat (M4). Ephemeral: callers never queue or retry it. */
@@ -171,6 +175,7 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     openGift: (giftId, clientId) => request<CommandResponse>('POST', giftOpenPath(giftId), { clientId }),
     coopWeek: () => request<CoopWeekResponse>('GET', API_PATHS.coopWeek),
     putMyStats: (req) => request<ApiMyStats>('PUT', API_PATHS.meStats, req),
+    analyzeDog: (req) => request<DogAnalyzeResponse>('POST', API_PATHS.dogAnalyze, req, { timeoutMs: 45_000 }),
     uploadLogs: (req) => request<LogUploadResponse>('POST', API_PATHS.logs, req),
     sendPresence: (req) => request<PresenceUpdateResponse>('POST', API_PATHS.presence, req),
     presence: ({ after, waitSeconds = 0, signal } = {}) => {

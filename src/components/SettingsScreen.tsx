@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Modal, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
@@ -25,6 +25,8 @@ import { LogShippingSwitch } from './LogShippingSwitch';
 import { isRestoreAllowed } from '../sync/restoreGuard';
 import type { SyncEngine } from '../sync/syncEngine';
 import { useSyncStatus } from '../sync/useSyncStatus';
+import type { DogPhotoPort } from '../dogPhoto/dogPhoto';
+import { pickDogPhotos } from '../dogPhoto/photoPicker';
 
 // This app's first Settings screen (docs/decisions/walk-reminder.md
 // Decision 1) — exists for exactly one feature today, the opt-in daily walk
@@ -95,6 +97,25 @@ export function SettingsScreen({
   const [aboutStatus, setAboutStatus] = useState<string | null>(null);
   useLocale(); // re-render when the language switches
   const syncStatus = useSyncStatus(syncEngine);
+  // The photo step needs a joined household (the analysis runs on our server); without it the picker is the manual one.
+  // A server without vision set up answers `unavailable` once; the entry then stays hidden until the app restarts.
+  const [photoUnavailable, setPhotoUnavailable] = useState(false);
+  const dogPhoto = useMemo<DogPhotoPort | undefined>(
+    () =>
+      syncEngine && settingsRepository && syncStatus?.joined && !photoUnavailable
+        ? {
+            pick: pickDogPhotos,
+            analyze: async (photos) => {
+              const result = await syncEngine.analyzeDogPhotos(photos);
+              if (result.kind === 'unavailable') setPhotoUnavailable(true);
+              return result;
+            },
+            hasConsent: () => settingsRepository.getDogPhotoConsent(),
+            giveConsent: () => settingsRepository.saveDogPhotoConsent(true),
+          }
+        : undefined,
+    [syncEngine, settingsRepository, syncStatus?.joined, photoUnavailable]
+  );
   // Restoring an old file over live synced state would fork the household's history.
   // Until the status has loaded, an engine-equipped screen keeps Restore off rather than flash it on.
   const restoreAllowed = !syncEngine || (syncStatus !== null && isRestoreAllowed(syncStatus.joined));
@@ -247,6 +268,7 @@ export function SettingsScreen({
           name={dogDisplayName(dogName)}
           initial={buddyAppearance}
           topInset={0}
+          dogPhoto={dogPhoto}
           onSave={async (look) => {
             await onSaveAppearance(look);
             setEditingLook(false);

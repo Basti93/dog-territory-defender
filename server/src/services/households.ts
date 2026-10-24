@@ -230,6 +230,7 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
       startSource: walks.startSource,
       closed: walks.closed,
       newGroundCellIds: walks.newGroundCellIds,
+      metNeighbourIds: walks.metNeighbourIds,
       treatsEarned: walks.treatsEarned,
       reward: walks.reward,
       deletedAt: walks.deletedAt,

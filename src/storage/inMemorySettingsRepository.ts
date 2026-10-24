@@ -12,6 +12,7 @@ export function createInMemorySettingsRepository(): SettingsRepository {
   let liveShareEnabled = false;
   let liveSharePromptShown = false;
   let batteryHintShown = false;
+  let dogPhotoConsent = false;
   let incomeBeatShown: { day: string; rate: number } | null = null;
   let shownPartnerWalkIds: string[] = [];
   return {
@@ -56,6 +57,12 @@ export function createInMemorySettingsRepository(): SettingsRepository {
     },
     async saveLiveShareEnabled(enabled) {
       liveShareEnabled = enabled === true;
+    },
+    async getDogPhotoConsent() {
+      return dogPhotoConsent;
+    },
+    async saveDogPhotoConsent(consent) {
+      dogPhotoConsent = consent === true;
     },
     async getBatteryHintShown() {
       return batteryHintShown;

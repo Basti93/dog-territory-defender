@@ -27,6 +27,8 @@ import {
   softenToClay,
 } from '../../buddy/buddyAppearance';
 import { PICKER_STEPS, PickerStep } from '../../buddy/pickerSteps';
+import type { DogPhotoPort } from '../../dogPhoto/dogPhoto';
+import { DogPhotoStep } from './DogPhotoStep';
 import { BuddyAvatar } from './BuddyAvatar';
 import { material, PressableScale, radii, spacing, TextLink, textStyle, WoodSign } from '../../ui';
 import { t } from '../../i18n';
@@ -40,6 +42,11 @@ export interface BuddyAppearancePickerProps {
   onDone?: (appearance: BuddyAppearance) => void;
   /** When given, a Skip button is shown. Caller decides what skipping saves. */
   onSkip?: () => void;
+  /**
+   * Optional "start from photos" step before the coat step (camera/gallery -> server analysis -> proposal).
+   * Omitted = no photo step and the picker is exactly the manual one.
+   */
+  dogPhoto?: DogPhotoPort;
   /** Extra space above the content, for callers with no header of their own. Default 0. */
   topInset?: number;
 }
@@ -167,10 +174,16 @@ export function BuddyAppearancePicker({
   onSave,
   onDone,
   onSkip,
+  dogPhoto,
   topInset = 0,
 }: BuddyAppearancePickerProps) {
   const [look, setLook] = useState<BuddyAppearance>(initial ?? defaultBuddyAppearance());
   const [stepIndex, setStepIndex] = useState(0);
+  // 'photo' = the optional photo step, 'proposal' = "does this look like {name}?", 'steps' = the manual picker.
+  // Frozen at mount: the parent may drop the port mid-flow (server without vision), which must not blank the step.
+  const [photoPort] = useState(dogPhoto);
+  const [phase, setPhase] = useState<'photo' | 'proposal' | 'steps'>(dogPhoto ? 'photo' : 'steps');
+  const [analyzing, setAnalyzing] = useState(false);
   const step = STEPS[stepIndex];
   const isLast = step === 'done';
 
@@ -206,9 +219,41 @@ export function BuddyAppearancePicker({
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.previewCard}>
-        <BuddyAvatar appearance={look} size={170} mood="idle" name={name} showCaption />
+        <BuddyAvatar appearance={look} size={170} mood={analyzing ? 'curious' : 'idle'} name={name} showCaption />
       </View>
 
+      {phase === 'photo' && photoPort && (
+        <DogPhotoStep
+          name={name}
+          port={photoPort}
+          onAnalyzing={setAnalyzing}
+          onManual={() => setPhase('steps')}
+          onResult={(proposal) => {
+            setLook(proposal);
+            setPhase('proposal');
+          }}
+        />
+      )}
+      {phase === 'proposal' && (
+        <View style={styles.furBox}>
+          <Text style={[textStyle('sign'), styles.caption]}>{t('buddy.photo.result', { name })}</Text>
+          <WoodSign size="wide" onPress={finish} style={styles.primaryCentered}>
+            {t('buddy.photo.yes')}
+          </WoodSign>
+          <View style={styles.footer}>
+            <TextLink
+              label={t('buddy.photo.tweak')}
+              onPress={() => {
+                // Fell and Form are pre-filled by the proposal's fur block.
+                setStepIndex(STEPS.indexOf('fur'));
+                setPhase('steps');
+              }}
+            />
+          </View>
+        </View>
+      )}
+      {phase === 'steps' && (
+      <>
       <Text style={[textStyle('sign'), styles.caption]}>{stepCaption(step, name)}</Text>
 
       {step === 'coat' && (
@@ -364,6 +409,8 @@ export function BuddyAppearancePicker({
         )}
         {onSkip && <TextLink label={t('buddy.skip')} onPress={onSkip} />}
       </View>
+      </>
+      )}
     </ScrollView>
   );
 }
@@ -454,6 +501,7 @@ const styles = StyleSheet.create({
   },
   dotFill: { width: 30, height: 30, borderRadius: radii.pill, borderWidth: 1, borderColor: material.woodRim },
   primary: { marginTop: spacing.xl, minWidth: 200 },
+  primaryCentered: { alignSelf: 'center', marginTop: spacing.md, minWidth: 200 },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',

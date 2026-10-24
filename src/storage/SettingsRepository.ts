@@ -53,6 +53,9 @@ export interface SettingsRepository {
   /** Android only: the one-time "keep walks running in the pocket" battery hint was shown. False until then. */
   getBatteryHintShown(): Promise<boolean>;
   saveBatteryHintShown(shown: boolean): Promise<void>;
+  /** The player agreed that dog photos are sent to our server and Google Gemini (EU) for analysis. False until then. */
+  getDogPhotoConsent(): Promise<boolean>;
+  saveDogPhotoConsent(consent: boolean): Promise<void>;
   /** Ids of partner walks whose mini homecoming already played (newest last, capped by the caller). Returns [] when nothing saved. */
   getShownPartnerWalkIds(): Promise<string[]>;
   saveShownPartnerWalkIds(ids: string[]): Promise<void>;

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tails Up",
     "slug": "dog-territory-defender",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "sdkVersion": "54.0.0",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": [
@@ -68,6 +68,15 @@
           "color": "#2ECC71"
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Tails Up darf die Kamera benutzen, damit du ein Foto von deinem Hund machen kannst. Das Foto wird nicht gespeichert. / Tails Up can use the camera so you can take a photo of your dog. The photo is not stored.",
+          "photosPermission": "Tails Up darf auf deine Fotos zugreifen, damit du Bilder von deinem Hund auswählen kannst. / Tails Up can read your photos so you can pick pictures of your dog.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-image-manipulator",
       [
         "expo-audio",
         {

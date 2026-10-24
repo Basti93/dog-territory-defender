@@ -45,6 +45,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     if (!columns.some((c) => c.name === 'batteryHintShown')) {
       await db.execAsync('ALTER TABLE app_settings ADD COLUMN batteryHintShown INTEGER NOT NULL DEFAULT 0');
     }
+    if (!columns.some((c) => c.name === 'dogPhotoConsent')) {
+      await db.execAsync('ALTER TABLE app_settings ADD COLUMN dogPhotoConsent INTEGER NOT NULL DEFAULT 0');
+    }
     if (!columns.some((c) => c.name === 'shownPartnerWalks')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN shownPartnerWalks TEXT NOT NULL DEFAULT '[]'");
     }
@@ -225,6 +228,22 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET batteryHintShown = excluded.batteryHintShown`,
         SINGLETON_ID,
         shown ? 1 : 0
+      );
+    },
+
+    async getDogPhotoConsent(): Promise<boolean> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ dogPhotoConsent: number }>('SELECT dogPhotoConsent FROM app_settings WHERE id = ?', SINGLETON_ID);
+      return row?.dogPhotoConsent === 1;
+    },
+
+    async saveDogPhotoConsent(consent: boolean): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, dogPhotoConsent) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET dogPhotoConsent = excluded.dogPhotoConsent`,
+        SINGLETON_ID,
+        consent ? 1 : 0
       );
     },
 

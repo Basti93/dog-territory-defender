@@ -61,6 +61,7 @@ export const walkMetaFromRow = (r: Omit<typeof walks.$inferSelect, 'route' | 'ge
   startSource: r.startSource as 'button' | 'manual-log',
   closed: r.closed,
   newGroundCellIds: (r.newGroundCellIds ?? []) as string[],
+  ...(Array.isArray(r.metNeighbourIds) && r.metNeighbourIds.length > 0 ? { metNeighbourIds: r.metNeighbourIds as string[] } : {}),
   treatsEarned: r.treatsEarned,
   deleted: r.deletedAt !== null,
 });

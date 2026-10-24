@@ -42,6 +42,12 @@ services:
       MIN_CLIENT_API_LEVEL: ${MIN_CLIENT_API_LEVEL:-1}
       NEIGHBOURS_ENABLED: ${NEIGHBOURS_ENABLED:-true}
       OVERPASS_URL: ${OVERPASS_URL:-}
+      # Hundefoto-Analyse (POST /v1/dog/analyze) ueber den LiteLLM-Proxy. Ohne Key antwortet die Route 503 analysis_unavailable.
+      # Erreichbar nur mit docker-compose.litellm.yml (siehe .env.example: COMPOSE_FILE).
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm:4000}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      DTD_VISION_MODEL: ${DTD_VISION_MODEL:-small}
+      GEMINI_MONTHLY_CAP_USD: ${GEMINI_MONTHLY_CAP_USD:-10}
     ports:
       - "127.0.0.1:7000:7000"
     mem_limit: 384m

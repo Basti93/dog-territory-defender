@@ -1,0 +1,1 @@
+ALTER TABLE "walks" ADD COLUMN "met_neighbour_ids" jsonb DEFAULT '[]'::jsonb NOT NULL;

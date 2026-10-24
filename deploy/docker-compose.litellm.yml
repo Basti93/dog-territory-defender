@@ -1,0 +1,11 @@
+# Override: haengt den api-Dienst zusaetzlich in das Netz des LiteLLM-Proxys.
+# Aktivieren: in .env `COMPOSE_FILE=docker-compose.yml:docker-compose.litellm.yml` (Compose liest das selbst, auch fuer make).
+# Das externe Netz muss existieren (laeuft der Proxy-Stack?), sonst bricht `up` ab; darum ist es kein Teil der Basisdatei.
+services:
+  api:
+    networks: [default, tga]
+
+networks:
+  tga:
+    name: ${LITELLM_NETWORK:-litellm-stack_default}
+    external: true

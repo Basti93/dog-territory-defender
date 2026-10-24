@@ -8,6 +8,7 @@ import { cornerDisplayName } from '../utils/cornerName';
 import { cornersTouchedBy, resolveCorners } from '../utils/cornerDetection';
 import { NEW_GROUND_MIN_CELLS, cellKey, paintedCells, streetsKnown } from '../utils/grid';
 import type { StoredCorner } from '../storage/CornerRepository';
+import { metNeighboursOf, neighbourName } from './company';
 import { displayTerritoryName } from '../utils/territoryDisplayName';
 
 // Postcards on the bench (redesign step 5). Nothing is stored: every finished walk that went somewhere IS a postcard,
@@ -48,6 +49,8 @@ export interface PostcardFacts {
   /** Started on a Saturday or Sunday (local time). */
   weekend: boolean;
   daypart: Daypart;
+  /** Neighbour dogs met on the walk (archetype ids, at most 3, known dogs only); empty for none and for old walks. */
+  metNeighbours: string[];
 }
 
 /** A very short walk gets its own cosy lines ("kurz, aber voller Gerüche"). */
@@ -87,7 +90,7 @@ export function postcardForWalk(walk: StoredWalk, territories: readonly Territor
       startTime: walk.startTime,
       distanceMeters: 0,
       newStreets: 0,
-      facts: { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: isWeekend(walk.startTime), daypart },
+      facts: { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: isWeekend(walk.startTime), daypart, metNeighbours: [] },
     };
   }
   if (!walkHasMovement(walk)) return null;
@@ -110,6 +113,7 @@ export function postcardForWalk(walk: StoredWalk, territories: readonly Territor
       shortWalk: distanceMeters < SHORT_WALK_KM * 1000,
       weekend: isWeekend(walk.startTime),
       daypart,
+      metNeighbours: metNeighboursOf(walk),
     },
   };
 }
@@ -164,6 +168,7 @@ export const LINE_POOL_SIZES = {
   weekend: 6,
   short: 6,
   corner: 6,
+  met: 6,
 } as const;
 type LinePool = keyof typeof LINE_POOL_SIZES;
 
@@ -189,6 +194,7 @@ export function pickBuddyLineKey(entry: { id: string; kind: PostcardEntry['kind'
   if (facts.firstPlace) specials.push('firstPlace');
   if (facts.longWalk) specials.push('long');
   if (facts.shortWalk) specials.push('short');
+  if (facts.metNeighbours.length > 0) specials.push('met');
   if (opts.cornerTouched) specials.push('corner');
   if (facts.weekend) specials.push('weekend');
   if (facts.daypart === 'morning' || facts.daypart === 'forenoon') specials.push('morning');
@@ -222,7 +228,7 @@ export function postcardWords(entry: PostcardEntry, opts: { dog: string; territo
     when: handwritten ? formatDate(entry.startTime, { weekday: 'long' }) : daypartPhrase(entry.startTime),
     distance: handwritten ? null : formatDistanceKm(entry.distanceMeters / 1000, 1),
     streets: newStreetsPhrase(entry.newStreets),
-    buddyLine: t(pickBuddyLineKey(entry, { cornerTouched: !handwritten && !!opts.cornerName })),
+    buddyLine: t(pickBuddyLineKey(entry, { cornerTouched: !handwritten && !!opts.cornerName }), { name: neighbourName(entry.facts.metNeighbours[0]) }),
     signature: t('postcard.signature', { dog: opts.dog }),
     postmark: handwritten ? t('postcard.postmark.manual') : opts.cornerName ?? opts.territoryName ?? t('postcard.postmark.fallback'),
   };

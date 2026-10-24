@@ -71,6 +71,13 @@
       "when": 1792844069797,
       "tag": "0009_dog_appearance_rev",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792846056022,
+      "tag": "0010_walk_met_neighbours",
+      "breakpoints": true
     }
   ]
 }

@@ -22,6 +22,20 @@ export interface Config {
     /** Pause between sequential tile fetches. */
     overpassPauseMs: number;
   };
+  /** Dog photo analysis through the LiteLLM proxy (OpenAI-compatible; model alias DTD_VISION_MODEL). No key or URL = 503 analysis_unavailable. */
+  vision: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    /** Our own safety ceiling per calendar month (UTC), summed from token usage (flat estimate when a reply has none). */
+    monthlyCapUsd: number;
+    /** Estimate per analysis when the reply carries no usage, and the amount reserved before the call. */
+    flatCostUsd: number;
+    inputUsdPerMTokens: number;
+    outputUsdPerMTokens: number;
+    perHouseholdPerDay: number;
+    perHouseholdPerMonth: number;
+  };
   limits: {
     unauthPerMinPerIp: number;
     anyPerMinPerIp: number;
@@ -61,6 +75,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       enabled: env.NEIGHBOURS_ENABLED === 'true',
       overpassUrl: env.OVERPASS_URL ?? '',
       overpassPauseMs: int('OVERPASS_PAUSE_MS', 2000, env),
+    },
+    vision: {
+      baseUrl: env.LITELLM_BASE_URL || 'http://litellm:4000',
+      apiKey: env.LITELLM_API_KEY ?? '',
+      model: env.DTD_VISION_MODEL || 'small',
+      monthlyCapUsd: int('GEMINI_MONTHLY_CAP_USD', 10, env),
+      flatCostUsd: 0.005,
+      inputUsdPerMTokens: 0.75,
+      outputUsdPerMTokens: 3.75,
+      perHouseholdPerDay: 3,
+      perHouseholdPerMonth: 6,
     },
     limits: {
       unauthPerMinPerIp: int('RL_UNAUTH_PER_MIN', 30, env),

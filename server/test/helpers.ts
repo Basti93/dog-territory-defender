@@ -25,6 +25,17 @@ export function testConfig(overrides: Partial<Config['limits']> = {}, neighbours
     inviteTtlMs: 24 * 3600_000,
     minClientApiLevel,
     neighbours: { enabled: false, overpassUrl: '', overpassPauseMs: 0, ...neighbours },
+    vision: {
+      baseUrl: 'http://litellm.test:4000',
+      apiKey: '',
+      model: 'dtd-vision-test',
+      monthlyCapUsd: 10,
+      flatCostUsd: 0.005,
+      inputUsdPerMTokens: 0.75,
+      outputUsdPerMTokens: 3.75,
+      perHouseholdPerDay: 3,
+      perHouseholdPerMonth: 6,
+    },
     limits: {
       unauthPerMinPerIp: 10_000,
       anyPerMinPerIp: 10_000,

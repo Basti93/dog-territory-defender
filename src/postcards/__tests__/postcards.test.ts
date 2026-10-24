@@ -25,7 +25,7 @@ import {
 import en from '../../i18n/en';
 import de from '../../i18n/de';
 
-const plainFacts: PostcardFacts = { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: false, daypart: 'afternoon' };
+const plainFacts: PostcardFacts = { firstPlace: false, newTerritory: false, longWalk: false, shortWalk: false, weekend: false, daypart: 'afternoon', metNeighbours: [] };
 const territory = (id: string, createdAt: number, name = 'Newt Range'): Territory => ({ id, name, createdAt, walksHere: 1, treatsEarnedHere: 0 });
 
 beforeEach(() => setLocale('en'));
@@ -119,6 +119,12 @@ describe('postcard list derivation', () => {
   });
 });
 
+const hashForTest = (seed: string) => {
+  let hash = 0;
+  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return hash;
+};
+
 describe('Buddy line picker', () => {
   const entry = (id: string, facts: Partial<PostcardFacts> = {}, kind: PostcardEntry['kind'] = 'tracked') => ({ id, kind, facts: { ...plainFacts, ...facts } });
 
@@ -133,6 +139,7 @@ describe('Buddy line picker', () => {
           longWalk: i % 3 === 0,
           shortWalk: i % 4 === 0,
           weekend: i % 7 === 0,
+          metNeighbours: i % 3 === 1 ? ['momo'] : [],
           daypart: (['morning', 'forenoon', 'midday', 'afternoon', 'evening', 'night'] as const)[i % 6],
         };
         const key = pickBuddyLineKey(entry(`walk-${i}`, facts));
@@ -140,6 +147,19 @@ describe('Buddy line picker', () => {
         expect(dict[key]).toBeDefined();
       }
     }
+  });
+
+  it('draws from the met pool only when a neighbour was met, and names the first dog', () => {
+    const met = { ...plainFacts, metNeighbours: ['keks', 'momo'] };
+    for (let i = 0; i < 20; i++) {
+      expect(pickBuddyLineKey(entry(`met${i}`, { metNeighbours: ['keks'] }))).toMatch(/^postcard\.line\.(met|plain)\./);
+      expect(pickBuddyLineKey(entry(`none${i}`))).not.toMatch(/\.met\./);
+    }
+    const card = { ...entry('met-card', met), kind: 'tracked' as const };
+    expect(pickBuddyLineKey(card)).toBe('postcard.line.met.' + (((Math.floor(hashForTest('met-card') / 7)) % 6) + 1));
+    const words = postcardWords(card as unknown as PostcardEntry, { dog: 'Buddy', territoryName: null });
+    expect(words.buddyLine).toContain('Keks');
+    expect(words.buddyLine).not.toContain('{name}');
   });
 
   it('prefers a new territory over everything else', () => {

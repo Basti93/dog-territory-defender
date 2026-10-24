@@ -4,7 +4,7 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { NEIGHBOUR_CONFIG } from '@game/economy/neighbourConfig';
 import { ACHIEVEMENT_ID_PATTERN, API_LIMITS, CORNER_ID_PATTERN, MAX_STATS_TIME_MS, STATS_CAPS } from '@game/sync/apiContract';
-import type { ApiMyStats, CommandRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
+import type { ApiMyStats, CommandRequest, DogAnalyzeRequest, ImportRequest, JoinRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const Str = (min: number, max: number) => Type.String({ minLength: min, maxLength: max });
 const Id = Type.String({ minLength: 8, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' });
@@ -270,6 +270,16 @@ export const MyStatsSchema = Type.Object(
   { additionalProperties: false }
 );
 
+export const DogAnalyzeSchema = Type.Object(
+  {
+    photos: Type.Array(Type.String({ minLength: 100, maxLength: API_LIMITS.maxAnalyzePhotoChars }), {
+      minItems: 1,
+      maxItems: API_LIMITS.maxAnalyzePhotos,
+    }),
+  },
+  { additionalProperties: false }
+);
+
 // ---- compile-time drift checks (assignable both ways)
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _join: Same<Static<typeof JoinSchema>, JoinRequest> = true;
@@ -279,4 +289,5 @@ const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
 const _logs: Same<Static<typeof LogUploadSchema>, LogUploadRequest> = true;
 const _presence: Same<Static<typeof PresenceSchema>, PresenceUpdateRequest> = true;
 const _myStats: Same<Static<typeof MyStatsSchema>, ApiMyStats> = true;
-void [_join, _walk, _cmd, _import, _logs, _presence, _myStats];
+const _analyze: Same<Static<typeof DogAnalyzeSchema>, DogAnalyzeRequest> = true;
+void [_analyze, _join, _walk, _cmd, _import, _logs, _presence, _myStats];

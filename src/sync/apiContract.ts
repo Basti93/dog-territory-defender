@@ -20,7 +20,7 @@ export const API_PREFIX = '/v1';
  * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
  * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
  * Additive inside level 2 (no bump): live presence (M4), named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`)
- * the shared dog look (`appearance.set`, `dog.appearance`, `ApiDog.appearanceRev`) and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`).
+ * the shared dog look (`appearance.set`, `dog.appearance`, `ApiDog.appearanceRev`) and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`), and the neighbour dogs met on a walk (`ApiWalkMeta.metNeighbourIds`, `WalkUploadResponse.metNeighbourIds`).
  */
 export const API_LEVEL = 2;
 
@@ -50,12 +50,17 @@ export const API_PATHS = {
   import: '/v1/households/import',
   logs: '/v1/logs', // POST only: device diagnostics; read via the operator CLI, never over HTTP
   meStats: '/v1/me/stats', // PUT: the caller's personal stats + achievements (monotonic merge); never shown to other members
+  dogAnalyze: '/v1/dog/analyze', // POST: 1-5 dog photos (base64 JPEG) -> a proposed look; photos are never stored or logged
   presence: '/v1/presence', // POST heartbeat of a walk in progress; GET the other household members' walks in progress (long-poll)
 } as const;
 
 export const giftOpenPath = (giftId: string) => `/v1/gifts/${encodeURIComponent(giftId)}/open`;
 
 export const API_LIMITS = {
+  /** Photos in one `POST /v1/dog/analyze`. */
+  maxAnalyzePhotos: 5,
+  /** Max base64 characters per photo (a 1024 px JPEG is ~150 KB = ~200 K characters; this is generous headroom). */
+  maxAnalyzePhotoChars: 1_000_000,
   /** Max GPS fixes in one uploaded walk. */
   maxLocationsPerWalk: 20000,
   /** Long-poll ceiling for GET /v1/events?wait= (seconds). */
@@ -106,6 +111,10 @@ export type ApiErrorCode =
   | 'client_id_reuse' // 409: same clientId used for a different command
   | 'daily_cap' // 429: per-household write cap reached
   | 'rate_limited' // 429
+  | 'analysis_unavailable' // 503: photo analysis is not set up on this server (no LITELLM_API_KEY); the app hides the photo entry
+  | 'analysis_limit' // 429: household day/month limit or the global monthly cost cap reached; the app falls back to the manual picker
+  | 'analysis_no_dog' // 422: the photos did not show a dog the model could read
+  | 'analysis_failed' // 502: the vision provider failed or answered nonsense
   | 'not_found' // 404: only for authenticated requests on a known resource
   | 'payload_too_large' // 413
   | 'unsupported_media_type' // 415
@@ -124,6 +133,19 @@ export type WalkRejectedReason =
   | 'unsupported-source'
   /** manual-log: the household already logged BALANCE.freshGround.maxManualLogsPerDay walks today. */
   | 'manual-log-quota';
+
+// ----------------------------------------------------------------- dog photo analysis
+
+export interface DogAnalyzeRequest {
+  /** 1..API_LIMITS.maxAnalyzePhotos JPEGs as base64 (no data: prefix), resized and EXIF-stripped by the app. */
+  photos: string[];
+}
+
+export interface DogAnalyzeResponse {
+  /** A full `BuddyAppearance` (with `fur`), already clay-softened and validated by the server. */
+  appearance: Record<string, unknown>;
+  confidence: 'low' | 'medium' | 'high';
+}
 
 // ----------------------------------------------------------------- join
 
@@ -243,6 +265,8 @@ export interface ApiWalkMeta {
   startSource: 'button' | 'manual-log';
   closed: boolean;
   newGroundCellIds: string[];
+  /** Neighbour dogs (archetype ids) that were out during this walk, at most 3. Server-derived, additive; absent when none or from an older server. */
+  metNeighbourIds?: string[];
   treatsEarned: number | null;
   deleted: boolean;
 }
@@ -366,6 +390,8 @@ export interface WalkUploadResponse {
   /** True when this id was already stored; reward is the original one. */
   duplicate: boolean;
   reward: WalkReward;
+  /** Same as ApiWalkMeta.metNeighbourIds; absent from an older server. */
+  metNeighbourIds?: string[];
   den: ApiDenState;
   serverTime: number;
   seq: number;
