@@ -8,7 +8,7 @@ import { CORNER_ID_PATTERN } from '../sync/apiContract';
 import type { Location } from '../types';
 import { getDistance } from './geometry';
 import { CellId, cellCentre, cellKey, parseCellKey, walkedCells } from './grid';
-import { calendarDayGap, calendarDayKey } from './manualWalkLog';
+import { calendarDayGap, calendarDayKey } from './calendarDay';
 
 export type CornerId = CellId;
 

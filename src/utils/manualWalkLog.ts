@@ -15,32 +15,9 @@ export function startTimeForMissedWalk(timing: MissedWalkTiming, now: number = D
   return timing === 'today' ? now : now - ONE_DAY_MS;
 }
 
-/** Local calendar-day key (year-month-day), used anywhere "which day did this happen on" needs to be compared — e.g. the look-back window below and the per-day reward multiplier in economy/walkRewards.ts. */
-export function calendarDayKey(timestamp: number): string {
-  const d = new Date(timestamp);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-}
-
-/** Local calendar midnight (ms epoch) for the day containing `ms`. */
-export function startOfLocalDay(ms: number): number {
-  const d = new Date(ms);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-/**
- * Whole local-calendar-day gap between two timestamps (0 = same calendar
- * day, 1 = yesterday vs. today, etc.) — extracted from
- * SomewhereWildCard.tsx's own private day-diff helper
- * (docs/decisions/home-dashboard.md Decision 3) since this file is
- * already the de facto calendar-utilities module in this codebase (see
- * calendarDayKey's own doc comment). Used by SomewhereWildCard's dayPhrase
- * and doorstepSession.ts's session-state resolution — the two places this
- * codebase currently need to answer "how many calendar days back was this."
- */
-export function calendarDayGap(earlier: number, later: number): number {
-  return Math.round((startOfLocalDay(later) - startOfLocalDay(earlier)) / (24 * 60 * 60 * 1000));
-}
+// The pure day helpers live in calendarDay.ts (server-safe); re-exported for existing callers.
+import { calendarDayKey } from './calendarDay';
+export { calendarDayGap, calendarDayKey, startOfLocalDay } from './calendarDay';
 
 /**
  * Enforces the look-back-window decision: a manually-logged walk's startTime
