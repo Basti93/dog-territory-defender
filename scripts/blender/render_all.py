@@ -10,6 +10,7 @@ import assets
 import contact_sheet
 import scene_props  # noqa: F401  (registers the scene props + textures)
 import sticks  # noqa: F401  (registers the stick-<dog> sprites)
+import meadow_props  # noqa: F401  (registers the meadow-* props)
 
 
 # Output px per asset (on-screen use, keeps decoded memory low); anything else uses the registry size.

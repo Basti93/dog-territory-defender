@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { nextEffectLabel, useDen } from '../../app/useDen';
 import { BuddyAppearance } from '../../buddy/buddyAppearance';
-import { buddyFeetInset } from '../../buddy/imageSkin';
 import { buddyBackPoseSources } from '../../buddy/imageSkinSources';
 import { ArtKey, artOr } from '../../art/artAssets';
 import { stickDogOf } from '../../economy/sticks';
@@ -68,6 +67,8 @@ import {
   viertelScrollTarget,
   worldYardLayout,
 } from './sceneLayout';
+import { MeadowGround, MeadowProps } from './MeadowLayer';
+import { hofDecor, meadowLayout } from './meadowDecor';
 import { skyTintForDate } from './timeOfDay';
 import { useViertelChrome } from './useViertelChrome';
 
@@ -89,6 +90,8 @@ const PILL_MIN_W = 60;
 const GATE_SIGN_ROOM = 200;
 /** Roughly the body colour of yard-ground-wide.png, shown where the hill edge drops away at the sides; also the buildings page's ground. */
 const GRASS_BASE = '#9BC995';
+/** The hill's bottom edge (measured on yard-ground-wide.png: ~#B9D7B6) as a mix of the meadow colour, so the buildings page fades out of it with no seam. */
+const HILL_EDGE = mix(GRASS_BASE, '#FFFFFF', 0.3);
 const MAX_NOTES = 2;
 /** Stick pickup: Buddy gets this long to reach the stick before a second tap may start a new errand (a re-layout can cancel one). */
 const ERRAND_STALE_MS = 6000;
@@ -281,6 +284,9 @@ export function WorldScene(props: WorldSceneProps) {
 
   const layout = useMemo(() => sceneLayout(height, width, insets.top, insets.bottom), [height, width, insets.top, insets.bottom]);
   const buildings = useMemo(() => buildingsLayout(width, insets.top, layout.buildingsPageH), [width, insets.top, layout.buildingsPageH]);
+  // Static meadow decor: computed once per window size, never per frame.
+  const meadow = useMemo(() => meadowLayout(width, layout.buildingsH, buildings), [width, layout.buildingsH, buildings]);
+  const yardDecor = useMemo(() => hofDecor(width, layout.yardH, worldYardLayout(width, layout.yardH).feetY), [width, layout.yardH]);
 
   const scrollRef = useRef<{ scrollTo: (o: { x?: number; y?: number; animated?: boolean }) => void } | null>(null);
   const scrollY = useRef(new Animated.Value(layout.startOffset)).current;
@@ -693,6 +699,7 @@ export function WorldScene(props: WorldSceneProps) {
 
           {/* The yard: buildings, Buddy, extras, signs. `bottom` values are measured from the yard floor. */}
           <View pointerEvents="box-none" style={[styles.yard, { height: layout.yardH }]}>
+            <MeadowProps items={yardDecor} />
             {(() => {
               const mat = artOr('doormat', null);
               return mat ? <DecorImage source={mat} resizeMode="contain" style={{ position: 'absolute', ...yard.doormat }} /> : null;
@@ -748,7 +755,7 @@ export function WorldScene(props: WorldSceneProps) {
                     zIndex: 6,
                     opacity: walker.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
                     transform: [
-                      { translateY: walker.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0, -(BUDDY_SIZE * 0.9 + buddyFeetInset(BUDDY_SIZE))] }) },
+                      { translateY: walker.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 0, -yard.gateRise] }) },
                       { scale: walker.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, 1, 0.6] }) },
                     ],
                   },
@@ -875,9 +882,9 @@ export function WorldScene(props: WorldSceneProps) {
                   onPress={scrollToBuildings}
                   accessibilityRole="button"
                   accessibilityLabel={label}
-                  style={[styles.hint, { top: layout.hintDownTop, height: HINT_H, zIndex: 5 }]}
+                  style={[styles.hint, styles.hintGrass, { top: layout.hintDownTop, height: HINT_H, zIndex: 5 }]}
                 >
-                  <Text style={[textStyle('hand'), styles.hintText]}>{`↓ ${label}\u00A0\u00A0`}</Text>
+                  <Text style={[textStyle('hand'), styles.hintText, styles.hintPill]}>{`↓ ${label}\u00A0\u00A0`}</Text>
                 </Pressable>
                 {upgradeReady && pennant && (
                   <DecorImage
@@ -894,6 +901,8 @@ export function WorldScene(props: WorldSceneProps) {
         {/* ---- GEBÄUDE: the buildings page below the Hof; two per row on one ground, the 4th slot is reserved ---- */}
         <View pointerEvents="box-none" style={[styles.layer, { top: layout.buildingsTop, height: layout.buildingsH, zIndex: 3 }]}>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: GRASS_BASE }]} />
+          <MeadowGround layout={meadow} width={width} fromColor={HILL_EDGE} toColor={GRASS_BASE} />
+          <MeadowProps items={meadow.items} />
           {buildings.slots.map((slot) => {
             const k = slot.key;
             if (!k) return null; // the reserved slot (Friend Lounge) draws nothing
@@ -955,9 +964,9 @@ export function WorldScene(props: WorldSceneProps) {
             onPress={scrollToYard}
             accessibilityRole="button"
             accessibilityLabel={t('world.backToYard')}
-            style={[styles.hint, { top: buildings.backTop, height: HINT_H }]}
+            style={[styles.hint, styles.hintGrass, { top: buildings.backTop, height: HINT_H }]}
           >
-            <Text style={[textStyle('hand'), styles.hintText]}>{`↑ ${t('world.backToYard')}\u00A0\u00A0`}</Text>
+            <Text style={[textStyle('hand'), styles.hintText, styles.hintPill]}>{`↑ ${t('world.backToYard')}\u00A0\u00A0`}</Text>
           </Pressable>
         </View>
 
@@ -1226,6 +1235,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: mix(tokens.blue, '#FFFFFF', 0.7),
   },
+  // The two strips on the grass between the Hof and the buildings: no full-width band (that read as a hard cut), just a soft label.
+  hintGrass: { backgroundColor: 'transparent' },
+  hintPill: { backgroundColor: '#FFFFFF80', borderRadius: radii.pill, overflow: 'hidden' },
   // Right padding: the handwriting font's last glyph overhangs its advance width and was clipped ("Viertei").
   hintText: { color: material.inkGreen, fontSize: 20, lineHeight: 24, paddingHorizontal: 8 },
   dogSignText: { color: material.ink, textAlign: 'center', alignSelf: 'stretch' },

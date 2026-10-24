@@ -31,7 +31,7 @@ export const BOTTOM_ROW_H = 232;
 export const MIN_YARD_H = 300;
 
 export const BUDDY_SIZE = 130;
-/** Gap between the fence line and the top of Buddy's box. */
+/** Smallest gap between the fence line and the top of Buddy's box (the leaving trot starts from the resting box). */
 const BUDDY_TOP_GAP = 4;
 
 export interface SceneLayout {
@@ -127,6 +127,18 @@ const BUILDINGS_TOP_GAP = 8;
 /** Distance between the two ground lines (a share of the sprite size): row 1's sign hangs below its art and ends above row 2's roof. */
 const ROW_PITCH_FRAC = 1.2;
 const BUILDINGS_BOTTOM_PAD = 24;
+/**
+ * Hand-set, deterministic per-slot offsets (pt) so the buildings do not read as a grid: the left column sits a bit lower, the
+ * right one higher, each slightly off its column. Slot order as BUILDING_SLOTS. A column's lower slot never moves up relative to
+ * the upper one (its sign still ends above the next roof). The sprite size stays BUILDING_SIZE: one world scale.
+ */
+export const SLOT_JITTER: ReadonlyArray<{ dx: number; dy: number }> = [
+  { dx: -8, dy: 6 },
+  { dx: 6, dy: -14 },
+  { dx: 10, dy: 14 },
+  { dx: -6, dy: -8 },
+];
+const SLOT_JITTER_MAX_DOWN = Math.max(...SLOT_JITTER.map((j) => j.dy));
 const HIT_WIDTH_FRAC = 0.6;
 const HIT_HEIGHT_FRAC = 0.5;
 /** Share of the sprite size above the canvas top where a pennant's lower end sits: pennant stands on the roof area. */
@@ -145,7 +157,7 @@ function firstGroundY(insetsTop: number): number {
 
 /** Page height the two rows need (the page is at least a viewport high). */
 function buildingsPageNeededH(insetsTop: number): number {
-  const lastGround = firstGroundY(insetsTop) + ROW_PITCH_FRAC * BUILDING_SIZE;
+  const lastGround = firstGroundY(insetsTop) + ROW_PITCH_FRAC * BUILDING_SIZE + SLOT_JITTER_MAX_DOWN;
   return lastGround + (1 - SPRITE_GROUND_Y_FRAC) * BUILDING_SIZE + BUILDINGS_BOTTOM_PAD;
 }
 
@@ -165,7 +177,7 @@ export interface WorldBuildingBox {
 export interface BuildingsLayout {
   /** Top of the "back to the Hof" strip. */
   backTop: number;
-  /** Ground line y of each row. */
+  /** Nominal ground line y of each row (a slot's own `groundY` is this plus its SLOT_JITTER dy). */
   rowGroundY: number[];
   /** Slot order as BUILDING_SLOTS; an empty slot is `null` (reserved, draws nothing). */
   slots: Array<{ key: YardBuildingKey | null; cx: number; groundY: number }>;
@@ -174,7 +186,7 @@ export interface BuildingsLayout {
 
 /**
  * Buildings page geometry. Each sprite's footprint centre (canvas 0.5, 0.69) is placed on its slot's ground point, so all
- * buildings of a row stand on one line whatever their stage. Slack height (tall phones) moves the rows down a little.
+ * buildings stand on their slot's ground point whatever their stage. Slack height (tall phones) moves the rows down a little.
  */
 export function buildingsLayout(width: number, insetsTop: number, pageH: number): BuildingsLayout {
   const slack = Math.max(0, pageH - buildingsPageNeededH(insetsTop));
@@ -185,8 +197,8 @@ export function buildingsLayout(width: number, insetsTop: number, pageH: number)
   const world = {} as Record<YardBuildingKey, WorldBuildingBox>;
   const slots: BuildingsLayout['slots'] = [];
   BUILDING_SLOTS.forEach((key, i) => {
-    const groundY = rowGroundY[Math.floor(i / SLOT_COLUMNS)];
-    const cx = width * SLOT_CX[i % SLOT_COLUMNS];
+    const groundY = rowGroundY[Math.floor(i / SLOT_COLUMNS)] + SLOT_JITTER[i].dy;
+    const cx = width * SLOT_CX[i % SLOT_COLUMNS] + SLOT_JITTER[i].dx;
     slots.push({ key, cx, groundY });
     if (!key) return;
     // The widest sprite uses 86% of the canvas: keep it on screen.
@@ -208,25 +220,32 @@ export function buildingsLayout(width: number, insetsTop: number, pageH: number)
 // ---- Hof (yard) geometry ----
 
 export interface WorldYardLayout extends YardLayout {
-  /** Doormat under the gate, centred on Buddy's resting spot. */
+  /** Doormat under Buddy's resting spot (his bed in the middle of the yard). */
   doormat: { left: number; top: number; width: number; height: number };
+  /** Distance Buddy's resting box rises while he trots up to the gate (the gate is above the yard). */
+  gateRise: number;
+  /** Ground y (px from the yard top) of his feet at the resting spot: the decor is placed around it. */
+  feetY: number;
 }
 
 /**
  * Hof geometry for the scene. It returns a `YardLayout` (what YardBuddy's walk geometry and the Wild Extras need) with Buddy
- * resting at the gate (top of the yard). `bottom` values are px up from the yard floor (= yard height down).
+ * resting (and lying down) in the middle of the yard on his doormat. `bottom` values are px up from the yard floor (= yard height down).
  */
 export function worldYardLayout(width: number, yardH: number): WorldYardLayout {
+  const top = Math.max(BUDDY_TOP_GAP, Math.round((yardH - BUDDY_SIZE) / 2));
   const buddy: LayoutBox = {
     left: width / 2 - BUDDY_SIZE / 2,
-    bottom: yardH - BUDDY_TOP_GAP - BUDDY_SIZE,
+    bottom: yardH - top - BUDDY_SIZE,
     size: BUDDY_SIZE,
   };
   return {
     buddy,
     ground: groundBox(width, yardH),
     extras: { daisyCx: width * 0.24, duckBaseY: yardH * 0.7, fireflyCx: width * 0.26, teaCx: width * 0.7, teaBaseY: yardH * 0.8 },
-    doormat: { left: width / 2 - 70, top: BUDDY_TOP_GAP + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE) - 40, width: 140, height: 70 },
+    doormat: { left: width / 2 - 70, top: top + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE) - 40, width: 140, height: 70 },
+    gateRise: top - BUDDY_TOP_GAP + BUDDY_SIZE * 0.9 + buddyFeetInset(BUDDY_SIZE),
+    feetY: top + BUDDY_SIZE - buddyFeetInset(BUDDY_SIZE),
   };
 }
 

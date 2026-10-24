@@ -60,7 +60,7 @@ describe('buildings page', () => {
   });
 
   const levelsToWidth: Array<[number, number]> = [[360, 24], [390, 47], [430, 59]];
-  it.each(levelsToWidth)('every building shares one size and stands on its row ground line, on screen (width %d)', (width, inset) => {
+  it.each(levelsToWidth)('every building shares one size and stands on its slot ground point, on screen (width %d)', (width, inset) => {
     const b = buildingsLayout(width, inset, 844);
     for (const k of ['doghouse', 'bakery', 'sniffGarden'] as const) {
       const w = b.world[k];
@@ -68,11 +68,16 @@ describe('buildings page', () => {
       expect(w.sprite.left).toBeGreaterThanOrEqual(-0.07 * BUILDING_SIZE - 0.001);
       expect(w.sprite.left + w.sprite.size).toBeLessThanOrEqual(width + 0.07 * BUILDING_SIZE + 0.001);
     }
-    // ground point (0.5, 0.69 of the canvas) of both buildings in row 1 sits on the same line
+    // each sprite's ground point (0.5, 0.69 of the canvas) is its slot's (jittered) ground point
     const ground = (k: 'doghouse' | 'bakery' | 'sniffGarden') => b.world[k].sprite.top + SPRITE_GROUND_Y_FRAC * BUILDING_SIZE;
-    expect(ground('doghouse')).toBeCloseTo(b.rowGroundY[0], 5);
-    expect(ground('bakery')).toBeCloseTo(b.rowGroundY[0], 5);
-    expect(ground('sniffGarden')).toBeCloseTo(b.rowGroundY[1], 5);
+    expect(ground('doghouse')).toBeCloseTo(b.slots[0].groundY, 5);
+    expect(ground('bakery')).toBeCloseTo(b.slots[1].groundY, 5);
+    expect(ground('sniffGarden')).toBeCloseTo(b.slots[2].groundY, 5);
+    // organic, not a grid: the two buildings of row 1 do not share a ground line, but stay within a row-pitch fraction of it
+    expect(Math.abs(b.slots[0].groundY - b.slots[1].groundY)).toBeGreaterThan(10);
+    expect(Math.abs(b.slots[0].groundY - b.slots[1].groundY)).toBeLessThan(0.25 * BUILDING_SIZE);
+    // a column's lower slot never rises above the upper one, so the upper sign still ends above the next roof
+    expect(b.slots[2].groundY - b.slots[0].groundY).toBeGreaterThanOrEqual(b.rowGroundY[1] - b.rowGroundY[0]);
     // the two neighbours of a row do not overlap by more than their transparent margins
     expect(b.world.bakery.sprite.left - (b.world.doghouse.sprite.left + BUILDING_SIZE)).toBeGreaterThan(-0.2 * BUILDING_SIZE);
   });
@@ -103,7 +108,7 @@ describe('buildings page', () => {
 
   it('hangs each sign below the baked shadow (>= 0.25 S under the ground line)', () => {
     const b = buildingsLayout(390, 47, 844);
-    expect(b.world.doghouse.signTop - b.rowGroundY[0]).toBeGreaterThanOrEqual(0.25 * 206 - 0.001);
+    expect(b.world.doghouse.signTop - b.slots[0].groundY).toBeGreaterThanOrEqual(0.25 * 206 - 0.001);
   });
 
   it('keeps both rows and their signs inside the page, also on a short phone', () => {
@@ -116,9 +121,13 @@ describe('buildings page', () => {
 });
 
 describe('worldYardLayout', () => {
-  it('rests Buddy at the top of the yard, inside it, with the Extras anchored on fixed Hof points', () => {
+  it('rests Buddy in the middle of the yard on his mat, inside it, with the Extras anchored on fixed Hof points', () => {
     const y = worldYardLayout(390, 405);
     expect(y.buddy.bottom + y.buddy.size).toBeLessThanOrEqual(405);
+    const top = 405 - y.buddy.bottom - y.buddy.size;
+    expect(Math.abs(top + y.buddy.size / 2 - 405 / 2)).toBeLessThanOrEqual(1);
+    expect(y.gateRise).toBeGreaterThan(top);
+    expect(y.feetY).toBeGreaterThan(y.doormat.top);
     expect(y.extras.teaBaseY).toBeLessThan(405);
     expect(y.doormat.width).toBeGreaterThan(0);
   });

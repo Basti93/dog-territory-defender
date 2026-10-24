@@ -56,6 +56,13 @@ export type ArtKey =
   | 'prop-firefly'
   | 'prop-lightbulb'
   | 'prop-question'
+  // Meadow props for the Hof and the buildings page (Blender, scripts/blender/meadow_props.py).
+  | 'meadow-bush'
+  | 'meadow-hedge'
+  | 'meadow-tree'
+  | 'meadow-flowers'
+  | 'meadow-stones'
+  | 'meadow-tuft'
   // Stock-Regal: one stick per neighbour dog.
   | `stick-${StickDogId}`
   // Neighbour-dog portraits for postcards (Blender, scripts/blender/neighbour_portraits.py).
@@ -138,6 +145,12 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'rosette-distance': require('../../assets/art/rosette-distance.png'),
   'rosette-treats': require('../../assets/art/rosette-treats.png'),
   'rosette-den': require('../../assets/art/rosette-den.png'),
+  'meadow-bush': require('../../assets/art/meadow-bush.png'),
+  'meadow-hedge': require('../../assets/art/meadow-hedge.png'),
+  'meadow-tree': require('../../assets/art/meadow-tree.png'),
+  'meadow-flowers': require('../../assets/art/meadow-flowers.png'),
+  'meadow-stones': require('../../assets/art/meadow-stones.png'),
+  'meadow-tuft': require('../../assets/art/meadow-tuft.png'),
   'stick-momo': require('../../assets/art/stick-momo.png'),
   'stick-pfote': require('../../assets/art/stick-pfote.png'),
   'stick-bruno': require('../../assets/art/stick-bruno.png'),

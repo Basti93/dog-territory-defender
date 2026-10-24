@@ -39,3 +39,6 @@ Building stages 4-5 (`doghouse|bakery|garden-4/5`, 512px, fill ~93%): treehouse 
 
 ## Neighbour portraits (2026-10-24)
 `neighbour_portraits.py`: `-- --only momo,keks --fast --out dir --sheet sheet.png`. One cut-out per bot dog and pose (`dog-<dog>-sit|trot`, 384 px, feet on one line, scaled by the dog's size) from the Buddy rig with each archetype's legacy look (`LOOKS` mirrors `server/src/neighbours/archetypes.ts`). Read via `artOr('dog-<dog>-<pose>')`.
+
+## Meadow props (2026-10-24)
+`meadow_props.py`: `-- --only meadow` renders `meadow-bush` 384x256, `meadow-hedge` 768x256, `meadow-tree` 384x512, `meadow-flowers` / `meadow-tuft` 256x192, `meadow-stones` 256x160 (camera `MEADOWCAM`, baked contact shadow, no randomness). Placed by `src/components/world/meadowDecor.ts` (ground point per sprite in its `SPRITES` table; retune there if a sprite changes).

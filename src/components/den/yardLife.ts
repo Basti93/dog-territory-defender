@@ -32,9 +32,9 @@ export function pickDestination(rng: Rng, current: SpotId | null): SpotId {
   return options[Math.floor(unit(rng) * options.length)];
 }
 
-/** Sleeping only by the bench; sniffing at the bench or the mailbox; the front spot is for sitting or a trick. */
+/** Sniffing only at the bench or the mailbox; the front spot (the middle of the yard, his doormat) is for sitting, a trick or lying down for a nap (listed twice: the mat is his favourite bed). */
 export function activityOptions(spot: SpotId): YardActivity[] {
-  if (spot === 'front') return ['sit', 'trick'];
+  if (spot === 'front') return ['sit', 'trick', 'sleep', 'sleep'];
   if (spot === 'bench') return ['sniff', 'sit', 'sleep', 'trick'];
   return ['sniff', 'sit', 'trick'];
 }
