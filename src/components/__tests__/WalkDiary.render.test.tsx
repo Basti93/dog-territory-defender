@@ -1,17 +1,12 @@
 import React from 'react';
 import { screen } from '@testing-library/react-native';
 
-import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { t } from '../../i18n';
-import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRangeRepository';
 import { createInMemorySettingsRepository } from '../../storage/inMemorySettingsRepository';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { eastwardTrail, trackedWalk } from '../../test/postcardFixtures';
 import { flush, renderScreen } from '../../test/render';
-import { resetNeighbourhood } from '../../sync/neighbourhoodStore';
-import { AlbumScreen } from '../AlbumScreen';
-
-afterEach(resetNeighbourhood);
+import { WalkDiaryScreen } from '../WalkDiaryScreen';
 
 async function open(minutes: number[]) {
   const walkRepository = createInMemoryWalkRepository();
@@ -21,18 +16,19 @@ async function open(minutes: number[]) {
     await walkRepository.saveWalk(trackedWalk(`w${i}`, { startTime, locations: eastwardTrail(startTime, m * 30 + 1) }));
   }
   await renderScreen(
-    <AlbumScreen buddyAppearance={defaultBuddyAppearance()} walkRepository={walkRepository} homeRangeRepository={createInMemoryHomeRangeRepository()} settingsRepository={settingsRepository} dogName="Rex" onClose={jest.fn()} />
+    <WalkDiaryScreen walkRepository={walkRepository} settingsRepository={settingsRepository} onClose={jest.fn()} />
   );
   await flush();
   await flush();
   return settingsRepository;
 }
 
-describe('Walk diary in the Album', () => {
+describe('Walk diary screen', () => {
   it('shows only the teaser before three walks', async () => {
     await open([20, 30]);
     expect(screen.getByText(t('diary.teaser.one'))).toBeTruthy();
     expect(screen.queryByTestId('walk-diary')).toBeNull();
+    expect(screen.getByText(t('diary.screen.title'))).toBeTruthy();
   });
 
   it('shows the diary with the intro once, and remembers it', async () => {

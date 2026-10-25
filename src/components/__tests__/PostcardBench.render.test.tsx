@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { defaultBuddyAppearance } from '../../buddy/buddyAppearance';
 import { t } from '../../i18n';
@@ -42,6 +42,8 @@ async function setup(walks: StoredWalk[], spy?: (repo: ReturnType<typeof createI
       onStartWalk={jest.fn()}
       onOpenMap={jest.fn()}
       onOpenHistory={onOpenHistory}
+      onOpenSticks={jest.fn()}
+      onOpenDiary={jest.fn()}
       onOpenSettings={jest.fn()}
       onTreatsChanged={jest.fn()}
     />
@@ -103,5 +105,20 @@ describe('postcards on the bench', () => {
     await setup([]);
     expect(screen.queryByTestId('bench-postcards', HIDDEN)).toBeNull();
     expect(screen.getByRole('button', { name: t('world.albumLabel') })).toBeOnTheScreen();
+  });
+});
+
+describe('a new postcard arrives in the mailbox first', () => {
+  it('stays off the bench until Buddy pulls it out, then lands on the bench with his line', async () => {
+    await setup([...fiveWalks(), trackedWalk('fresh', { startTime: Date.now() + 1000 })]);
+    expect(screen.queryByTestId('bench-postcard-fresh', HIDDEN)).toBeNull();
+    expect(screen.getByTestId('mailbox-flag')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('mailbox'));
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(6000);
+    });
+    expect(await screen.findByText(t('inbox.postcardToBench'))).toBeOnTheScreen();
+    expect(screen.getByTestId('bench-postcard-fresh', HIDDEN)).toBeTruthy();
+    expect(screen.queryByTestId('mailbox-flag')).toBeNull();
   });
 });

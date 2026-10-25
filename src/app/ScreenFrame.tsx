@@ -14,12 +14,15 @@ export function ScreenFrame({
   fadeKey,
   safeArea = false,
   treats,
+  onOpenSettings,
   children,
 }: {
   fadeKey: string | null;
   safeArea?: boolean;
   /** The treat count for the shared top bar. Omit on screens without one (first-launch flow). */
   treats?: number | null;
+  /** The bar's gear opens Settings. Omit on the Settings screen. */
+  onOpenSettings?: () => void;
   children: React.ReactNode;
 }) {
   const body = fadeKey ? <FadeSlideIn key={fadeKey}>{children}</FadeSlideIn> : children;
@@ -36,17 +39,17 @@ export function ScreenFrame({
   return (
     <SafeAreaProvider>
       <Container style={styles.container} {...(safeArea ? { edges: ['bottom', 'left', 'right'] as const } : {})}>
-        <BarAndBody treats={treats}>{body}</BarAndBody>
+        <BarAndBody treats={treats} onOpenSettings={onOpenSettings}>{body}</BarAndBody>
       </Container>
     </SafeAreaProvider>
   );
 }
 
-function BarAndBody({ treats, children }: { treats: number | null; children: React.ReactNode }) {
+function BarAndBody({ treats, onOpenSettings, children }: { treats: number | null; onOpenSettings?: () => void; children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
     <>
-      <TopBar treats={treats ?? 0} />
+      <TopBar treats={treats ?? 0} onOpenSettings={onOpenSettings} />
       <SafeAreaInsetsContext.Provider value={{ ...insets, top: 0 }}>
         <View style={styles.body}>{children}</View>
       </SafeAreaInsetsContext.Provider>

@@ -22,7 +22,9 @@ export interface TopBarProps {
   label?: string;
   /** Tapping the chip (the Hof zooms the bowl). Without it the chip is not a button. */
   onPressTreats?: () => void;
-  /** Optional left slot (screen title or back button). */
+  /** A quiet gear on the left opens Settings. Omitted on the Settings screen itself (and on screens without a way there). */
+  onOpenSettings?: () => void;
+  /** Optional left slot (screen title or back button), after the gear. */
   left?: React.ReactNode;
 }
 
@@ -31,7 +33,7 @@ export interface TopBarProps {
  * The number counts up and the chip bumps whenever the count grows (harvest arrival, Buddy bonus).
  * In flow (screens) it pushes content down; in the world scene it floats at the top and the scene lays out below TOP_BAR_H.
  */
-export function TopBar({ treats, note, full, label, onPressTreats, left }: TopBarProps) {
+export function TopBar({ treats, note, full, label, onPressTreats, onOpenSettings, left }: TopBarProps) {
   const insets = useSafeAreaInsets();
   const count = Math.floor(treats);
   const bump = useRef(new Animated.Value(1)).current;
@@ -64,7 +66,14 @@ export function TopBar({ treats, note, full, label, onPressTreats, left }: TopBa
   const accessibilityLabel = label ?? t('topBar.treatsLabel', { count: formatNumber(count) });
   return (
     <View style={[styles.bar, { paddingTop: insets.top, height: insets.top + TOP_BAR_H }]} testID="top-bar">
-      <View style={styles.left}>{left}</View>
+      <View style={styles.left}>
+        {onOpenSettings && (
+          <Pressable accessibilityRole="button" accessibilityLabel={t('topBar.settingsLabel')} onPress={onOpenSettings} hitSlop={6} style={styles.gear} testID="top-bar-settings">
+            <GearIcon />
+          </Pressable>
+        )}
+        {left}
+      </View>
       <Animated.View style={{ transform: [{ scale: bump }] }}>
         {onPressTreats ? (
           <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPressTreats} style={styles.chip} hitSlop={6}>
@@ -80,7 +89,29 @@ export function TopBar({ treats, note, full, label, onPressTreats, left }: TopBa
   );
 }
 
+const GEAR = 20;
+const GEAR_INK = `${material.muted}`;
+
+/** A small gear drawn with Views (no art): four bars through the centre make the teeth, a ring with a hole the body. Quiet on purpose. */
+function GearIcon() {
+  return (
+    <View style={styles.gearBox} pointerEvents="none">
+      {[0, 45, 90, 135].map((deg) => (
+        <View key={deg} style={[styles.gearTooth, { transform: [{ rotate: `${deg}deg` }] }]} />
+      ))}
+      <View style={styles.gearBody}>
+        <View style={styles.gearHole} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  gear: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
+  gearBox: { width: GEAR, height: GEAR, alignItems: 'center', justifyContent: 'center' },
+  gearTooth: { position: 'absolute', width: GEAR, height: 4, borderRadius: 2, backgroundColor: GEAR_INK },
+  gearBody: { width: 14, height: 14, borderRadius: 7, backgroundColor: GEAR_INK, alignItems: 'center', justifyContent: 'center' },
+  gearHole: { width: 6, height: 6, borderRadius: 3, backgroundColor: tokens.white },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

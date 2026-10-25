@@ -7,6 +7,8 @@ import { BuddyAppearance } from '../../buddy/buddyAppearance';
 import { buddyBackPoseSources } from '../../buddy/imageSkinSources';
 import { ArtKey, artOr } from '../../art/artAssets';
 import { stickDogOf } from '../../economy/sticks';
+import { emptyBoxLine, noteLine, type InboxItem } from '../../inbox/inbox';
+import { useInbox } from '../../inbox/useInbox';
 import { BuildingKey } from '../../economy/balanceConfig';
 import { dogDisplayName, getBuildingLevel } from '../../economy/denEconomy';
 import { currentTitleForLevel } from '../../economy/milestones';
@@ -14,7 +16,6 @@ import { AchievementId } from '../../economy/personalStats';
 import * as haptics from '../../feedback/haptics';
 import { play } from '../../feedback/sounds';
 import { formatNumber, t } from '../../i18n';
-import type { NeighbourNote } from '../../sync/householdEvents';
 import { coopSignText, fillsShelfSlot, giftOpenedLine } from '../../sync/neighbourhood';
 import type { NeighbourhoodActions } from '../../sync/neighbourhood';
 import { usePartnerWalk } from '../../sync/presenceStore';
@@ -46,8 +47,8 @@ import { FenceBadges } from './FenceBadges';
 import { signStrip } from './fencePlan';
 import { useFenceBadges } from './useFenceBadges';
 import { Homecoming } from './Homecoming';
+import { InboxUnwrap, MailboxFlag } from './Mailbox';
 import { PILE_H, PILE_W, StickPile } from './StickPile';
-import { NeighbourCard } from './NeighbourCard';
 import { CornerSheet, type CornerTools } from './CornerSheet';
 import { BeatId, HomecomingWalk, homecomingBadgeArrivals } from './homecomingPlan';
 import {
@@ -67,7 +68,7 @@ import {
   worldYardLayout,
 } from './sceneLayout';
 import { MeadowGround, MeadowProps } from './MeadowLayer';
-import { hofDecor, meadowLayout } from './meadowDecor';
+import { diarySpot, hofDecor, meadowLayout } from './meadowDecor';
 import { skyTintForDate } from './timeOfDay';
 import { useViertelChrome } from './useViertelChrome';
 
@@ -89,10 +90,16 @@ const GRASS_BASE = '#9BC995';
 /** The hill's bottom edge (measured on yard-ground-wide.png: ~#B9D7B6) as a mix of the meadow colour, so the buildings page fades out of it with no seam. */
 const HILL_EDGE = mix(GRASS_BASE, '#FFFFFF', 0.3);
 const MAX_NOTES = 2;
-/** Stick pickup: Buddy gets this long to reach the stick before a second tap may start a new errand (a re-layout can cancel one). */
+/** Buddy gets this long to reach the stick shelf or the mailbox before a second tap may start a new errand (a re-layout can cancel one). */
 const ERRAND_STALE_MS = 6000;
 /** Keys of Buddy's stick lines start here so they never collide with App's flash-note keys. */
 const STICK_LINE_KEY_BASE = 1_000_000;
+/** Same for the mailbox lines; a rising counter keeps every line's key unique (a repeated line must still show). */
+const INBOX_LINE_KEY_BASE = 2_000_000;
+/** How long the pile-up line stays alone before Buddy pulls the first item. */
+const PILE_UP_PAUSE_MS = 1600;
+/** Which empty-box line comes next; module-level so the three rotate across visits to the Hof. */
+let emptyBoxTurn = 0;
 const NO_LOCATIONS: never[] = [];
 /** The yard's wooden-sign text is smaller than the 20pt default so long names fit under a building. */
 const SMALL_SIGN_TEXT = { fontSize: 15, lineHeight: 18 } as const;
@@ -143,6 +150,11 @@ export interface WorldSceneProps {
   flashNote?: { key: number; text: string } | null;
   onOpenMap: () => void;
   onOpenHistory: () => void;
+  /** The Stock-Regal (the stick pile). */
+  onOpenSticks: () => void;
+  /** Buddy's walk diary (the notebook on the stump). */
+  onOpenDiary: () => void;
+  /** The gear in the top bar. */
   onOpenSettings: () => void;
   /** The dog-name sign under the fence opens Stats & badges. Omitted = the sign is plain decoration. */
   onOpenStats?: () => void;
@@ -167,19 +179,16 @@ export interface WorldSceneProps {
   cornerTools?: CornerTools;
 }
 
-type NoteKind = 'update' | 'line' | 'neighbour';
+type NoteKind = 'update' | 'line';
 interface Note {
   key: string;
   kind: NoteKind;
   text: string;
-  /** neighbour notes: the dog the line is about (tap opens its card); null for the co-op line. */
-  botId?: string | null;
 }
 
 /**
  * Pure: at most two notes at once. The OTA update card comes first, then the welcome-back line, then the away-strip lines
- * in their given order; the greeting only fills an otherwise empty yard. A neighbour note (max one) takes the paper
- * slot on the fence unless the OTA card holds it; Buddy's speech bubble always keeps the household/greeting line.
+ * in their given order; the greeting only fills an otherwise empty yard. Neighbour notes arrive in the mailbox, not here.
  */
 export function pickSceneNotes(
   awayStripLines: AwayStripLine[],
@@ -187,7 +196,6 @@ export function pickSceneNotes(
   hasUpdateCard: boolean,
   dismissed: ReadonlySet<string>,
   welcomeBack: string | null = null,
-  neighbour: NeighbourNote | null = null,
   flash: { key: number; text: string } | null = null
 ): Note[] {
   const all: Note[] = [];
@@ -202,12 +210,7 @@ export function pickSceneNotes(
   });
   if (all.length === 0 && greeting) all.push({ key: 'greeting', kind: 'line', text: greeting });
   const visible = all.filter((n) => !dismissed.has(n.key));
-  if (!neighbour || dismissed.has(neighbour.key)) return visible.slice(0, MAX_NOTES);
-  const update = visible.find((n) => n.kind === 'update');
-  if (update) return visible.slice(0, MAX_NOTES); // the neighbour waits until the update card is gone
-  const bubble = visible.find((n) => n.kind === 'line');
-  const note: Note = { key: neighbour.key, kind: 'neighbour', text: neighbour.text, botId: neighbour.botId };
-  return bubble ? [bubble, note] : [note];
+  return visible.slice(0, MAX_NOTES);
 }
 
 let sleepyYawnPlayed = false;
@@ -249,6 +252,8 @@ export function WorldScene(props: WorldSceneProps) {
     flashNote = null,
     onOpenMap,
     onOpenHistory,
+    onOpenSticks,
+    onOpenDiary,
     onOpenSettings,
     onOpenStats,
     openDenPanel = false,
@@ -284,6 +289,7 @@ export function WorldScene(props: WorldSceneProps) {
   const buildings = useMemo(() => buildingsLayout(width, topInset, layout.buildingsPageH), [width, topInset, layout.buildingsPageH]);
   // Static meadow decor: computed once per window size, never per frame.
   const meadow = useMemo(() => meadowLayout(width, layout.buildingsH, buildings), [width, layout.buildingsH, buildings]);
+  const diary = useMemo(() => diarySpot(width, worldYardLayout(width, layout.yardH).feetY), [width, layout.yardH]);
   const yardDecor = useMemo(() => hofDecor(width, layout.yardH, worldYardLayout(width, layout.yardH).feetY), [width, layout.yardH]);
 
   const scrollRef = useRef<{ scrollTo: (o: { x?: number; y?: number; animated?: boolean }) => void } | null>(null);
@@ -443,6 +449,7 @@ export function WorldScene(props: WorldSceneProps) {
   // ---- Gate: swing open, Buddy trots through, then the existing walk flow ----
   type GateFrame = 'sit' | 'a' | 'b';
   const [leaving, setLeaving] = useState<GateFrame | null>(null);
+  const closeBoxRef = useRef<() => void>(() => undefined);
   const leavingRef = useRef(false);
   const gateTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const walker = useRef(new Animated.Value(0)).current;
@@ -460,6 +467,7 @@ export function WorldScene(props: WorldSceneProps) {
   const startWalk = () => {
     if (leavingRef.current) return;
     leavingRef.current = true;
+    closeBoxRef.current(); // Buddy is off on the walk: whatever he was fetching from the box stays in it
     setLeaving('sit');
     walker.setValue(0);
     Animated.timing(walker, { toValue: 1, duration: GATE_SWING_MS, useNativeDriver: true }).start();
@@ -543,18 +551,27 @@ export function WorldScene(props: WorldSceneProps) {
   const dismiss = (key: string) => setDismissed((prev) => new Set(prev).add(key));
   const welcomeText = welcome ? t('world.welcomeBack', { n: formatNumber(welcome.n) }) : null;
   const hood = useNeighbourhood(neighbourhood);
-  const [cardBotId, setCardBotId] = useState<string | null>(null);
-  const cardItem = cardBotId ? hood.nearby.find((n) => n.id === cardBotId) : undefined;
-  // Sticks (and the odd parcel) the neighbour dogs left in the Hof. A tap sends Buddy; at the stick the gift is opened (`gift.open`).
-  const lawnGifts = hood.unopenedGifts;
+  // The mailbox (Posteingang): stick gifts, neighbour notes and postponed postcards arrive here; Buddy pulls them out one at a time.
+  const inbox = useInbox({ settingsRepository, walkRepository, territoryRepository, unopenedGifts: hood.unopenedGifts, lines: hood.lines, cards: postcards.cards });
+  const benchCardList = useMemo(() => postcards.cards.filter((c) => !inbox.inBoxIds.has(c.id)), [postcards.cards, inbox.inBoxIds]);
   const [errand, setErrand] = useState<{ key: number; x: number; onArrived: () => void } | null>(null);
   const errandKey = useRef(0);
   const errandSince = useRef(0);
-  /** The gift whose gift.open is in flight: a slow answer must never start a second errand or line for it. */
-  const openingGiftId = useRef<string | null>(null);
+  const lineSeq = useRef(0);
+  const pileUpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (pileUpTimer.current) clearTimeout(pileUpTimer.current);
+  }, []);
+  /** The items of the current opening (a snapshot taken at the tap) and what is on show now; null = the box is closed. */
+  const [unwrap, setUnwrap] = useState<{ item: InboxItem; index: number } | null>(null);
+  const [boxOpen, setBoxOpen] = useState(false);
+  const queue = useRef<InboxItem[]>([]);
+  const pulledIndex = useRef(-1);
+  /** True while Buddy stands at the mailbox; a stick he carried to the shelf sends him back before the next pull. */
+  const buddyAtBox = useRef(false);
   const [stickLine, setStickLine] = useState<{ key: number; text: string } | null>(null);
   const [stickPop, setStickPop] = useState<{ n: number; amount: number } | null>(null);
-  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, hood.note, stickLine ?? flashNote);
+  const notes = pickSceneNotes(awayStripLines, greeting, !!updateCard && !walkActive, dismissed, welcomeText, stickLine ?? flashNote);
   const bubbleNote = notes.find((n) => n.kind === 'line');
   const paperNote = notes.find((n) => n !== bubbleNote);
   const coopText = coopSignText(hood.coop);
@@ -601,32 +618,100 @@ export function WorldScene(props: WorldSceneProps) {
   // The pile lies right of the doormat, just under Buddy's paws: clear of the bowl, the bench and the mailbox paths.
   const pileLeft = Math.min(width / 2 + 74, width - PILE_W - 6);
   const pileTop = yard.doormat.top + 40 - 30;
-  const fetchStick = () => {
-    const gift = lawnGifts.find((g) => g.id !== openingGiftId.current);
-    const busy = errandSince.current > 0 && Date.now() - errandSince.current < ERRAND_STALE_MS;
-    if (!gift || busy || leaving || homecoming) return;
+  // Mailbox: sits right of the bench row; Buddy trots to its x. The pile (the shelf's entry) is where he carries a stick.
+  const mailboxX = width - 14 - 65;
+  const pileX = pileLeft + PILE_W / 2;
+  const say = (text: string) => setStickLine({ key: INBOX_LINE_KEY_BASE + ++lineSeq.current, text });
+  const errandBusy = () => errandSince.current > 0 && Date.now() - errandSince.current < ERRAND_STALE_MS;
+  /** Buddy trots to x and does `then` there. */
+  const trotTo = (x: number, then: () => void) => {
     errandSince.current = Date.now();
     errandKey.current += 1;
     const myKey = errandKey.current;
-    const wasNew = fillsShelfSlot(gift, hood.gifts);
     setErrand({
       key: myKey,
-      x: pileLeft + PILE_W / 2,
+      x,
       onArrived: () => {
-        openingGiftId.current = gift.id;
-        void hood.openGift(gift).then((ok) => {
-          openingGiftId.current = null;
-          if (errandKey.current === myKey) errandSince.current = 0; // a newer errand keeps its own clock
-          if (ok === 'gone') return; // removed from the store: nothing to retry
-          const n = STICK_LINE_KEY_BASE + myKey;
-          setStickLine({ key: n, text: ok ? giftOpenedLine(gift, wasNew) : t('neighbours.gift.retry') });
-          if (ok && gift.sprinkleTreats) {
-            setStickPop({ n, amount: gift.sprinkleTreats });
-            play('treat');
-            haptics.success();
-          }
-        });
+        if (errandKey.current === myKey) errandSince.current = 0; // a newer errand keeps its own clock
+        then();
       },
+    });
+  };
+  const closeBox = () => {
+    if (pileUpTimer.current) clearTimeout(pileUpTimer.current);
+    pileUpTimer.current = null;
+    setUnwrap(null);
+    setBoxOpen(false);
+    buddyAtBox.current = false;
+  };
+  closeBoxRef.current = closeBox;
+  /** Pulls item `index` out of the box: shows it, says Buddy's one line and does what the item means. */
+  const pull = (index: number) => {
+    const item = queue.current[index];
+    // Never twice for one item (a double tap in one frame would open a gift twice), and never once the gate is swinging.
+    if (pulledIndex.current === index) return;
+    if (!item || leavingRef.current) return closeBox();
+    pulledIndex.current = index;
+    buddyAtBox.current = true;
+    setUnwrap({ item, index });
+    if (item.kind === 'note') {
+      say(noteLine(item));
+      inbox.markNoteSeen(item.key);
+    } else if (item.kind === 'postcard') {
+      say(t('inbox.postcardToBench'));
+      inbox.release(item.entry.id);
+    } else {
+      const wasNew = fillsShelfSlot(item.gift, hood.gifts);
+      void hood.openGift(item.gift).then((ok) => {
+        if (ok === 'gone') return pull(index + 1); // the server no longer knows it: nothing to show
+        if (!ok) {
+          say(t('neighbours.gift.retry'));
+          return closeBox();
+        }
+        const n = STICK_LINE_KEY_BASE + index;
+        say(giftOpenedLine(item.gift, wasNew));
+        if (item.gift.sprinkleTreats) {
+          setStickPop({ n, amount: item.gift.sprinkleTreats });
+          play('treat');
+          haptics.success();
+        }
+        if (stickDogOf(item.gift)) {
+          // Unwrapped: Buddy carries the stick over to the shelf.
+          buddyAtBox.current = false;
+          trotTo(pileX, () => undefined);
+        }
+      });
+    }
+  };
+  const pullNext = (index: number) => {
+    if (index >= queue.current.length) {
+      say(t('inbox.done'));
+      return closeBox();
+    }
+    if (!buddyAtBox.current) {
+      // Buddy was off carrying a stick to the shelf: back to the box first.
+      setUnwrap(null);
+      return trotTo(mailboxX, () => pull(index));
+    }
+    pull(index);
+  };
+  const openMailbox = () => {
+    if (errandBusy() || leaving || homecoming) return;
+    if (inbox.items.length === 0) {
+      // Empty box: the flag is already down; a short sniff beat and one of three lines.
+      buddyAtBox.current = false;
+      trotTo(mailboxX, () => say(emptyBoxLine(emptyBoxTurn++)));
+      return;
+    }
+    queue.current = inbox.items;
+    pulledIndex.current = -1;
+    setBoxOpen(true);
+    say(t('inbox.opening'));
+    trotTo(mailboxX, () => {
+      if (queue.current.length > 1) {
+        say(t('inbox.pileUp'));
+        pileUpTimer.current = setTimeout(() => pull(0), PILE_UP_PAUSE_MS);
+      } else pull(0);
     });
   };
   const extraEl = wildExtra.active ? (
@@ -722,16 +807,29 @@ export function WorldScene(props: WorldSceneProps) {
             />
             {extraEl}
 
-            {/* What the neighbour dogs left: sticks (each dog its own look) lie by the doormat; one tap and Buddy fetches the front one. */}
-            {lawnGifts.length > 0 && (
-              <StickPile
-                gifts={lawnGifts}
-                left={pileLeft}
-                top={pileTop}
-                accessibilityLabel={t(stickDogOf(lawnGifts[0]) ? 'neighbours.stick.label' : 'neighbours.stick.otherLabel', { bot: lawnGifts[0].botName, dog })}
-                onPress={fetchStick}
-              />
-            )}
+            {/* Buddy's diary: a notebook on a tree stump left of the doormat. */}
+            {(() => {
+              const art = artOr('meadow-diary', null);
+              return art ? (
+                <DecorImage source={art} resizeMode="contain" style={{ position: 'absolute', left: diary.left, top: diary.top, width: diary.width, height: diary.height }} />
+              ) : null;
+            })()}
+            <Pressable
+              testID="diary-prop"
+              accessibilityRole="button"
+              accessibilityLabel={t('world.diaryLabel')}
+              onPress={onOpenDiary}
+              style={[styles.abs, { left: diary.left + 8, top: diary.top + diary.height * 0.15, width: diary.width - 16, height: diary.height * 0.8 }]}
+            />
+
+            {/* The stick pile is the one entry to the Stock-Regal; sticks from the mailbox end up on it. */}
+            <StickPile
+              dogs={hood.shelf.filter((slot) => slot.collected).map((slot) => slot.id)}
+              left={pileLeft}
+              top={pileTop}
+              accessibilityLabel={t('world.sticksLabel')}
+              onPress={onOpenSticks}
+            />
             <TreatPop
               amount={stickPop?.amount ?? 0}
               trigger={stickPop?.n}
@@ -794,20 +892,6 @@ export function WorldScene(props: WorldSceneProps) {
                       </WoodSign>
                     </View>
                   </PaperNote>
-                ) : paperNote.kind === 'neighbour' ? (
-                  <Pressable
-                    onPress={() => {
-                      // A note about a dog opens its card; either way it has been read.
-                      if (paperNote.botId && hood.nearby.some((n) => n.id === paperNote.botId)) setCardBotId(paperNote.botId);
-                      dismiss(paperNote.key);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={paperNote.text}
-                  >
-                    <PaperNote>
-                      <Text style={[textStyle('small'), styles.noteText]}>{paperNote.text}</Text>
-                    </PaperNote>
-                  </Pressable>
                 ) : (
                   <Pressable onPress={() => dismiss(paperNote.key)} accessibilityRole="button" accessibilityLabel={paperNote.text}>
                     <PaperNote>
@@ -822,7 +906,7 @@ export function WorldScene(props: WorldSceneProps) {
           {/* Bottom row: bench = Album, bowl = treats, mailbox = Post. */}
           <View pointerEvents="box-none" style={[styles.bottomRow, { top: layout.yardH, height: BOTTOM_ROW_H }]}>
             <ArtDecor art="bench-empty" style={[styles.abs, { left: 6, top: 0, width: 140, height: 140 }]} />
-            <BenchPostcards cards={postcards.cards} favouriteId={postcards.favouriteId} />
+            <BenchPostcards cards={benchCardList} favouriteId={postcards.favouriteId} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('world.albumLabel')}
@@ -836,14 +920,16 @@ export function WorldScene(props: WorldSceneProps) {
             </View>
 
             <ArtDecor art={'prop-mailbox'} style={[styles.abs, { right: 14, top: -6, width: 130, height: 130 }]} />
+            {inbox.items.length > 0 && !boxOpen && <MailboxFlag boxRight={14} boxTop={-6} />}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('world.postLabel')}
-              onPress={onOpenSettings}
+              accessibilityLabel={inbox.items.length > 0 ? t('world.postFlagLabel') : t('world.postLabel')}
+              onPress={openMailbox}
               style={[styles.abs, { right: 30, top: 0, width: 98, height: 110 }]}
+              testID="mailbox"
             />
             <View pointerEvents="box-none" style={[styles.abs, { right: 14, top: 108, width: 130, alignItems: 'center' }]}>
-              <WoodSign size="small" onPress={onOpenSettings} accessibilityLabel={t('world.post')} textStyleOverride={SMALL_SIGN_TEXT}>
+              <WoodSign size="small" onPress={openMailbox} accessibilityLabel={t('world.post')} textStyleOverride={SMALL_SIGN_TEXT}>
                 {t('world.post')}
               </WoodSign>
             </View>
@@ -909,8 +995,10 @@ export function WorldScene(props: WorldSceneProps) {
             if (!k) return null; // the reserved slot (Friend Lounge) draws nothing
             const w = buildings.world[k];
             const pennantHere = den.cheapestAffordable?.building === k;
+            // Every building whose next upgrade is affordable says so on its sign; pennant and sparkle stay on the cheapest.
+            const upgradeHere = den.affordable.some((a) => a.building === k);
             const name = t(`den.building.${k}.name`);
-            const nextLine = pennantHere ? nextEffectLabel(k, state) : null;
+            const nextLine = upgradeHere ? nextEffectLabel(k, state) : null;
             const pennant = artOr('pennant', null);
             return (
               <React.Fragment key={k}>
@@ -948,7 +1036,7 @@ export function WorldScene(props: WorldSceneProps) {
                     accessibilityLabel={t('world.buildingLabel', { name, level: levels[k] })}
                     textStyleOverride={SMALL_SIGN_TEXT}
                   >
-                    {pennantHere ? (
+                    {upgradeHere ? (
                       <View style={styles.upgradeLabel}>
                         <Text style={[textStyle('sign'), styles.upgradeTitle, SMALL_SIGN_TEXT]}>{t('world.upgradePossible')}</Text>
                         {nextLine ? <Text style={[textStyle('small'), styles.upgradeNext]}>{nextLine}</Text> : null}
@@ -1131,6 +1219,7 @@ export function WorldScene(props: WorldSceneProps) {
           note={walkActive || homecoming || projection.ratePerHour <= 0 ? null : t('world.treatsRate', { rate: formatRatePerHour(projection.ratePerHour) })}
           label={t('world.treatsPillLabel', { count: formatNumber(Math.floor(bankShown)), cap: formatNumber(cap) })}
           onPressTreats={zoomBowl}
+          onOpenSettings={onOpenSettings}
         />
       </View>
 
@@ -1167,7 +1256,15 @@ export function WorldScene(props: WorldSceneProps) {
         />
       )}
 
-      {cardItem && <NeighbourCard item={cardItem} lines={hood.linesFor(cardItem.id)} onClose={() => setCardBotId(null)} />}
+      {unwrap && (
+        <InboxUnwrap
+          item={unwrap.item}
+          top={insets.top + TOP_BAR_H}
+          bottom={insets.bottom}
+          onAdvance={() => pullNext(unwrap.index + 1)}
+          onLater={closeBox}
+        />
+      )}
 
       {/* The upgrade sign docks at the bottom of the screen (the buildings page). */}
       {selected && (

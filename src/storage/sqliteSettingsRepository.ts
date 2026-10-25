@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { openSharedDatabase } from './database';
 
+import { InboxState, normalizeInboxState } from '../inbox/inbox';
 import { DiarySeen, normalizeDiarySeen } from '../walks/walkDiary';
 import { LocalePreference } from '../i18n/types';
 import { normalizeLastShown } from '../components/den/wildExtras';
@@ -58,6 +59,9 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
     }
     if (!columns.some((c) => c.name === 'diarySeen')) {
       await db.execAsync("ALTER TABLE app_settings ADD COLUMN diarySeen TEXT NOT NULL DEFAULT ''");
+    }
+    if (!columns.some((c) => c.name === 'inboxState')) {
+      await db.execAsync("ALTER TABLE app_settings ADD COLUMN inboxState TEXT NOT NULL DEFAULT ''");
     }
     return db;
   });
@@ -286,6 +290,26 @@ export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME)
          ON CONFLICT(id) DO UPDATE SET diarySeen = excluded.diarySeen`,
         SINGLETON_ID,
         JSON.stringify(normalizeDiarySeen(seen))
+      );
+    },
+
+    async getInboxState(): Promise<InboxState> {
+      const db = await dbPromise;
+      const row = await db.getFirstAsync<{ inboxState: string }>('SELECT inboxState FROM app_settings WHERE id = ?', SINGLETON_ID);
+      try {
+        return normalizeInboxState(JSON.parse(row?.inboxState || 'null'));
+      } catch {
+        return normalizeInboxState(null);
+      }
+    },
+
+    async saveInboxState(state: InboxState): Promise<void> {
+      const db = await dbPromise;
+      await db.runAsync(
+        `INSERT INTO app_settings (id, localePreference, inboxState) VALUES (?, 'system', ?)
+         ON CONFLICT(id) DO UPDATE SET inboxState = excluded.inboxState`,
+        SINGLETON_ID,
+        JSON.stringify(normalizeInboxState(state))
       );
     },
 

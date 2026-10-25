@@ -13,6 +13,7 @@ import { createInMemoryHomeRangeRepository } from '../../storage/inMemoryHomeRan
 import { createInMemoryPersonalStatsRepository } from '../../storage/inMemoryPersonalStatsRepository';
 import { createInMemoryTerritoryRepository } from '../../storage/inMemoryTerritoryRepository';
 import { cellCentre } from '../../utils/grid';
+import { createInMemorySettingsRepository } from '../../storage/inMemorySettingsRepository';
 import { createInMemoryWalkRepository } from '../../storage/inMemoryWalkRepository';
 import { advance, flush, imagesIn, renderScreen, unmountAndExpectNoTimers } from '../../test/render';
 import { pickSceneNotes, WorldScene, WorldSceneProps } from '../world/WorldScene';
@@ -53,6 +54,8 @@ async function setup(extra: Partial<WorldSceneProps> = {}, treats = 70, stateExt
     onOpenMap: jest.fn(),
     onCancelWalk: jest.fn(),
     onOpenHistory: jest.fn(),
+    onOpenSticks: jest.fn(),
+    onOpenDiary: jest.fn(),
     onOpenSettings: jest.fn(),
     onOpenStats: jest.fn(),
     onTreatsChanged: jest.fn(),
@@ -145,13 +148,41 @@ describe('WorldScene', () => {
     await unmountAndExpectNoTimers(view);
   });
 
-  it('bench, mailbox and the neighbourhood call their callbacks', async () => {
-    const { view, onOpenHistory, onOpenSettings, onOpenMap } = await setup();
+  it('every building whose next upgrade is affordable says "Upgrade possible"; pennant and sparkle stay on the cheapest', async () => {
+    const a = await setup({}, 100); // doghouse 60, sniff garden 72 and bakery 96 are all affordable
+    expect(screen.getAllByText(t('world.upgradePossible'))).toHaveLength(3);
+    expect(screen.getAllByText(/^→ /).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByTestId('upgrade-sparkle')).toHaveLength(1);
+    await unmountAndExpectNoTimers(a.view);
+    const b = await setup({}, 80); // doghouse and sniff garden only
+    expect(screen.getAllByText(t('world.upgradePossible'))).toHaveLength(2);
+    expect(screen.getByText('Treat Bakery · Lv\u00A01')).toBeOnTheScreen();
+    expect(screen.getAllByTestId('upgrade-sparkle')).toHaveLength(1);
+    await unmountAndExpectNoTimers(b.view);
+  });
+
+  it('the stick pile is always there and is the one entry to the stick shelf (no "Sticks" sign); the diary prop opens the diary', async () => {
+    const { view, onOpenSticks, onOpenDiary } = await setup();
+    expect(screen.getByTestId('stick-pile')).toBeOnTheScreen();
+    expect(screen.queryByText('Sticks')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: t('world.sticksLabel') }));
+    expect(onOpenSticks).toHaveBeenCalledTimes(1);
+    await fireEvent.press(screen.getByRole('button', { name: t('world.diaryLabel') }));
+    expect(onOpenDiary).toHaveBeenCalledTimes(1);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('the bench opens the Album; the mailbox no longer opens Settings (the top bar gear does)', async () => {
+    const { view, onOpenHistory, onOpenSettings } = await setup();
     await fireEvent.press(screen.getByRole('button', { name: t('world.albumLabel') }));
     await fireEvent.press(screen.getByRole('button', { name: t('world.album') }));
     expect(onOpenHistory).toHaveBeenCalledTimes(2);
     await fireEvent.press(screen.getByRole('button', { name: t('world.postLabel') }));
+    await advance(6000);
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole('button', { name: t('topBar.settingsLabel') }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    await advance(4000);
     await unmountAndExpectNoTimers(view);
   });
 
@@ -478,9 +509,9 @@ describe('pickSceneNotes', () => {
   });
   it("puts the walk-end line first, ahead of the greeting and the away strip", () => {
     const flash = { key: 7, text: 'Later, then!' };
-    expect(pickSceneNotes(lines, 'Hi', false, new Set(), null, null, flash).map((n) => n.key)).toEqual(['flash-7', 'line-0']);
-    expect(pickSceneNotes([], 'Hi', false, new Set(), null, null, flash).map((n) => n.key)).toEqual(['flash-7']);
-    expect(pickSceneNotes([], 'Hi', false, new Set(['flash-7']), null, null, flash).map((n) => n.key)).toEqual([]); // a tapped-away line leaves the yard quiet
+    expect(pickSceneNotes(lines, 'Hi', false, new Set(), null, flash).map((n) => n.key)).toEqual(['flash-7', 'line-0']);
+    expect(pickSceneNotes([], 'Hi', false, new Set(), null, flash).map((n) => n.key)).toEqual(['flash-7']);
+    expect(pickSceneNotes([], 'Hi', false, new Set(['flash-7']), null, flash).map((n) => n.key)).toEqual([]); // a tapped-away line leaves the yard quiet
   });
   it('uses the greeting only when nothing else is there, and skips dismissed notes', () => {
     expect(pickSceneNotes([], 'Hi', false, new Set()).map((n) => n.text)).toEqual(['Hi']);
@@ -632,73 +663,69 @@ const coopWeek = (over: Partial<CoopWeekResponse> = {}): CoopWeekResponse => ({
 /** The store is what the scene reads (the sync engine fills it); `actions` is only the gift-open seam. */
 const actions: NeighbourhoodActions = { openGift: async () => true };
 const seed = (state: Parameters<typeof setNeighbourhood>[0]) => setNeighbourhood(state);
+/** An inbox state that already counts lines from the beginning of time (the first-look rule would hide lines older than the first mount). */
+async function inboxRepo() {
+  const repo = createInMemorySettingsRepository();
+  await repo.saveInboxState({ postponedPostcards: [], deliveredPostcards: [], seenNotes: [], notesFrom: 1 });
+  return repo;
+}
 const sniffLine = { line: 'neighbours.line.sniffCorner', botName: 'Momo', botId: 'b1', params: { bot: 'Momo' }, at: Date.now() - 60_000, seq: 4 };
 
 describe('WorldScene neighbours', () => {
-  it('pins the neighbour line on the fence; tapping it opens the dog card with its last lines and the note is gone', async () => {
-    seed({ nearby: [momo], lines: [sniffLine, { ...sniffLine, line: 'neighbours.line.wave', seq: 3, at: Date.now() - 9e6 }] });
+  it('the fence no longer pins neighbour notes: they arrive in the mailbox', async () => {
+    seed({ nearby: [momo], lines: [sniffLine] });
     const { view } = await setup({ neighbourhood: actions });
-    const note = await screen.findByRole('button', { name: 'Momo had a good sniff at your corner today.' });
-    expect(screen.getByText('Hello Rex!')).toBeOnTheScreen(); // Buddy's bubble keeps the greeting
-    expect(screen.queryByTestId('neighbour-card')).toBeNull();
-    await fireEvent.press(note);
-    expect(screen.getByTestId('neighbour-card')).toBeOnTheScreen();
-    expect(screen.getByText(t('neighbours.dog.momo.trait'))).toBeOnTheScreen();
-    expect(screen.getByText(t('neighbours.badge'))).toBeOnTheScreen();
-    expect(screen.getByText('Momo is waving at you from the corner.')).toBeOnTheScreen();
-    expect(screen.getAllByText('Momo had a good sniff at your corner today.')).toHaveLength(1); // in the card only
-    await fireEvent.press(screen.getAllByRole('button', { name: t('neighbours.card.close') })[1]);
-    expect(screen.queryByTestId('neighbour-card')).toBeNull();
+    expect(screen.queryByText(/good sniff/)).toBeNull();
+    expect(screen.getByText('Hello Rex!')).toBeOnTheScreen();
     await unmountAndExpectNoTimers(view);
   });
 
-  it('a note without a known dog (co-op line) is just dismissed, and shows no card', async () => {
-    const coop = { line: 'neighbours.line.coopDone', botName: null, botId: null, params: { km: 40 }, at: Date.now() - 1000, seq: 5 };
-    seed({ lines: [coop] });
-    const { view } = await setup({ neighbourhood: actions });
-    const note = await screen.findByRole('button', { name: /walked 40 km together/ });
-    await fireEvent.press(note);
-    expect(screen.queryByTestId('neighbour-card')).toBeNull();
-    expect(screen.queryByText(/walked 40 km together/)).toBeNull();
-    await unmountAndExpectNoTimers(view);
-  });
-
-  it('shows no neighbour note without neighbours, and the OTA card keeps the paper slot', async () => {
-    const a = await setup();
-    expect(screen.queryByText(/sniff/)).toBeNull();
-    await unmountAndExpectNoTimers(a.view);
-    seed({ lines: [sniffLine] });
-    const b = await setup({ updateCard: { onApply: jest.fn(), onLater: jest.fn() }, neighbourhood: actions });
-    expect(screen.getByText(t('update.ready'))).toBeOnTheScreen();
-    expect(screen.queryByText(/sniff/)).toBeNull();
-    await unmountAndExpectNoTimers(b.view);
-  });
-
-  it('a waiting stick lies in the Hof (no sign at the mailbox); a tap sends Buddy, who opens it at the stick and Buddy says the calm line', async () => {
-    seed({ gifts: [gift({ cosmeticId: 'stick-pfote' })] });
-    const openGift = jest.fn(async () => true);
-    const { view, onOpenSettings } = await setup({ neighbourhood: { openGift } });
-    const pile = await screen.findByRole('button', { name: t('neighbours.stick.label', { bot: 'Pfote', dog: 'Rex' }) });
-    expect(screen.queryByText(t('neighbours.parcel.sign'))).toBeNull();
-    await fireEvent.press(pile);
-    expect(openGift).not.toHaveBeenCalled(); // Buddy has to trot over first
-    await fireEvent.press(pile); // a second tap while he is on his way does nothing
+  it('empty box: no flag; a tap gives a short sniff beat with one of the three lines and opens nothing', async () => {
+    const { view, onOpenSettings } = await setup({ neighbourhood: actions });
+    expect(screen.queryByTestId('mailbox-flag')).toBeNull();
+    await fireEvent.press(screen.getByTestId('mailbox'));
     await advance(6000);
-    expect(openGift).toHaveBeenCalledTimes(1);
-    expect(openGift).toHaveBeenCalledWith('g1');
-    expect(await screen.findByText(t('neighbours.stick.lineNew', { bot: 'Pfote' }))).toBeOnTheScreen();
+    expect(screen.getByText(new RegExp([1, 2, 3].map((n) => t(`inbox.empty.${n}`).replace(/[.?']/g, '.')).join('|')))).toBeOnTheScreen();
+    expect(screen.queryByTestId('inbox-unwrap')).toBeNull();
     expect(onOpenSettings).not.toHaveBeenCalled();
     await advance(4000);
     await unmountAndExpectNoTimers(view);
   });
 
-  it('when opening does not work the stick stays and the line is a gentle retry', async () => {
+  it('a waiting stick raises the flag (no number); the tap opens it and Buddy carries the stick to the shelf, then says he is done', async () => {
+    seed({ gifts: [gift({ cosmeticId: 'stick-pfote' })] });
+    const settingsRepository = await inboxRepo();
+    const openGift = jest.fn(async () => true);
+    const { view, onOpenSettings } = await setup({ neighbourhood: { openGift }, settingsRepository });
+    expect(await screen.findByTestId('mailbox-flag')).toBeOnTheScreen();
+    const box = screen.getByTestId('mailbox');
+    await fireEvent.press(box);
+    expect(await screen.findByText(t('inbox.opening'))).toBeOnTheScreen();
+    expect(screen.queryByTestId('mailbox-flag')).toBeNull(); // the flag dropped
+    await fireEvent.press(box); // a second tap while he is on his way does nothing
+    expect(openGift).not.toHaveBeenCalled(); // Buddy has to trot over first
+    await advance(6000);
+    expect(openGift).toHaveBeenCalledTimes(1);
+    expect(openGift).toHaveBeenCalledWith('g1');
+    expect(await screen.findByText(t('neighbours.stick.lineNew', { bot: 'Pfote' }))).toBeOnTheScreen();
+    expect(screen.getByTestId('inbox-unwrap')).toBeOnTheScreen();
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('inbox-next')); // skips the unwrap beat
+    await fireEvent.press(screen.getByTestId('inbox-next')); // nothing more in the box
+    expect(await screen.findByText(t('inbox.done'))).toBeOnTheScreen();
+    expect(screen.queryByTestId('inbox-unwrap')).toBeNull();
+    await advance(6000);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('when opening does not work the gift stays and the line is a gentle retry', async () => {
     seed({ gifts: [gift()] });
-    const { view } = await setup({ neighbourhood: { openGift: async () => false } });
-    await fireEvent.press(await screen.findByTestId('stick-pile'));
+    const { view } = await setup({ neighbourhood: { openGift: async () => false }, settingsRepository: await inboxRepo() });
+    await fireEvent.press(await screen.findByTestId('mailbox'));
     await advance(6000);
     expect(await screen.findByText(t('neighbours.gift.retry'))).toBeOnTheScreen();
-    expect(screen.getByTestId('stick-pile')).toBeOnTheScreen();
+    expect(screen.queryByTestId('inbox-unwrap')).toBeNull();
+    expect(screen.getByTestId('mailbox-flag')).toBeOnTheScreen();
     await advance(4000);
     await unmountAndExpectNoTimers(view);
   });
@@ -709,25 +736,50 @@ describe('WorldScene neighbours', () => {
       seed({ gifts: [] }); // what the engine does for not-found
       return 'gone' as const;
     });
-    const { view } = await setup({ neighbourhood: { openGift } });
-    await fireEvent.press(await screen.findByTestId('stick-pile'));
+    const { view } = await setup({ neighbourhood: { openGift }, settingsRepository: await inboxRepo() });
+    await fireEvent.press(await screen.findByTestId('mailbox'));
     await advance(6000);
     expect(openGift).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(t('neighbours.gift.retry'))).toBeNull();
-    expect(screen.queryByTestId('stick-pile')).toBeNull();
+    expect(screen.queryByTestId('mailbox-flag')).toBeNull();
     await advance(4000);
     await unmountAndExpectNoTimers(view);
   });
 
-  it('no stick pile when there are no gifts or all are opened', async () => {
-    seed({ gifts: [gift({ openedAt: 5 })] });
-    const a = await setup({ neighbourhood: actions });
-    expect(screen.queryByTestId('stick-pile')).toBeNull();
-    await unmountAndExpectNoTimers(a.view);
-    resetNeighbourhood();
-    const b = await setup({ neighbourhood: actions });
-    expect(screen.queryByTestId('stick-pile')).toBeNull();
-    await unmountAndExpectNoTimers(b.view);
+  it('a neighbour note comes out of the box as "Ein Zettel von ..." once and is then seen for good', async () => {
+    seed({ nearby: [momo], lines: [sniffLine] });
+    const settingsRepository = await inboxRepo();
+    const { view } = await setup({ neighbourhood: actions, settingsRepository });
+    expect(await screen.findByTestId('mailbox-flag')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('mailbox'));
+    await advance(6000);
+    expect(await screen.findByText(t('inbox.note', { text: 'Momo had a good sniff at your corner today.' }))).toBeOnTheScreen();
+    expect((await settingsRepository.getInboxState()).seenNotes).toEqual(['neighbour-4']);
+    await fireEvent.press(screen.getByTestId('inbox-next'));
+    await fireEvent.press(screen.getByTestId('inbox-next'));
+    expect(screen.queryByTestId('mailbox-flag')).toBeNull();
+    await advance(6000);
+    await unmountAndExpectNoTimers(view);
+  });
+
+  it('several items: Buddy says "Da hat sich was gesammelt" first; "Später" leaves the rest silently and the flag stays up', async () => {
+    seed({ gifts: [gift({ id: 'g1', createdAt: 2, cosmeticId: 'stick-pfote' }), gift({ id: 'g2', createdAt: 1, cosmeticId: 'stick-momo', botName: 'Momo' })] });
+    const openGift = jest.fn(async () => true);
+    const { view } = await setup({ neighbourhood: { openGift }, settingsRepository: await inboxRepo() });
+    await fireEvent.press(await screen.findByTestId('mailbox'));
+    for (let i = 0; i < 40 && !screen.queryByText(t('inbox.pileUp')); i += 1) await advance(150); // Buddy's trot has no fixed length
+    expect(screen.getByText(t('inbox.pileUp'))).toBeOnTheScreen();
+    expect(openGift).not.toHaveBeenCalled();
+    await advance(2000);
+    expect(openGift).toHaveBeenCalledTimes(1);
+    expect(openGift).toHaveBeenCalledWith('g1'); // newest first
+    await fireEvent.press(screen.getByText(t('inbox.later')));
+    expect(screen.queryByTestId('inbox-unwrap')).toBeNull();
+    expect(screen.queryByText(t('inbox.done'))).toBeNull();
+    expect(openGift).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('mailbox-flag')).toBeOnTheScreen(); // the opened mock did not change the store: both still wrapped
+    await advance(6000);
+    await unmountAndExpectNoTimers(view);
   });
 
   it('the Viertel-Runde sign shows one percentage while the co-op is active, and is hidden otherwise', async () => {
@@ -743,20 +795,6 @@ describe('WorldScene neighbours', () => {
     const c = await setup({ neighbourhood: actions });
     expect(await screen.findByText(t('neighbours.coop.done'))).toBeOnTheScreen();
     await unmountAndExpectNoTimers(c.view);
-  });
-});
-
-describe('pickSceneNotes with a neighbour note', () => {
-  const nb = { key: 'neighbour-4', text: 'Momo sniffed.', botId: 'b1', at: 1 };
-  const line = { text: 'a', kind: 'household' as const };
-  it('takes the paper slot next to the household/greeting bubble', () => {
-    expect(pickSceneNotes([line, { text: 'b', kind: 'household' }], null, false, new Set(), null, nb).map((n) => n.key)).toEqual(['line-0', 'neighbour-4']);
-    expect(pickSceneNotes([], 'Hi', false, new Set(), null, nb).map((n) => n.key)).toEqual(['greeting', 'neighbour-4']);
-    expect(pickSceneNotes([], null, false, new Set(), null, nb)).toEqual([{ key: 'neighbour-4', kind: 'neighbour', text: 'Momo sniffed.', botId: 'b1' }]);
-  });
-  it('waits for the OTA card, and stays gone once dismissed', () => {
-    expect(pickSceneNotes([line], null, true, new Set(), null, nb).map((n) => n.key)).toEqual(['update', 'line-0']);
-    expect(pickSceneNotes([line], null, false, new Set(['neighbour-4']), null, nb).map((n) => n.key)).toEqual(['line-0']);
   });
 });
 

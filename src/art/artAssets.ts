@@ -63,6 +63,7 @@ export type ArtKey =
   | 'meadow-flowers'
   | 'meadow-stones'
   | 'meadow-tuft'
+  | 'meadow-diary'
   // Stock-Regal: one stick per neighbour dog.
   | `stick-${StickDogId}`
   // Neighbour-dog portraits for postcards (Blender, scripts/blender/neighbour_portraits.py).
@@ -151,6 +152,7 @@ export const artAssets: Partial<Record<ArtKey, ImageSourcePropType>> = {
   'meadow-flowers': require('../../assets/art/meadow-flowers.png'),
   'meadow-stones': require('../../assets/art/meadow-stones.png'),
   'meadow-tuft': require('../../assets/art/meadow-tuft.png'),
+  'meadow-diary': require('../../assets/art/meadow-diary.png'),
   'stick-momo': require('../../assets/art/stick-momo.png'),
   'stick-pfote': require('../../assets/art/stick-pfote.png'),
   'stick-bruno': require('../../assets/art/stick-bruno.png'),

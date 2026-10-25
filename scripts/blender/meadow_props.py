@@ -7,7 +7,7 @@ import bpy
 import assets
 import common
 from assets import base, flower
-from common import cyl, sph, cone, HEX
+from common import box, cyl, sph, cone, torus, HEX
 
 R = math.radians
 HEX.update({"stone": "#CFC8BA", "stone_dark": "#B3AB9B", "bark": "#A27B52", "leaf_light": "#98E08F"})
@@ -85,6 +85,27 @@ def tuft():
     flower((0.55, 0.05, 0), "white", 0.7, 0.3)
 
 
+def diary():
+    """Buddy's walk diary: a coral notebook with a ribbon and a pencil lying on a low tree stump (opens the diary screen in the Hof)."""
+    _shadow(1.0)
+    cyl((0, 0, 0.3), 0.62, 0.6, "bark", bev=0.06)
+    cyl((0, 0, 0.62), 0.56, 0.06, "yellow", bev=0.02)  # the sawn top
+    torus((0, 0, 0.66), 0.3, 0.012, "bark", scale=(1, 1, 0.6))
+    # notebook: cream pages block, coral cover, a lighter spine; tilted a little on the stump
+    nb = (0, 0, R(-14))
+    box((0, 0, 0.78), (0.74, 0.54, 0.17), "cream", bev=0.03, rot=nb)
+    box((0, 0, 0.88), (0.78, 0.58, 0.07), "coral", bev=0.03, rot=nb)
+    box((-0.36 * math.cos(nb[2]), 0.36 * math.sin(nb[2]) * -1, 0.8), (0.09, 0.58, 0.22), "brown_dark", bev=0.03, rot=nb)
+    sph((0.12, -0.02, 0.93), 0.08, "yellow", (1, 1, 0.5), rot=nb)  # a little paw-print stamp
+    for dx, dz in ((-0.07, 0.0), (0.0, 0.05), (0.07, 0.0)):
+        sph((0.12 + dx, -0.02 + dz - 0.1, 0.93), 0.03, "yellow", (1, 1, 0.5), rot=nb)
+    # ribbon bookmark hanging over the front edge
+    box((0.28, -0.3, 0.8), (0.07, 0.04, 0.3), "lav", bev=0.01, rot=nb)
+    # pencil resting beside it on the stump
+    cyl((0.38, 0.12, 0.7), 0.04, 0.5, "warm", bev=0.01, rot=(0, R(90), R(25)))
+    cone((0.54, 0.17, 0.7), 0.04, 0.1, "cream", rot=(0, R(90), R(25)), bev=0.005)
+
+
 assets.ASSETS.update({
     "meadow-bush": (bush, 384, 256, MEADOWCAM, 0.92, False),
     "meadow-hedge": (hedge, 768, 256, MEADOWCAM, 0.96, False),
@@ -92,4 +113,5 @@ assets.ASSETS.update({
     "meadow-flowers": (flowers, 256, 192, MEADOWCAM, 0.9, False),
     "meadow-stones": (stones, 256, 160, MEADOWCAM, 0.9, False),
     "meadow-tuft": (tuft, 256, 192, MEADOWCAM, 0.9, False),
+    "meadow-diary": (diary, 256, 256, MEADOWCAM, 0.9, False),
 })

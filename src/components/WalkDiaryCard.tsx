@@ -10,6 +10,8 @@ interface WalkDiaryCardProps {
   diary: WalkDiary;
   showIntro: boolean;
   newLongest: boolean;
+  /** The screen's own header already says the title. */
+  showTitle?: boolean;
 }
 
 /** Small time-of-day icons from plain shapes (sun, high sun, moon, moon with a star); the clay look comes from the soft rims. */
@@ -59,13 +61,15 @@ function Row({ label, value, note, testID }: { label: string; value: string; not
  * total distance (it only grows) and one row per time of day that has enough walks. No charts, no goals, no comparison
  * with anyone else. Before three walks only a friendly teaser shows.
  */
-export function WalkDiaryCard({ diary, showIntro, newLongest }: WalkDiaryCardProps) {
+export function WalkDiaryCard({ diary, showIntro, newLongest, showTitle = true }: WalkDiaryCardProps) {
   if (!diary.ready) {
     return (
       <View style={styles.card} testID="walk-diary-teaser">
-        <Text style={[textStyle('h2'), styles.title]} accessibilityRole="header">
-          {t('diary.title')}
-        </Text>
+        {showTitle ? (
+          <Text style={[textStyle('h2'), styles.title]} accessibilityRole="header">
+            {t('diary.title')}
+          </Text>
+        ) : null}
         <Text style={[textStyle('hand'), styles.hand]}>{tPlural('diary.teaser', diary.walksToGo)}</Text>
       </View>
     );
@@ -75,9 +79,11 @@ export function WalkDiaryCard({ diary, showIntro, newLongest }: WalkDiaryCardPro
   const sniff = sniffComment(diary);
   return (
     <View style={styles.card} testID="walk-diary">
-      <Text style={[textStyle('h2'), styles.title]} accessibilityRole="header">
-        {t('diary.title')}
-      </Text>
+      {showTitle ? (
+        <Text style={[textStyle('h2'), styles.title]} accessibilityRole="header">
+          {t('diary.title')}
+        </Text>
+      ) : null}
       {showIntro ? <Text style={[textStyle('hand'), styles.hand]}>{t('diary.intro')}</Text> : null}
       {newLongest ? (
         <Text style={[textStyle('hand'), styles.hand]} testID="walk-diary-record">

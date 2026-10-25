@@ -1,4 +1,5 @@
 import { LocalePreference } from '../i18n/types';
+import type { InboxState } from '../inbox/inbox';
 import type { DiarySeen } from '../walks/walkDiary';
 
 /** Household sync identity (multiplayer-sync). The token is stored unencrypted in SQLite: accepted for the 2-person test (design.md Decision 9). Never part of the Backup JSON. */
@@ -66,6 +67,9 @@ export interface SettingsRepository {
   /** What the Album's walk diary has already announced (intro line, longest walk seen). Never fails: returns the "nothing yet" value. */
   getDiarySeen(): Promise<DiarySeen>;
   saveDiarySeen(seen: DiarySeen): Promise<void>;
+  /** The mailbox's two small lists (postponed postcards, seen notes). Never fails: returns the empty value. */
+  getInboxState(): Promise<InboxState>;
+  saveInboxState(state: InboxState): Promise<void>;
 }
 
 /** Defensive read of the stored shown-partner-walk list. */

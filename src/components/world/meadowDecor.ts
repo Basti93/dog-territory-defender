@@ -16,6 +16,7 @@ const SPRITES: Record<MeadowArt, { aspect: number; foot: number }> = {
   'meadow-flowers': { aspect: 256 / 192, foot: 0.9 },
   'meadow-stones': { aspect: 256 / 160, foot: 0.82 },
   'meadow-tuft': { aspect: 256 / 192, foot: 0.9 },
+  'meadow-diary': { aspect: 1, foot: 0.9 },
 };
 
 export interface DecorItem {
@@ -57,6 +58,14 @@ function seeded(seed: number): () => number {
   };
 }
 
+/**
+ * Buddy's diary (a notebook on a tree stump): left of the doormat, below the left bush and clear of the bowl, the pile, the
+ * bench and the mailbox. It is tappable, so WorldScene draws it itself instead of it being part of `hofDecor`.
+ */
+export function diarySpot(width: number, feetY: number): DecorItem {
+  return place('meadow-diary', Math.max(52, width * 0.2), feetY + 14, 72);
+}
+
 /** The Hof: cosy props around Buddy's mat. Everything stays behind him and clear of the bowl (centred under the mat), pile and the mailbox path. */
 export function hofDecor(width: number, yardH: number, feetY: number): DecorItem[] {
   const low = Math.min(yardH - 10, feetY + 70);
@@ -73,7 +82,6 @@ export function hofDecor(width: number, yardH: number, feetY: number): DecorItem
     place('meadow-bush', width * 0.97, feetY - 8, 84, true),
     // below the mat: the bowl sits centred right under it, so these keep to the sides (x < 0.28 and x > 0.7)
     place('meadow-flowers', width * 0.14, low - 4, 66),
-    place('meadow-tuft', width * 0.8, low - 6, 58, true),
     place('meadow-stones', width * 0.92, low + 2, 48),
     place('meadow-tuft', width * 0.24, low + 12, 46),
   ];

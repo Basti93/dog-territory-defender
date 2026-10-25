@@ -12,6 +12,8 @@ export type Screen =
   | 'map'
   | 'territories'
   | 'history'
+  | 'sticks'
+  | 'diary'
   | 'den'
   | 'debugLog'
   | 'settings'
@@ -38,6 +40,10 @@ export function screenKey(screen: Screen): string | null {
       return 'settings';
     case 'stats':
       return 'stats';
+    case 'sticks':
+      return 'sticks';
+    case 'diary':
+      return 'diary';
     case 'logMissedWalk':
       return 'log-missed-walk';
     case 'doorstep':

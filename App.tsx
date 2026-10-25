@@ -43,6 +43,8 @@ import { cornerDisplayName } from './src/utils/cornerName';
 import { partnerHomecomingWalk, type HomecomingWalk } from './src/components/world/homecomingPlan';
 import { DebugLogScreen } from './src/components/DebugLogScreen';
 import { StatsScreen } from './src/components/StatsScreen';
+import { StickShelfScreen } from './src/components/StickShelfScreen';
+import { WalkDiaryScreen } from './src/components/WalkDiaryScreen';
 import { LogMissedWalkScreen } from './src/components/LogMissedWalkScreen';
 import { DogNamePromptScreen } from './src/components/DogNamePromptScreen';
 import { OnboardingScreen, PermissionPrimerScreen } from './src/components/onboarding';
@@ -281,6 +283,7 @@ export default function App() {
   );
   // Everything below renders the current screen. It is a closure (deliberately not re-indented, to keep the diff
   // small) so the root-level prompt above can sit next to whatever screen is returned.
+  const openSettings = () => nav.goTo('settings');
   const renderScreens = (): React.ReactElement | null => {
   // Fonts + language gate: first render waits so no screen flashes the system
   // font or the wrong language.
@@ -389,7 +392,9 @@ export default function App() {
         flashNote={restoringNote ?? walkEnd.walkEndNote}
         onOpenMap={() => nav.goTo('map')}
         onOpenHistory={() => nav.goTo('history')}
-        onOpenSettings={() => nav.goTo('settings')}
+        onOpenSticks={() => nav.goTo('sticks')}
+        onOpenDiary={() => nav.goTo('diary')}
+        onOpenSettings={openSettings}
         onOpenStats={() => nav.goTo('stats')}
         openDenPanel={screen === 'den' && !homecoming}
         onDenPanelHandled={nav.goDoorstep}
@@ -461,7 +466,7 @@ export default function App() {
     case 'territories':
       return swipeable(
         'territories',
-        <ScreenFrame fadeKey={fadeKey} treats={treats}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
           <TerritoriesScreen
             buddyAppearance={buddyAppearance}
             territoryRepository={repos.territoryRepository}
@@ -478,14 +483,13 @@ export default function App() {
       // It hosts the card's WebView, so screenKey('history') is null: never FadeSlideIn-wrapped.
       return swipeable(
         'history',
-        <ScreenFrame fadeKey={fadeKey} treats={treats}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
           <AlbumScreen
             buddyAppearance={buddyAppearance}
             walkRepository={repos.walkRepository}
             homeRangeRepository={repos.homeRangeRepository}
             territoryRepository={repos.territoryRepository}
             cornerRepository={repos.cornerRepository}
-            settingsRepository={repos.settingsRepository}
             dogName={dogName}
             onWalkDeleted={(id) => void syncEngine.enqueueWalkDelete(id).catch(() => undefined)}
             onClose={() => {
@@ -495,10 +499,29 @@ export default function App() {
           />
         </ScreenFrame>
       );
+    case 'sticks':
+      return swipeable(
+        'sticks',
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
+          <StickShelfScreen onClose={nav.close} />
+        </ScreenFrame>
+      );
+    case 'diary':
+      return swipeable(
+        'diary',
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
+          <WalkDiaryScreen
+            walkRepository={repos.walkRepository}
+            territoryRepository={repos.territoryRepository}
+            settingsRepository={repos.settingsRepository}
+            onClose={nav.close}
+          />
+        </ScreenFrame>
+      );
     case 'debugLog':
       return swipeable(
         'debugLog',
-        <ScreenFrame fadeKey={fadeKey} treats={treats}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
           <DebugLogScreen notificationRepository={repos.notificationRepository} onClose={nav.close} />
         </ScreenFrame>
       );
@@ -528,7 +551,7 @@ export default function App() {
     case 'stats':
       return swipeable(
         'stats',
-        <ScreenFrame fadeKey={fadeKey} treats={treats}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
           <StatsScreen
             buddyAppearance={buddyAppearance}
             repository={repos.personalStatsRepository}
@@ -541,7 +564,7 @@ export default function App() {
     case 'logMissedWalk':
       return swipeable(
         'logMissedWalk',
-        <ScreenFrame fadeKey={fadeKey} treats={treats}>
+        <ScreenFrame fadeKey={fadeKey} treats={treats} onOpenSettings={openSettings}>
           <LogMissedWalkScreen
             onLog={manualLog.logMissedWalk}
             onClose={nav.close}

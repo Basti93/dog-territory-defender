@@ -81,14 +81,19 @@ export function nextEffectLabel(building: BuildingKey, state: DenEconomyState): 
   }
 }
 
-/** The cheapest building upgrade Buddy can afford right now (he sniffs toward it), or undefined. */
-export function cheapestAffordableUpgrade(state: DenEconomyState): { building: BuildingKey; cost: number } | undefined {
+/** Every building whose next upgrade Buddy can afford right now, cheapest first. */
+export function affordableUpgrades(state: DenEconomyState): Array<{ building: BuildingKey; cost: number }> {
   return BUILDING_ORDER.map((b) => {
     const lvl = getBuildingLevel(state, b);
     return lvl >= BALANCE.maxBuildingLevel ? null : { building: b, cost: upgradeCost(b, lvl + 1) };
   })
     .filter((c): c is { building: BuildingKey; cost: number } => c !== null && c.cost <= state.treats + state.pile)
-    .sort((a, b) => a.cost - b.cost)[0];
+    .sort((a, b) => a.cost - b.cost);
+}
+
+/** The cheapest building upgrade Buddy can afford right now (he sniffs toward it), or undefined. */
+export function cheapestAffordableUpgrade(state: DenEconomyState): { building: BuildingKey; cost: number } | undefined {
+  return affordableUpgrades(state)[0];
 }
 
 export interface UseDenOptions {
@@ -301,5 +306,6 @@ export function useDen({
     buddyPop,
     tease: state ? getUpgradeTease(state) : null,
     cheapestAffordable: state ? cheapestAffordableUpgrade(state) : undefined,
+    affordable: state ? affordableUpgrades(state) : [],
   };
 }

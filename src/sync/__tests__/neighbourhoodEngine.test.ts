@@ -168,7 +168,7 @@ describe('sync engine and the neighbourhood store', () => {
 describe('neighbour wording', () => {
   it('words the pickup gently: a stick names its dog, the first one of a dog says where it hangs', () => {
     expect(giftOpenedLine(gift())).toBe('A stick from Pfote!');
-    expect(giftOpenedLine(gift(), true)).toBe('A stick from Pfote! It hangs on the stick shelf in the Album now.');
+    expect(giftOpenedLine(gift(), true)).toBe('A stick from Pfote! It hangs on the stick shelf now.');
     expect(giftOpenedLine(gift({ cosmeticId: 'collar-sky' }))).toBe('Pfote gifted you a collar. It goes with your fur.');
     expect(giftOpenedLine(gift({ cosmeticId: 'sock-odd', botName: 'Nebel' }))).toBe("Nebel left you a sock. It's from somewhere else.");
     expect(giftOpenedLine(gift({ cosmeticId: null }))).toBe('Pfote rolled a few treats into your bowl.');

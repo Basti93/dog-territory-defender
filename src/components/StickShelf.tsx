@@ -17,9 +17,6 @@ interface StickShelfProps {
 export function StickShelf({ slots }: StickShelfProps) {
   return (
     <View style={styles.shelf} testID="stick-shelf">
-      <Text style={[textStyle('h2'), styles.title]} accessibilityRole="header">
-        {t('neighbours.shelf.title')}
-      </Text>
       <Text style={[textStyle('small'), styles.hint]}>{t('neighbours.shelf.hint')}</Text>
       <View style={styles.grid}>
         {slots.map((slot) => {
@@ -63,8 +60,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
-  title: { color: material.ink },
-  hint: { color: material.muted, marginTop: spacing.xs, marginBottom: spacing.sm },
+  hint: { color: material.muted, marginBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm },
   slot: { width: '31%', alignItems: 'center' },
   // The "shelf board" each stick lies on: a wooden strip along the bottom of the slot.

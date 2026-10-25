@@ -1,25 +1,20 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { BuddyAppearance } from '../buddy/buddyAppearance';
 import { daypartPhrase, type PostcardEntry } from '../postcards/postcards';
 import { usePostcards } from '../postcards/usePostcards';
 import type { CornerRepository } from '../storage/CornerRepository';
-import type { SettingsRepository } from '../storage/SettingsRepository';
 import type { HomeRangeRepository } from '../storage/HomeRangeRepository';
 import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
-import { Confetti, EmptyState, Header, material, Screen, spacing, textStyle } from '../ui';
+import { EmptyState, Header, material, Screen, spacing, textStyle } from '../ui';
 import { formatDate, t } from '../i18n';
-import { useNeighbourhood } from '../sync/useNeighbourhood';
 import { log } from '../utils/log';
 import { BuddyLoading } from './BuddyLoading';
 import { BuddyAvatar } from './buddy';
 import { PostcardOverlay } from './postcards/PostcardOverlay';
 import { PostcardThumb } from './postcards/PostcardThumb';
-import { useWalkDiary } from '../walks/useWalkDiary';
-import { StickShelf } from './StickShelf';
-import { WalkDiaryCard } from './WalkDiaryCard';
 
 interface AlbumScreenProps {
   buddyAppearance: BuddyAppearance;
@@ -28,8 +23,6 @@ interface AlbumScreenProps {
   territoryRepository?: TerritoryRepository;
   /** Postmarks use a named corner's name when the walk ran through one. */
   cornerRepository?: CornerRepository;
-  /** Remembers which diary lines were already said (intro, longest walk). Optional: without it the diary shows, silently. */
-  settingsRepository?: SettingsRepository;
   dogName: string | null;
   onClose: () => void;
   /** A card was taken away, i.e. its walk deleted locally. App.tsx uses it to tell the household (`walk.delete`); the Range keeps the ground either way. */
@@ -50,22 +43,9 @@ function tiltFor(id: string): number {
  * The Album (what the bench opens): every postcard, newest first, in a calm grid. Tap a card to open it; it turns over
  * by tap or swipe. No counts, no comparisons, nothing to catch up on.
  */
-export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeRepository, territoryRepository, cornerRepository, settingsRepository, dogName, onClose, onWalkDeleted }: AlbumScreenProps) {
+export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeRepository, territoryRepository, cornerRepository, dogName, onClose, onWalkDeleted }: AlbumScreenProps) {
   const { cards, loaded, favouriteId, forget } = usePostcards({ walkRepository, territoryRepository });
   const [openId, setOpenId] = useState<string | null>(null);
-  // The Stock-Regal sits above the cards. It only appears once there are neighbour dogs (or a stick already hangs on it).
-  const hood = useNeighbourhood(undefined);
-  const shelf = hood.nearby.length > 0 || hood.shelf.some((s) => s.collected) ? <StickShelf slots={hood.shelf} /> : null;
-  // Buddy's walk diary sits under the shelf, above the cards (only once there is a card at all).
-  const walks = useMemo(() => cards.map((c) => c.walk), [cards]);
-  const { diary, showIntro, newLongest } = useWalkDiary(walks, loaded, settingsRepository);
-  const [confettiDone, setConfettiDone] = useState(false);
-  const header = (
-    <>
-      {shelf}
-      <WalkDiaryCard diary={diary} showIntro={showIntro} newLongest={newLongest} />
-    </>
-  );
   const { width } = useWindowDimensions();
   const thumbW = Math.floor((width - 2 * spacing.lg - GAP * (COLUMNS - 1)) / COLUMNS);
   const open = openId ? cards.find((c) => c.id === openId) ?? null : null;
@@ -90,18 +70,14 @@ export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeReposito
         {!loaded ? (
           <BuddyLoading appearance={buddyAppearance} text={t('common.loading')} />
         ) : cards.length === 0 ? (
-          <>
-            {shelf}
-            <EmptyState title={t('album.empty.title')} message={t('album.empty.message')}>
-              <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
-            </EmptyState>
-          </>
+          <EmptyState title={t('album.empty.title')} message={t('album.empty.message')}>
+            <BuddyAvatar appearance={buddyAppearance} size={120} mood="idle" />
+          </EmptyState>
         ) : (
           <FlatList
             data={cards}
             keyExtractor={(item) => item.id}
             numColumns={COLUMNS}
-            ListHeaderComponent={header}
             columnWrapperStyle={styles.row}
             showsVerticalScrollIndicator={false}
             initialNumToRender={8}
@@ -125,7 +101,6 @@ export function AlbumScreen({ buddyAppearance, walkRepository, homeRangeReposito
           />
         )}
       </Screen>
-      {newLongest && !confettiDone && <Confetti count={18} onDone={() => setConfettiDone(true)} />}
       {open && (
         <PostcardOverlay
           key={open.id}
