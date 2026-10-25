@@ -32,9 +32,12 @@ import { applyLocationToCues, createWalkCueState, resumeWalkCueState, startWalkC
 import type { ActiveWalkRecorder } from './activeWalkRecorder';
 import { mergeNewerFixes } from './restoreWalk';
 import { appendStoredFixes } from './storedFixes';
+import { withTimeout } from '../utils/withTimeout';
 
 /** How long the GPS-gap note stays on the live map once the app is in front. */
 const GPS_GAP_NOTE_SHOWN_MS = 20_000;
+/** Reading the stored fixes may take this long at most (see syncStoredFixes). */
+export const STORE_SYNC_TIMEOUT_MS = 10_000;
 
 /** What `finishWalk` did: `saved` (the normal path), `discarded` (no movement: nothing stored, like a cancel), `ignored` (already finishing). */
 export type FinishOutcome = 'saved' | 'discarded' | 'ignored';
@@ -135,7 +138,8 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
     if (!activeWalk || !current || !auto || finishingRef.current) return;
     if (!force && Date.now() - auto.lastFixAt < GPS_GAP_MS) return;
     try {
-      const snapshot = await activeWalk.load();
+      // Bounded: a store that never answers must not hold back the auto-finish decision that follows in the tick.
+      const snapshot = await withTimeout(activeWalk.load(), STORE_SYNC_TIMEOUT_MS, 'stored fixes');
       const latest = walkRef.current;
       if (!snapshot || !latest || snapshot.meta.id !== latest.id || finishingRef.current) return;
       const { walk: merged, added } = appendStoredFixes(latest, snapshot.locations);
@@ -500,7 +504,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
       if (cancelled() || !walkRef.current) return false;
 
       // Fixes that landed in the stored copy while this session was still starting (headless runtime) are not in memory yet.
-      const stored = await activeWalk?.load().catch(() => null);
+      const stored = activeWalk ? await withTimeout(activeWalk.load(), STORE_SYNC_TIMEOUT_MS, 'stored walk').catch(() => null) : null;
       if (stored && stored.meta.id === restored.id && walkRef.current) {
         walkRef.current = mergeNewerFixes(walkRef.current, stored.locations, restored.locations[restored.locations.length - 1].timestamp);
       }

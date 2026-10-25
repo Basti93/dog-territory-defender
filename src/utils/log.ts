@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 import { appendToDebugLog } from './debugLog';
 import { shipLog } from './logShipper';
+import { setDatabaseEventListener } from '../storage/dbEvents';
 
 /**
  * Structured logging for on-device test walks — one line per event, tagged,
@@ -20,3 +21,6 @@ export function log(tag: string, data: Record<string, unknown> = {}): void {
   appendToDebugLog(line);
   shipLog(tag, data, entry.appState);
 }
+
+// Storage (database.ts, dbLock.ts) reports DB_OPEN_ERROR, DB_LOCK_TIMEOUT and friends through the normal log.
+setDatabaseEventListener((tag, data) => log(tag, data));

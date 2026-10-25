@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { Walk } from '../types';
@@ -20,7 +21,7 @@ function rowToStoredWalk(row: WalkRow): StoredWalk {
 }
 
 export function createSqliteWalkRepository(dbName: string = DEFAULT_DB_NAME): WalkRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS walks (
         id TEXT PRIMARY KEY,

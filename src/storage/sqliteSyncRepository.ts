@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { EMPTY_SYNC_STATE, NewOutboxItem, OutboxItem, SyncRepository, SyncState } from './SyncRepository';
@@ -24,7 +25,7 @@ function rowToItem(row: OutboxRow): OutboxItem {
 // No automated test for this file (no expo-sqlite jest harness in the repo);
 // the contract test covers the in-memory fake.
 export function createSqliteSyncRepository(dbName: string = DEFAULT_DB_NAME): SyncRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS sync_outbox (
         id TEXT PRIMARY KEY,

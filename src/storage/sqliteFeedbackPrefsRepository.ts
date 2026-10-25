@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 
 import { FeedbackPrefs, FeedbackPrefsRepository, normalizeFeedbackPrefs } from './FeedbackPrefsRepository';
 
@@ -9,7 +10,7 @@ const SINGLETON_ID = 'singleton';
 // the contract test covers the in-memory fake. Dedicated table so it never
 // touches app_settings, which other features own.
 export function createSqliteFeedbackPrefsRepository(dbName: string = DEFAULT_DB_NAME): FeedbackPrefsRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS feedback_prefs (
         id TEXT PRIMARY KEY,

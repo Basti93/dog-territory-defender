@@ -1,8 +1,9 @@
 import { AppState } from 'react-native';
 
-import { setFixRecorder } from '../utils/gps';
+import { setFixRecorder, stopWatchingLocation } from '../utils/gps';
 import { createActiveWalkRecorder } from './activeWalkRecorder';
 import { repos } from './repositories';
+import { startStaleWalkWatchdog } from './staleWalkWatchdog';
 
 /**
  * The one recorder of the walk in flight for the running app. Imported by App.tsx at module load, so it is wired even
@@ -15,3 +16,5 @@ setFixRecorder((location) => activeWalkRecorder.addFix(location));
 AppState.addEventListener('change', (state) => {
   if (state !== 'active') void activeWalkRecorder.flush();
 });
+
+startStaleWalkWatchdog({ recorder: activeWalkRecorder, stopTask: stopWatchingLocation });

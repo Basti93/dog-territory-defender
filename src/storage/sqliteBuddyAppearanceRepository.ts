@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 
 import { BuddyAppearance, defaultBuddyAppearance, normalizeAppearance } from '../buddy/buddyAppearance';
 import { BuddyAppearanceRepository } from './BuddyAppearanceRepository';
@@ -19,7 +20,7 @@ function parseFur(value: unknown): unknown {
 }
 
 export function createSqliteBuddyAppearanceRepository(dbName: string = DEFAULT_DB_NAME): BuddyAppearanceRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS buddy_appearance (
         id TEXT PRIMARY KEY,

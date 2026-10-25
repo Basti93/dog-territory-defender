@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { AchievementId, defaultPersonalStatsState, PersonalStatsState } from '../economy/personalStats';
@@ -36,7 +37,7 @@ function rowToState(row: PersonalStatsRow): PersonalStatsState {
 }
 
 export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_NAME): PersonalStatsRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS personal_stats (
         id TEXT PRIMARY KEY,

@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 
 import {
   defaultNotificationBookkeepingState,
@@ -73,7 +74,7 @@ async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, colu
 }
 
 export function createSqliteNotificationRepository(dbName: string = DEFAULT_DB_NAME): NotificationRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS notification_bookkeeping (
         id TEXT PRIMARY KEY,

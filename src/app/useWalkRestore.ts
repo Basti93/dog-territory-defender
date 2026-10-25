@@ -6,6 +6,7 @@ import type { RestoreGate } from './restoreGate';
 import { decideWalkRestore, restoreAgeMinutes, walkFromSnapshot } from './restoreWalk';
 import { stopWatchingLocation } from '../utils/gps';
 import { log } from '../utils/log';
+import { withTimeout } from '../utils/withTimeout';
 import type { Walk } from '../types';
 
 /** The slice of useWalkSession the restore needs. */
@@ -28,6 +29,9 @@ export interface WalkRestoreDeps {
   now?: () => number;
 }
 
+/** Reading the stored walk must answer within this; a wedged database must never hold the launch (or a walk start) up. */
+export const RESTORE_LOAD_TIMEOUT_MS = 15_000;
+
 export type RestoreOutcome = 'none' | 'resumed' | 'finished' | 'discarded' | 'skipped';
 
 /** What WALK_RESTORE_CHECK says was decided. */
@@ -44,7 +48,7 @@ export async function restoreActiveWalk(deps: Omit<WalkRestoreDeps, 'gate'>): Pr
   // One line per launch, whatever happens: "found nothing" must be distinguishable from "never ran" in the server logs.
   const check = (decision: RestoreCheckDecision, found: boolean, points: number, ageMin: number | null) =>
     log('WALK_RESTORE_CHECK', { found, points, ageMin, decision, ms: Date.now() - startedAt });
-  const snapshot = await deps.activeWalk.load();
+  const snapshot = await withTimeout(deps.activeWalk.load(), RESTORE_LOAD_TIMEOUT_MS, 'restore load');
   // The location task (Android foreground service, iOS blue pill) may have outlived a walk that is gone: stop it.
   const stopOrphanedTask = async () => {
     if (!deps.session.isBusy()) await stopWatchingLocation().catch(() => undefined);

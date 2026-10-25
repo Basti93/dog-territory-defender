@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { CellId, parseCellKey } from '../utils/grid';
@@ -50,7 +51,7 @@ async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, colu
 }
 
 export function createSqliteHomeRangeRepository(dbName: string = DEFAULT_DB_NAME): HomeRangeRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS home_range_cells (
         ix INTEGER NOT NULL,

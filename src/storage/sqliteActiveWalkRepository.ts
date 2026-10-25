@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import type { Location } from '../types';
@@ -18,7 +19,7 @@ interface FixRow {
 // fake. Tables are created IF NOT EXISTS, so installs from before this feature simply gain them (no migration step).
 // Fixes are one row each (append-only inserts), not one JSON blob: a long walk is never rewritten on every flush.
 export function createSqliteActiveWalkRepository(dbName: string = DEFAULT_DB_NAME): ActiveWalkRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS active_walk (
         slot INTEGER PRIMARY KEY CHECK (slot = 1),

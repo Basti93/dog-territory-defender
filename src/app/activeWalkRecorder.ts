@@ -21,6 +21,8 @@ export interface ActiveWalkRecorder {
   flush(): Promise<void>;
   /** Flushes, then returns the stored walk (what a relaunch restores). */
   load(): Promise<ActiveWalkSnapshot | null>;
+  /** When this runtime last saw the walk begin or a fix arrive; null while it knows of no walk. */
+  lastActivityAt(): number | null;
   /** The walk is over: forgets the buffer and clears the stored walk. */
   end(): Promise<void>;
 }
@@ -37,6 +39,7 @@ export function createActiveWalkRecorder({ repo, now = Date.now }: ActiveWalkRec
   let resolving = false;
   let buffer: Location[] = [];
   let lastFlushAt = now();
+  let lastActivityAt: number | null = null;
   let queue: Promise<void> = Promise.resolve();
 
   const enqueue = (task: () => Promise<void>): Promise<void> => {
@@ -84,11 +87,13 @@ export function createActiveWalkRecorder({ repo, now = Date.now }: ActiveWalkRec
       resolved = true;
       buffer = [];
       lastFlushAt = now();
+      lastActivityAt = now();
       await enqueue(() => repo.start({ id: walk.id, startTime: walk.startTime, startSource: walk.startSource }, walk.locations));
     },
 
     addFix(location) {
       if (resolved && !walkId) return;
+      lastActivityAt = now();
       buffer.push(location);
       if (buffer.length > MAX_BUFFERED_FIXES) buffer.splice(0, buffer.length - MAX_BUFFERED_FIXES);
       if (!resolved) {
@@ -99,6 +104,8 @@ export function createActiveWalkRecorder({ repo, now = Date.now }: ActiveWalkRec
     },
 
     flush,
+
+    lastActivityAt: () => (walkId ? lastActivityAt : null),
 
     async load() {
       await resolveActiveWalk();
@@ -112,6 +119,7 @@ export function createActiveWalkRecorder({ repo, now = Date.now }: ActiveWalkRec
 
     async end() {
       walkId = null;
+      lastActivityAt = null;
       resolved = true;
       buffer = [];
       await enqueue(() => repo.clear());

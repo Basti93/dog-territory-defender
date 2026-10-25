@@ -13,6 +13,7 @@ import { runHomeRangeMigrationIfNeeded } from '../storage/homeRangeMigration';
 import { runTerritoryFoldIfNeeded, runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
 import { loadFeedbackPrefsAtStartup } from '../feedback/feedbackRepository';
 import { resolveTerritoryName } from '../utils/streetLookup';
+import { withTimeout } from '../utils/withTimeout';
 import { getDeviceLocale, LocalePreference, resolveLocale, setLocale } from '../i18n';
 
 export interface AppRepositories {
@@ -55,8 +56,13 @@ loadFeedbackPrefsAtStartup();
 // time). Everything that produces copy at launch (greeting, away-strip lines,
 // territory names, notifications) awaits this first, and the render gate
 // waits for it too, so no screen ever flashes in the wrong language.
-export const localePreferenceLoaded: Promise<LocalePreference> = repos.settingsRepository
-  .getLocalePreference()
+// Bounded: a wedged database must fall back to the system language, not leave the app blank (no `ready`).
+export const LOCALE_LOAD_TIMEOUT_MS = 5_000;
+export const localePreferenceLoaded: Promise<LocalePreference> = withTimeout(
+  repos.settingsRepository.getLocalePreference(),
+  LOCALE_LOAD_TIMEOUT_MS,
+  'locale preference'
+)
   .catch((): LocalePreference => 'system')
   .then((pref) => {
     setLocale(resolveLocale(pref, getDeviceLocale()));

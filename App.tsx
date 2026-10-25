@@ -24,6 +24,8 @@ import { activeWalkRecorder } from './src/app/activeWalkRuntime';
 import { useCelebration } from './src/app/useCelebration';
 import { useFirstLaunch } from './src/app/useFirstLaunch';
 import { useLaunchEffects } from './src/app/useLaunchEffects';
+import { StartupTroubleView } from './src/app/StartupTroubleView';
+import { stopWatchingLocation } from './src/utils/gps';
 import { useManualWalkLog } from './src/app/useManualWalkLog';
 import { useAppReady } from './src/app/useAppReady';
 import { useOtaUpdates } from './src/app/useOtaUpdates';
@@ -198,8 +200,17 @@ export default function App() {
     },
   });
 
+  const [startupTrouble, setStartupTrouble] = useState(false);
   const launch = useLaunchEffects({
     repos,
+    onStartupTrouble: () => {
+      setStartupTrouble(true);
+      // Storage is wedged, so no fix can be saved. A service with no recent fix is an orphan (nobody can finish its walk
+      // from here): stop it. One that is still delivering fixes belongs to a healthy walk that only had a slow read:
+      // leave it, the retry or the stale-walk watchdog deals with it.
+      const lastFixAt = activeWalkRecorder.lastActivityAt();
+      if (lastFixAt === null || Date.now() - lastFixAt > 10 * 60 * 1000) void stopWatchingLocation().catch(() => undefined);
+    },
     applyFirstLaunch: firstLaunch.applyLoaded,
     setTreats,
     setPile,
@@ -274,6 +285,7 @@ export default function App() {
   // Fonts + language gate: first render waits so no screen flashes the system
   // font or the wrong language.
   if (!ready) return null;
+  if (startupTrouble) return <StartupTroubleView />;
   switch (firstLaunch.step) {
     case 'loading':
       // Cream loading view until Den state + settings are read.

@@ -17,6 +17,7 @@ import { checkAndScheduleWalkReminder } from '../notifications/walkReminder';
 import { resolveDoorstepOverflowLine } from '../notifications/notificationDecision';
 import { DEN_OVERFLOW_NOTIFICATION_DATA, WALK_ENDED_NOTIFICATION_DATA, WALK_REMINDER_NOTIFICATION_DATA } from '../notifications/scheduler';
 import { log } from '../utils/log';
+import { withTimeout } from '../utils/withTimeout';
 import { t } from '../i18n';
 import { updateCorners } from './updateCorners';
 import { AppRepositories, localePreferenceLoaded, runStartupMigrations } from './repositories';
@@ -32,6 +33,10 @@ export function destinationForNotificationType(type: unknown): 'den' | 'doorstep
   return null;
 }
 
+/** Each storage read the first screen depends on must answer within this, or the launch counts as failed. */
+export const STARTUP_DB_STEP_TIMEOUT_MS = 20_000;
+const startupRead = <T,>(promise: Promise<T>, what: string): Promise<T> => withTimeout(promise, STARTUP_DB_STEP_TIMEOUT_MS, what);
+
 export interface LaunchEffectsDeps {
   repos: AppRepositories;
   /** First-launch state read from storage (dog name + onboarding flag). */
@@ -43,6 +48,11 @@ export interface LaunchEffectsDeps {
   openDoorstep: () => void;
   /** Bumps the idle map's Home Range render key. */
   onRangeChanged: () => void;
+  /**
+   * The saved game could not be read (storage wedged, timed out, failed) before the first screen. The app must not stay
+   * on a blank view: the caller shows a calm retry screen. Nothing is written to storage in that case.
+   */
+  onStartupTrouble?: (error: unknown) => void;
   /** Household sync at app open, bounded so a slow server never holds the Doorstep up. Optional: omitted = no sync. */
   syncOnLaunch?: () => Promise<void>;
   /** Worded household news for the Doorstep away strip (multiplayer-sync Decision 10). */
@@ -130,27 +140,32 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
   // checkAndScheduleEarnedTriggerNotification runs and the two channels never
   // both surface the same unclaimed overflow in one app-open.
   useEffect(() => {
+    let firstLaunchApplied = false;
     (async () => {
       await localePreferenceLoaded; // copy below (greeting, strip lines, alerts) must use the saved language
-      const state = await denEconomyRepository.getState();
+      const state = await startupRead(denEconomyRepository.getState(), 'den state');
       const previousTick = state.lastTickAt;
       // worldMass (territories design.md Decision 6) is a single ungrouped
       // aggregate over the whole cells table, independent of territory
       // migration status — safe to read before the migration has run.
-      const worldMass = await homeRangeRepository.getWorldMass();
+      const worldMass = await startupRead(homeRangeRepository.getWorldMass(), 'world mass');
       const accrued = applyPassiveAccrual(state, Date.now(), worldMass);
       const { state: reconciled, caughtUpToLevel } = reconcileBuddyLevelCatchUp(accrued);
-      await denEconomyRepository.saveState(reconciled);
+      // A write that fails (database busy) must not block the first screen: the accrual is simply applied again next launch.
+      await startupRead(denEconomyRepository.saveState(reconciled), 'den state save').catch((err) =>
+        log('TREATS_ACCRUAL_SAVE_ERROR', { error: String(err) })
+      );
       log('TREATS_PASSIVE_ACCRUAL', {
         before: state.treats + state.pile,
         after: accrued.treats + accrued.pile,
         elapsedHours: (Date.now() - state.lastTickAt) / (1000 * 60 * 60),
       });
       // Read before the setState batch below so loaded + dogName flip together.
-      const onboardingDoneSaved = await settingsRepository.getOnboardingDone().catch(() => false);
+      const onboardingDoneSaved = await startupRead(settingsRepository.getOnboardingDone(), 'onboarding flag').catch(() => false);
       deps.setTreats(reconciled.treats);
       deps.setPile(reconciled.pile);
       deps.setLevel(reconciled.level);
+      firstLaunchApplied = true;
       deps.applyFirstLaunch({ dogName: reconciled.dogName, onboardingDone: onboardingDoneSaved });
 
       if (caughtUpToLevel !== null) {
@@ -232,7 +247,10 @@ export function useLaunchEffects(deps: LaunchEffectsDeps) {
       setBuddyMood(resolvedMood.mood);
       setPlayBuddyGreeting(resolvedMood.playGreeting);
       setDoorstepSession(resolvedSession);
-    })();
+    })().catch((error) => {
+      log('LAUNCH_ROUTINE_ERROR', { error: String(error), firstLaunchApplied });
+      if (!firstLaunchApplied) deps.onStartupTrouble?.(error);
+    });
   }, []);
 
   return {

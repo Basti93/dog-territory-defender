@@ -1,7 +1,7 @@
 jest.mock('../../utils/log', () => ({ log: jest.fn() }));
 jest.mock('../../utils/gps', () => ({ stopWatchingLocation: jest.fn().mockResolvedValue(undefined) }));
 
-import { restoreActiveWalk, type RestorableWalkSession } from '../useWalkRestore';
+import { restoreActiveWalk, RESTORE_LOAD_TIMEOUT_MS, type RestorableWalkSession } from '../useWalkRestore';
 import { createActiveWalkRecorder } from '../activeWalkRecorder';
 import { createInMemoryActiveWalkRepository } from '../../storage/inMemoryActiveWalkRepository';
 import { RESTORE_MAX_AGE_MS } from '../restoreWalk';
@@ -138,5 +138,25 @@ describe('restoreActiveWalk', () => {
     const { session, run } = await setup({ fixes: 3 });
     expect(await run(60 * MIN)).toBe('resumed');
     expect(session.resumeWalk).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('restoreActiveWalk with a wedged database', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('a stored-walk read that never answers rejects after the timeout instead of hanging the launch', async () => {
+    jest.useFakeTimers();
+    const session = { isBusy: jest.fn(() => false), resumeWalk: jest.fn(), finishRestoredWalk: jest.fn() } satisfies RestorableWalkSession;
+    const result = restoreActiveWalk({
+      activeWalk: { load: () => new Promise(() => undefined) } as never,
+      isWalkSaved: async () => false,
+      getAutoFinishEnabled: async () => true,
+      session,
+      openMap: jest.fn(),
+    });
+    const assertion = expect(result).rejects.toThrow(/timed out/);
+    await jest.advanceTimersByTimeAsync(RESTORE_LOAD_TIMEOUT_MS + 1);
+    await assertion;
+    expect(session.resumeWalk).not.toHaveBeenCalled();
   });
 });

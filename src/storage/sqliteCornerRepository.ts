@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { CornerRepository, cornerCoords, NewCorner, StoredCorner } from './CornerRepository';
@@ -6,7 +7,7 @@ import { CornerRepository, cornerCoords, NewCorner, StoredCorner } from './Corne
 const DEFAULT_DB_NAME = 'dog-territory-defender.db';
 
 export function createSqliteCornerRepository(dbName: string = DEFAULT_DB_NAME): CornerRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS corners (
         id TEXT PRIMARY KEY,

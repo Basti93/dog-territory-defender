@@ -1,8 +1,8 @@
-import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from '../storage/database';
 
 const DB_NAME = 'dog-territory-defender.db';
 
-const dbPromise = SQLite.openDatabaseAsync(DB_NAME).then(async (db) => {
+const dbPromise = openSharedDatabase(DB_NAME).then(async (db) => {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS debug_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

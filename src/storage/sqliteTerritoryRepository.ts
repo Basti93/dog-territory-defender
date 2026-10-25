@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 import { runInTransaction } from './dbLock';
 
 import { generateTerritoryId, IncrementTerritoryStatsInput, Territory, TerritoryId, TerritoryRepository } from './TerritoryRepository';
@@ -24,7 +25,7 @@ function rowToTerritory(row: TerritoryRow): Territory {
 }
 
 export function createSqliteTerritoryRepository(dbName: string = DEFAULT_DB_NAME): TerritoryRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS territories (
         id TEXT PRIMARY KEY,

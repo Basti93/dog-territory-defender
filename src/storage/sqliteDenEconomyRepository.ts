@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 
 import { defaultDenEconomyState, DenEconomyState } from '../economy/denEconomy';
 import { DenEconomyRepository } from './DenEconomyRepository';
@@ -65,7 +66,7 @@ async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, colu
 }
 
 export function createSqliteDenEconomyRepository(dbName: string = DEFAULT_DB_NAME): DenEconomyRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS den_economy (
         id TEXT PRIMARY KEY,

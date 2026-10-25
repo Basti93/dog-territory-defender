@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { openSharedDatabase } from './database';
 
 import { DiarySeen, normalizeDiarySeen } from '../walks/walkDiary';
 import { LocalePreference } from '../i18n/types';
@@ -12,7 +13,7 @@ const SINGLETON_ID = 'singleton';
 // the contract test covers the in-memory fake. Unknown stored values fall
 // back to 'system' on read.
 export function createSqliteSettingsRepository(dbName: string = DEFAULT_DB_NAME): SettingsRepository {
-  const dbPromise = SQLite.openDatabaseAsync(dbName).then(async (db) => {
+  const dbPromise = openSharedDatabase(dbName).then(async (db) => {
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS app_settings (
         id TEXT PRIMARY KEY,
