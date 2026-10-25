@@ -2,6 +2,7 @@
 // integers. iOS (expo-location) reports fractional ms (e.g. 1792359406662.5527); Postgres refuses a fractional value
 // for a bigint ("invalid input syntax for type bigint") and the upload was a 500. The schemas keep Type.Number on
 // purpose: rejecting with 400 would strand the walk in the phone's outbox, rounding accepts it.
+import type { ApiMyStatsBody } from './schemas';
 import type { ApiMyStats, ImportRequest, LogUploadRequest, PresenceUpdateRequest, WalkUploadRequest } from '@game/sync/apiContract';
 
 const toMs = (v: number): number => Math.round(v);
@@ -30,9 +31,9 @@ export function normalizeImport(req: ImportRequest): ImportRequest {
   };
 }
 
-export function normalizeMyStats(req: ApiMyStats): ApiMyStats {
+export function normalizeMyStats(req: ApiMyStatsBody): ApiMyStats {
   return {
-    stats: { ...req.stats, firstWalkAt: req.stats.firstWalkAt === null ? null : toMs(req.stats.firstWalkAt) },
+    stats: { ...req.stats, statsBasis: req.stats.statsBasis ?? 0, firstWalkAt: req.stats.firstWalkAt === null ? null : toMs(req.stats.firstWalkAt) },
     achievements: req.achievements.map((a) => ({ ...a, unlockedAt: toMs(a.unlockedAt) })),
   };
 }

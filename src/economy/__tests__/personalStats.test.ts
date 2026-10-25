@@ -89,7 +89,7 @@ describe('recordWalkClosed', () => {
     const farWalk = makeWalk({
       locations: [
         { latitude: 52.5, longitude: 13.4, timestamp: 0, accuracy: 5 },
-        { latitude: 52.527, longitude: 13.4, timestamp: 1000, accuracy: 5 }, // ~3000m north
+        { latitude: 52.527, longitude: 13.4, timestamp: 40 * 60_000, accuracy: 5 }, // ~3000m north in 40 minutes
       ],
     });
 
@@ -190,5 +190,25 @@ describe('recordBuildingUpgrade', () => {
       withLevels({ doghouseLevel: 4, bakeryLevel: 5, sniffGardenLevel: 5 })
     );
     expect(notCozy.newlyUnlocked).not.toContain('cozy-den');
+  });
+});
+
+describe('recordWalkClosed — statistics hygiene', () => {
+  const start = DISTANCE_RULE_SINCE_MS + 1_000_000;
+  const moving = Array.from({ length: 601 }, (_, i) => ({ latitude: 52.5, longitude: 13.4 + i * 0.00004, timestamp: start + i * 2000, accuracy: 5 })); // 20 min, ~1.6 km
+  const last = moving[moving.length - 1];
+  const bench = Array.from({ length: 12 * 90 }, (_, i) => ({ latitude: last.latitude + Math.sin(i) * 0.00002, longitude: last.longitude + Math.cos(i) * 0.00002, timestamp: last.timestamp + (i + 1) * 5000, accuracy: 10 })); // 90 min on a bench
+
+  it('does not count the idle tail in the lifetime distance or the longest walk', () => {
+    const clean = recordWalkClosed(defaultPersonalStatsState(), makeWalk({ startTime: start, locations: moving }), 30).stats;
+    const withTail = recordWalkClosed(defaultPersonalStatsState(), makeWalk({ startTime: start, locations: [...moving, ...bench] }), 30).stats;
+    expect(withTail.lifetimeDistanceMeters).toBeLessThan(clean.lifetimeDistanceMeters + 5);
+    expect(withTail.longestWalkDistanceM).toBeLessThan(clean.longestWalkDistanceM + 5);
+  });
+
+  it('an aborted (too short) walk adds its metres but never sets the longest-walk record', () => {
+    const aborted = recordWalkClosed(defaultPersonalStatsState(), makeWalk({ startTime: start, locations: moving.slice(0, 30) }), 30).stats; // 1 min
+    expect(aborted.longestWalkDistanceM).toBe(0);
+    expect(aborted.lifetimeDistanceMeters).toBeGreaterThan(0);
   });
 });

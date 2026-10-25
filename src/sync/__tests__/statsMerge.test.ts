@@ -60,6 +60,37 @@ describe('mergeStats', () => {
   });
 });
 
+describe('statsBasis (a correction may lower the distance figures)', () => {
+  type SB = { walks: number; lifetimeDistanceMeters: number; longestWalkDistanceM: number; firstWalkAt: number | null; statsBasis: number };
+  const old: SB = { walks: 15, lifetimeDistanceMeters: 34000, longestWalkDistanceM: 9000, firstWalkAt: 900, statsBasis: 0 };
+  const corrected: SB = { walks: 15, lifetimeDistanceMeters: 32000, longestWalkDistanceM: 5000, firstWalkAt: 900, statsBasis: 1 };
+
+  it('lets the higher basis win the distance figures, in either argument order, and stays idempotent', () => {
+    expect(mergeStatValues(old, corrected)).toEqual(corrected);
+    expect(mergeStatValues(corrected, old)).toEqual(corrected);
+    expect(mergeStatValues(corrected, corrected)).toEqual(corrected);
+    expect(mergeStatValues(mergeStatValues(old, corrected), old)).toEqual(corrected);
+  });
+
+  it('never loses a walk counted on the device that is behind on the basis', () => {
+    const offline: SB = { ...old, walks: 16, firstWalkAt: 500 };
+    expect(mergeStatValues(offline, corrected)).toEqual({ ...corrected, walks: 16, firstWalkAt: 500 });
+    expect(mergeStatValues(corrected, offline)).toEqual(mergeStatValues(offline, corrected));
+  });
+
+  it('treats a missing basis (an app from before) as 0 and keeps the max rules at equal basis', () => {
+    const noBasis = { walks: 3, lifetimeDistanceMeters: 100, longestWalkDistanceM: 50, firstWalkAt: null } as SB;
+    expect(mergeStatValues(noBasis, corrected)).toEqual(corrected);
+    expect(mergeStatValues({ ...old, lifetimeDistanceMeters: 50 }, { ...old, lifetimeDistanceMeters: 70 }).lifetimeDistanceMeters).toBe(70);
+    expect(mergeStatValues({ ...corrected, lifetimeDistanceMeters: 50 }, { ...corrected, lifetimeDistanceMeters: 70 }).lifetimeDistanceMeters).toBe(70);
+  });
+
+  it('is associative across three docs with different bases', () => {
+    const mid: SB = { walks: 9, lifetimeDistanceMeters: 40000, longestWalkDistanceM: 100, firstWalkAt: 100, statsBasis: 0 };
+    expect(mergeStatValues(mergeStatValues(old, mid), corrected)).toEqual(mergeStatValues(old, mergeStatValues(mid, corrected)));
+  });
+});
+
 describe('mergeAchievements', () => {
   it('sorts by date then id so equal inputs always give equal output', () => {
     expect(mergeAchievements([{ id: 'b', unlockedAt: 1 }, { id: 'a', unlockedAt: 1 }], [])).toEqual([{ id: 'a', unlockedAt: 1 }, { id: 'b', unlockedAt: 1 }]);

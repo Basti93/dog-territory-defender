@@ -6,7 +6,7 @@ Lifetime stat tracking and one-off personal achievements give a solo player a hi
 
 - Tracked across the full history, at minimum: total walks closed, lifetime distance walked, lifetime territory area claimed, biggest single territory ever claimed, longest single walk by distance, total treats earned lifetime.
 - Updated incrementally when the underlying event occurs (a walk closes; treats are earned from a walk reward or passive accrual; building upgrade), not recomputed from full history on each read.
-- Walk distance follows `walk-lifecycle`'s `Walked Distance Counts Only Plausible Steps`; stored totals and records are never recomputed or lowered by a rule change.
+- Walk distance follows `walk-lifecycle`'s `Walked Distance Counts Only Plausible Steps`; stored totals and records are never recomputed or lowered by a rule change, except the one-off statistics correction (`walk-lifecycle`, "Statistics hygiene": idle tails out of lifetime distance, `statsBasis`). Aborted/stuck/glitchy walks never set the longest-walk record.
 - **Walk closed into a territory:** total walks +1; lifetime distance and area increase by that walk's values; biggest-territory and longest-walk update if the new walk exceeds the record.
 - **Passive accrual while away:** counts toward total treats earned lifetime exactly like a walk reward.
 

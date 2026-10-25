@@ -1,6 +1,7 @@
 // Row <-> API mappers and shared reads used by several services.
 import { and, eq, sql } from 'drizzle-orm';
 import type { ApiCell, ApiCorner, ApiDenState, ApiDog, ApiTerritory, ApiWalkMeta } from '@game/sync/apiContract';
+import type { StatsExcludedReason } from '@game/types';
 import type { Db } from '../db/client';
 import { cells, corners, denState, dogs, territories, walks } from '../db/schema';
 import type { DenState } from '../economy/denTransitions';
@@ -64,6 +65,14 @@ export const walkMetaFromRow = (r: Omit<typeof walks.$inferSelect, 'route' | 'ge
   ...(Array.isArray(r.metNeighbourIds) && r.metNeighbourIds.length > 0 ? { metNeighbourIds: r.metNeighbourIds as string[] } : {}),
   treatsEarned: r.treatsEarned,
   deleted: r.deletedAt !== null,
+  ...(r.statsVersion !== null
+    ? {
+        statsVersion: r.statsVersion,
+        ...(r.statsEndTime !== null ? { statsEndTime: r.statsEndTime } : {}),
+        ...(r.statsDistanceM !== null ? { statsDistanceM: r.statsDistanceM } : {}),
+        ...(r.statsExcluded ? { statsExcluded: r.statsExcluded as StatsExcludedReason } : {}),
+      }
+    : {}),
 });
 
 export function stripRev(den: ApiDenState): DenState {

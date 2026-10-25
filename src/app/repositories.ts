@@ -10,6 +10,7 @@ import { createSqliteSyncRepository } from '../storage/sqliteSyncRepository';
 import { createSqliteActiveWalkRepository } from '../storage/sqliteActiveWalkRepository';
 import { createSqliteCornerRepository } from '../storage/sqliteCornerRepository';
 import { runHomeRangeMigrationIfNeeded } from '../storage/homeRangeMigration';
+import { repairLocalWalks } from '../walks/repairLocalWalks';
 import { runTerritoryFoldIfNeeded, runTerritoryMigrationIfNeeded } from '../storage/territoryMigration';
 import { loadFeedbackPrefsAtStartup } from '../feedback/feedbackRepository';
 import { resolveTerritoryName } from '../utils/streetLookup';
@@ -92,5 +93,8 @@ export function runStartupMigrations(r: AppRepositories): Promise<void> {
     // Joined households fold on the server and receive the result with the next snapshot.
     if (await r.settingsRepository.getSyncIdentity()) return;
     await runTerritoryFoldIfNeeded({ homeRangeRepository: r.homeRangeRepository, territoryRepository: r.territoryRepository });
+  }).then(async () => {
+    // Statistics hygiene: walks the server does not know get the same stats view the server computes (walkRepair.ts).
+    await repairLocalWalks(r.walkRepository);
   });
 }

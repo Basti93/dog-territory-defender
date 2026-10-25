@@ -14,7 +14,7 @@ afterEach(async () => {
   await s.close();
 });
 
-const zero = { totalWalksClosed: 0, lifetimeDistanceMeters: 0, lifetimeTerritoryAreaM2: 0, biggestTerritoryAreaM2: 0, longestWalkDistanceM: 0, totalTreatsEarnedLifetime: 0, firstWalkAt: null };
+const zero = { totalWalksClosed: 0, lifetimeDistanceMeters: 0, lifetimeTerritoryAreaM2: 0, biggestTerritoryAreaM2: 0, longestWalkDistanceM: 0, totalTreatsEarnedLifetime: 0, firstWalkAt: null, statsBasis: 0 };
 const doc = (stats: Partial<ApiMyStats['stats']> = {}, achievements: ApiMyStats['achievements'] = []): ApiMyStats => ({ stats: { ...zero, ...stats }, achievements });
 const put = (m: Member, payload: unknown) => s.app.inject({ method: 'PUT', url: '/v1/me/stats', headers: m.auth, payload: payload as object });
 const snapshot = async (m: Member) => (await s.app.inject({ method: 'GET', url: '/v1/snapshot', headers: m.auth })).json<SnapshotResponse>();

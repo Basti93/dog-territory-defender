@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { SessionKind } from '../doorstepSession';
+import type { SessionKind } from '../sessionKind';
 import type { SettingsRepository } from '../../storage/SettingsRepository';
 import {
   WildExtraId,

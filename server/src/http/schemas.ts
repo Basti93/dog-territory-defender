@@ -257,6 +257,8 @@ export const MyStatsSchema = Type.Object(
         biggestTerritoryAreaM2: StatNumber(STATS_CAPS.biggestTerritoryAreaM2),
         longestWalkDistanceM: StatNumber(STATS_CAPS.longestWalkDistanceM),
         totalTreatsEarnedLifetime: StatNumber(STATS_CAPS.totalTreatsEarnedLifetime),
+        // Optional on the wire: an app that predates the walk-statistics correction does not send it (= basis 0).
+        statsBasis: Type.Optional(StatNumber(STATS_CAPS.statsBasis)),
         // Null first: with ajv coerceTypes a null would be coerced to 0 by the number branch.
         firstWalkAt: Type.Union([Type.Null(), StatTime]),
       },
@@ -280,6 +282,9 @@ export const DogAnalyzeSchema = Type.Object(
   { additionalProperties: false }
 );
 
+/** The PUT body: like ApiMyStats, but an app that predates the walk-statistics correction sends no `statsBasis` (= 0). */
+export type ApiMyStatsBody = { stats: Omit<ApiMyStats['stats'], 'statsBasis'> & { statsBasis?: number }; achievements: ApiMyStats['achievements'] };
+
 // ---- compile-time drift checks (assignable both ways)
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _join: Same<Static<typeof JoinSchema>, JoinRequest> = true;
@@ -288,6 +293,6 @@ const _cmd: Same<Static<typeof CommandSchema>, CommandRequest> = true;
 const _import: Same<Static<typeof ImportSchema>, ImportRequest> = true;
 const _logs: Same<Static<typeof LogUploadSchema>, LogUploadRequest> = true;
 const _presence: Same<Static<typeof PresenceSchema>, PresenceUpdateRequest> = true;
-const _myStats: Same<Static<typeof MyStatsSchema>, ApiMyStats> = true;
+const _myStats: Same<Static<typeof MyStatsSchema>, ApiMyStatsBody> = true;
 const _analyze: Same<Static<typeof DogAnalyzeSchema>, DogAnalyzeRequest> = true;
 void [_analyze, _join, _walk, _cmd, _import, _logs, _presence, _myStats];

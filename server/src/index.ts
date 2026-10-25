@@ -2,6 +2,7 @@ import { loadConfig } from './config';
 import { connectPostgres, runMigrations } from './db/client';
 import { buildApp, buildReadyApp } from './http/app';
 import { foldSmallTerritories } from './services/territoryFold';
+import { foldWalkStats } from './services/walkStats';
 import { startLogRetention } from './services/logRetention';
 import { startNeighbourScheduler } from './neighbours/scheduler';
 
@@ -18,6 +19,11 @@ async function main() {
   void foldSmallTerritories(conn.db, bus, (hid, err) => app.log.error({ hid, err: String(err) }, 'territory fold failed for household'), (hid, reason) => app.log.debug({ hid, reason }, 'territory fold skipped household')).then(
     (n) => app.log.info({ folded: n }, 'territory fold'),
     (err) => app.log.error({ err: String(err) }, 'territory fold failed')
+  );
+  // Walk-statistics hygiene (services/walkStats.ts): idempotent, after listen, reports what it changed.
+  void foldWalkStats(conn.db, bus, (hid, err) => app.log.error({ hid, err: String(err) }, 'walk stats fold failed for household')).then(
+    (report) => app.log.info({ report }, 'walk stats fold'),
+    (err) => app.log.error({ err: String(err) }, 'walk stats fold failed')
   );
   const ready = config.readyPort > 0 ? buildReadyApp(conn.db) : null;
   if (ready) await ready.listen({ port: config.readyPort, host: '0.0.0.0' });

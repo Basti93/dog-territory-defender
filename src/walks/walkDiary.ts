@@ -1,10 +1,15 @@
 import type { StoredWalk } from '../storage/WalkRepository';
-import { walkDistanceMeters, walkHasMovement } from '../utils/geometry';
+import { walkHasMovement } from '../utils/geometry';
+import { walkStatsOf } from './walkRepair';
 
 // Buddy's Spazier-Tagebuch (Album): friendly numbers about the household's tracked walks, derived on read, nothing stored
 // except the two "seen" markers (DiarySeen). Pure: copy and React live in walkDiaryCopy.ts / WalkDiaryCard.tsx.
 // Manual logs are left out on purpose: they carry no fixes (so no duration or distance) and their start time is only
 // "earlier today / yesterday", not when the walk happened.
+// Robust on purpose: one broken walk must not move the numbers. Walks the repair marked `statsExcluded` (aborted, stuck,
+// glitchy; walkRepair.ts) stay out, a walk ends at its last moving fix (not at an idle tail), and every "typical" and
+// per-time-of-day value is a MEDIAN, not a mean: with the 3-10 walks a diary has, a trimmed mean degenerates to the plain
+// mean or throws away most of the data, while the median survives any single outlier (50% breakdown point).
 
 export type DiaryBucket = 'morning' | 'midday' | 'evening' | 'night';
 export const BUCKET_ORDER: readonly DiaryBucket[] = ['morning', 'midday', 'evening', 'night'];
@@ -13,8 +18,6 @@ export const BUCKET_ORDER: readonly DiaryBucket[] = ['morning', 'midday', 'eveni
 export const DIARY_MIN_WALKS = 3;
 /** Time-of-day averages within this share of the best one count as "all equally good". */
 export const DIARY_EVEN_SHARE = 0.1;
-/** A "walk" longer than this is a forgotten stop button, not a walk: it is left out of the numbers. */
-export const DIARY_MAX_WALK_MS = 8 * 60 * 60 * 1000;
 
 /** Morgen 0-11 except night, Mittag 11-17, Abend 17-22, Nacht 22-5 (local hour). */
 export function bucketForHour(hour: number): DiaryBucket {
@@ -24,14 +27,6 @@ export function bucketForHour(hour: number): DiaryBucket {
   return 'evening';
 }
 
-/** How long a tracked walk took (start to last fix), or null when it has no usable span. */
-export function walkDurationMs(walk: Pick<StoredWalk, 'startTime' | 'locations'>): number | null {
-  const fixes = walk.locations;
-  if (fixes.length < 2) return null;
-  const ms = fixes[fixes.length - 1].timestamp - Math.min(walk.startTime, fixes[0].timestamp);
-  return ms > 0 && ms <= DIARY_MAX_WALK_MS ? ms : null;
-}
-
 interface DiaryWalk {
   startTime: number;
   durationMs: number;
@@ -39,14 +34,14 @@ interface DiaryWalk {
   bucket: DiaryBucket;
 }
 
-/** Our dog's finished, tracked walks that went somewhere (partner walks included; they are stored like ours). */
+/** Our dog's finished, tracked, meaningful walks that went somewhere (partner walks included; they are stored like ours). */
 function diaryWalks(walks: readonly StoredWalk[]): DiaryWalk[] {
   const out: DiaryWalk[] = [];
   for (const walk of walks) {
     if (walk.startSource === 'manual-log' || !walkHasMovement(walk)) continue;
-    const durationMs = walkDurationMs(walk);
-    if (durationMs === null) continue;
-    out.push({ startTime: walk.startTime, durationMs, distanceMeters: walkDistanceMeters(walk), bucket: bucketForHour(new Date(walk.startTime).getHours()) });
+    const stats = walkStatsOf(walk);
+    if (stats.excluded || stats.durationMs === null || stats.durationMs <= 0 || stats.distanceMeters === null) continue;
+    out.push({ startTime: walk.startTime, durationMs: stats.durationMs, distanceMeters: stats.distanceMeters, bucket: bucketForHour(new Date(walk.startTime).getHours()) });
   }
   return out;
 }
@@ -54,6 +49,7 @@ function diaryWalks(walks: readonly StoredWalk[]): DiaryWalk[] {
 export interface BucketAverage {
   bucket: DiaryBucket;
   count: number;
+  /** Median (the field names keep "avg" for the copy that reads them). */
   avgDurationMs: number;
   avgDistanceMeters: number;
 }
@@ -78,7 +74,12 @@ export interface WalkDiary {
   evenBuckets: boolean;
 }
 
-const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+/** Middle value; the mean of the two middle ones for an even count. */
+export function median(xs: readonly number[]): number {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 
 export function buildWalkDiary(walks: readonly StoredWalk[]): WalkDiary {
   const list = diaryWalks(walks);
@@ -91,7 +92,7 @@ export function buildWalkDiary(walks: readonly StoredWalk[]): WalkDiary {
   for (const bucket of BUCKET_ORDER) {
     const inBucket = list.filter((w) => w.bucket === bucket);
     if (inBucket.length < DIARY_MIN_WALKS) continue;
-    buckets.push({ bucket, count: inBucket.length, avgDurationMs: mean(inBucket.map((w) => w.durationMs)), avgDistanceMeters: mean(inBucket.map((w) => w.distanceMeters)) });
+    buckets.push({ bucket, count: inBucket.length, avgDurationMs: median(inBucket.map((w) => w.durationMs)), avgDistanceMeters: median(inBucket.map((w) => w.distanceMeters)) });
   }
 
   let topBucket: DiaryBucket | null = null;
@@ -110,7 +111,7 @@ export function buildWalkDiary(walks: readonly StoredWalk[]): WalkDiary {
     walkCount,
     ready,
     walksToGo: Math.max(0, DIARY_MIN_WALKS - walkCount),
-    typical: walkCount > 0 ? { durationMs: mean(list.map((w) => w.durationMs)), distanceMeters: totalMeters / walkCount } : null,
+    typical: walkCount > 0 ? { durationMs: median(list.map((w) => w.durationMs)), distanceMeters: median(list.map((w) => w.distanceMeters)) } : null,
     longest: longestWalk && { durationMs: longestWalk.durationMs, startTime: longestWalk.startTime },
     last: lastWalk && { durationMs: lastWalk.durationMs, startTime: lastWalk.startTime },
     totalMeters,

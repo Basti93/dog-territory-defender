@@ -128,6 +128,33 @@ describe('walks', () => {
     expect(walk?.locations).toHaveLength(1);
   });
 
+  it('a new walk carries the server statistics view, and a replayed walk.added updates an existing walk (tail cut, excluded)', async () => {
+    const repos = makeRepos();
+    const stats = { statsVersion: 1, statsEndTime: 1_000, statsDistanceM: 2_500, statsExcluded: 'stuck' as const };
+    await applySnapshot(snapshot({ walks: [{ ...fullWalk('w1'), ...stats, locations: undefined } as never] }), repos, ctx());
+    expect(await repos.walks.getWalk('w1')).toMatchObject(stats);
+
+    // the repair fold re-sends my own walk with a corrected view: only the stats fields change, the route and sync mark stay
+    await repos.walks.saveWalk({ id: 'mine', startTime: 1, locations: [{ latitude: 1, longitude: 2, timestamp: 1, accuracy: 5 }], closed: true, startSource: 'button', statsVersion: 0, statsDistanceM: 9_999 });
+    const fixed = { statsVersion: 1, statsEndTime: 600, statsDistanceM: 800 };
+    const ev: ApiEvent = { seq: 1, kind: 'walk.added', actorPlayerId: null, createdAt: 1, payload: { walk: { ...fullWalk('mine', 'p-me'), ...fixed, locations: undefined } as never, cellsPainted: 3 } };
+    await applyEvents([ev], 1, repos, ctx());
+    await applyEvents([ev], 1, repos, ctx()); // idempotent
+    const mine = await repos.walks.getWalk('mine');
+    expect(mine).toMatchObject({ ...fixed, syncedAt: 9_000 });
+    expect(mine?.statsExcluded).toBeUndefined();
+    expect(mine?.locations).toHaveLength(1);
+  });
+
+  it('keeps a newer local statistics view over an older server one, and ignores a server without the fields', async () => {
+    const repos = makeRepos();
+    await repos.walks.saveWalk({ id: 'mine', startTime: 1, locations: [], closed: true, startSource: 'button', statsVersion: 2, statsDistanceM: 700 });
+    await applySnapshot(snapshot({ walks: [{ ...fullWalk('mine', 'p-me'), statsVersion: 1, statsDistanceM: 123, locations: undefined } as never] }), repos, ctx());
+    expect((await repos.walks.getWalk('mine'))?.statsDistanceM).toBe(700);
+    await applySnapshot(snapshot({ walks: [{ ...fullWalk('mine', 'p-me'), locations: undefined } as never] }), repos, ctx());
+    expect((await repos.walks.getWalk('mine'))?.statsDistanceM).toBe(700);
+  });
+
   it('does not re-fetch my own walk that exists locally, only marks it synced', async () => {
     const repos = makeRepos();
     await repos.walks.saveWalk({ id: 'mine', startTime: 1, locations: [], closed: true, startSource: 'button' });

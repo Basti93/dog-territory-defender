@@ -17,6 +17,7 @@ interface PersonalStatsRow {
   longestWalkDistanceM: number;
   totalTreatsEarnedLifetime: number;
   firstWalkAt: number | null;
+  statsBasis: number | null;
 }
 
 interface AchievementRow {
@@ -33,6 +34,7 @@ function rowToState(row: PersonalStatsRow): PersonalStatsState {
     longestWalkDistanceM: row.longestWalkDistanceM,
     totalTreatsEarnedLifetime: row.totalTreatsEarnedLifetime,
     firstWalkAt: row.firstWalkAt,
+    statsBasis: row.statsBasis ?? 0,
   };
 }
 
@@ -54,6 +56,11 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
         unlockedAt INTEGER NOT NULL
       );
     `);
+    // statsBasis arrived later (walk-statistics correction): add it to a table created without it.
+    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(personal_stats)');
+    if (!columns.some((c) => c.name === 'statsBasis')) {
+      await db.execAsync('ALTER TABLE personal_stats ADD COLUMN statsBasis INTEGER NOT NULL DEFAULT 0');
+    }
     return db;
   });
 
@@ -69,8 +76,8 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
       await db.runAsync(
         `INSERT INTO personal_stats (
           id, totalWalksClosed, lifetimeDistanceMeters, lifetimeTerritoryAreaM2,
-          biggestTerritoryAreaM2, longestWalkDistanceM, totalTreatsEarnedLifetime, firstWalkAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          biggestTerritoryAreaM2, longestWalkDistanceM, totalTreatsEarnedLifetime, firstWalkAt, statsBasis
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         SINGLETON_ID,
         initial.totalWalksClosed,
         initial.lifetimeDistanceMeters,
@@ -78,7 +85,8 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
         initial.biggestTerritoryAreaM2,
         initial.longestWalkDistanceM,
         initial.totalTreatsEarnedLifetime,
-        initial.firstWalkAt
+        initial.firstWalkAt,
+        initial.statsBasis
       );
       return initial;
     },
@@ -88,8 +96,8 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
       await db.runAsync(
         `INSERT INTO personal_stats (
           id, totalWalksClosed, lifetimeDistanceMeters, lifetimeTerritoryAreaM2,
-          biggestTerritoryAreaM2, longestWalkDistanceM, totalTreatsEarnedLifetime, firstWalkAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          biggestTerritoryAreaM2, longestWalkDistanceM, totalTreatsEarnedLifetime, firstWalkAt, statsBasis
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           totalWalksClosed = excluded.totalWalksClosed,
           lifetimeDistanceMeters = excluded.lifetimeDistanceMeters,
@@ -97,7 +105,8 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
           biggestTerritoryAreaM2 = excluded.biggestTerritoryAreaM2,
           longestWalkDistanceM = excluded.longestWalkDistanceM,
           totalTreatsEarnedLifetime = excluded.totalTreatsEarnedLifetime,
-          firstWalkAt = excluded.firstWalkAt`,
+          firstWalkAt = excluded.firstWalkAt,
+          statsBasis = excluded.statsBasis`,
         SINGLETON_ID,
         state.totalWalksClosed,
         state.lifetimeDistanceMeters,
@@ -105,7 +114,8 @@ export function createSqlitePersonalStatsRepository(dbName: string = DEFAULT_DB_
         state.biggestTerritoryAreaM2,
         state.longestWalkDistanceM,
         state.totalTreatsEarnedLifetime,
-        state.firstWalkAt
+        state.firstWalkAt,
+        state.statsBasis ?? 0 // a backup from before the field has none
       );
     },
 

@@ -2,6 +2,7 @@ import { dogDisplayName } from '../economy/denEconomy';
 import { ACHIEVEMENTS, AchievementId } from '../economy/personalStats';
 import { calendarDayGap } from '../utils/manualWalkLog';
 import { evaluateSomewhereWild, EvaluateSomewhereWildDeps } from './SomewhereWildCard';
+import type { GreetingFlavor, SessionKind } from './sessionKind';
 import { formatNumber, t, tPlural } from '../i18n';
 
 // The "Doorstep" launch logic (docs/decisions/home-dashboard.md): which session state applies (same-day reopen vs
@@ -9,8 +10,7 @@ import { formatNumber, t, tPlural } from '../i18n';
 // component is gone (the world scene is the home screen), these stayed. They are called once per app launch from
 // useLaunchEffects and their results are handed to the WorldScene as props.
 
-export type SessionKind = 'same-day-reopen' | 'fresh-open';
-export type GreetingFlavor = 'first-open' | 'long-absence';
+export type { SessionKind, GreetingFlavor };
 
 export interface DoorstepSession {
   kind: SessionKind;

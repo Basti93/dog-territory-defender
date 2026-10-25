@@ -117,6 +117,15 @@ export const walks = pgTable(
     generated: boolean('generated').notNull().default(false),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Statistics view (src/walks/walkRepair.ts analyseWalk), written at upload and by the startup fold; null = not analysed yet
+     * (manual logs get a version but no other value). Never read by rewards or cells: the route stays the truth.
+     */
+    statsVersion: integer('stats_version'),
+    statsEndTime: ms('stats_end_time'),
+    statsDistanceM: doublePrecision('stats_distance_m'),
+    /** too_short | stuck | gps_glitch: kept out of diary averages and records. */
+    statsExcluded: text('stats_excluded'),
   },
   (t) => [primaryKey({ columns: [t.householdId, t.id] }), index('walks_household_start_idx').on(t.householdId, t.startTime)]
 );

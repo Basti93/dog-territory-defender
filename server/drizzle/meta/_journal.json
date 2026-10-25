@@ -78,6 +78,13 @@
       "when": 1792846056022,
       "tag": "0010_walk_met_neighbours",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792966996104,
+      "tag": "0011_walk_stats",
+      "breakpoints": true
     }
   ]
 }

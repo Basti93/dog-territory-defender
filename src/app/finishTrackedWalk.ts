@@ -13,6 +13,7 @@ import { log } from '../utils/log';
 import { updateCorners } from './updateCorners';
 import { flushLogShipper } from '../utils/logShipper';
 import { AppRepositories } from './repositories';
+import { analyseWalk, statsFields } from '../walks/walkRepair';
 
 export interface TerritoryBeat {
   /** A far patch became a territory of its own with this walk ("Neues Revier!"): the suggested name, editable in the homecoming. */
@@ -215,7 +216,8 @@ export async function finishTrackedWalk(walk: Walk, deps: FinishTrackedWalkDeps)
   // newGroundCellIds (docs/decisions/walk-portrait.md Decision 4):
   // the same newGround Set computed above, written so the Walk Portrait can
   // later highlight this walk's own New Ground segments.
-  const finishedWalk: Walk = { ...walk, closed: qualifies, newGroundCellIds: Array.from(newGround) };
+  // The statistics view is stamped at finish (idle tail, aborted/stuck/glitchy walks; walkRepair.ts). Rewards above were paid from the full route.
+  const finishedWalk: Walk = { ...walk, closed: qualifies, newGroundCellIds: Array.from(newGround), ...statsFields(analyseWalk(walk)) };
 
   log('WALK_FINISHED', {
     id: finishedWalk.id,

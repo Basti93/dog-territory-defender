@@ -27,6 +27,7 @@ import type { TerritoryRepository } from '../storage/TerritoryRepository';
 import type { WalkRepository } from '../storage/WalkRepository';
 import type { Walk } from '../types';
 import { walkDistanceMeters } from '../utils/geometry';
+import { sameStoredStats, type StoredWalkStats } from '../walks/walkRepair';
 import type { ApiCell, ApiCorner, ApiDenState, ApiDogAppearance, ApiEvent, NearbyResponse, ApiTerritory, ApiWalkFull, ApiWalkMeta, CommandBody, SnapshotResponse } from './apiContract';
 
 export interface ApplyRepos {
@@ -131,7 +132,18 @@ function sameIds(a: readonly string[] | undefined, b: readonly string[]): boolea
   return !!a && a.length === b.length && a.every((id, i) => id === b[i]);
 }
 
-function toLocalWalk(full: ApiWalkFull, playerName: string | undefined): Walk {
+/** The server's statistics view of a walk (additive meta fields; none from an older server). */
+function serverStatsOf(meta: ApiWalkMeta): StoredWalkStats {
+  if (meta.statsVersion === undefined) return {};
+  return {
+    statsVersion: meta.statsVersion,
+    ...(meta.statsEndTime !== undefined ? { statsEndTime: meta.statsEndTime } : {}),
+    ...(meta.statsDistanceM !== undefined ? { statsDistanceM: meta.statsDistanceM } : {}),
+    ...(meta.statsExcluded ? { statsExcluded: meta.statsExcluded } : {}),
+  };
+}
+
+function toLocalWalk(full: ApiWalkFull, playerName: string | undefined, stats: StoredWalkStats): Walk {
   return {
     id: full.id,
     startTime: full.startTime,
@@ -141,6 +153,7 @@ function toLocalWalk(full: ApiWalkFull, playerName: string | undefined): Walk {
     newGroundCellIds: full.newGroundCellIds,
     ...(full.metNeighbourIds?.length ? { metNeighbourIds: full.metNeighbourIds } : {}),
     ...(full.treatsEarned !== null ? { treatsEarned: full.treatsEarned } : {}),
+    ...stats,
     playerId: full.playerId,
     ...(playerName ? { playerName } : {}),
   };
@@ -169,7 +182,7 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
     if (!existing) {
       const full = await ctx.fetchWalk(meta.id);
       if (!full) continue;
-      await repos.walks.saveWalk(toLocalWalk(full, players[meta.playerId]));
+      await repos.walks.saveWalk(toLocalWalk(full, players[meta.playerId], serverStatsOf(meta.statsVersion !== undefined ? meta : full)));
       walksAdded += 1;
       if (meta.playerId !== ctx.playerId) {
         partnerWalks.push({
@@ -183,9 +196,24 @@ async function applyBatch(batch: Batch, repos: ApplyRepos, ctx: ApplyContext, fo
           manual: full.startSource === 'manual-log',
         });
       }
-    } else if (meta.metNeighbourIds?.length && !sameIds(existing.metNeighbourIds, meta.metNeighbourIds)) {
-      const { syncedAt: _syncedAt, ...walk } = existing;
-      await repos.walks.saveWalk({ ...walk, metNeighbourIds: meta.metNeighbourIds });
+    } else {
+      // Fields the server derives and may change later: the neighbours met, and the statistics view (the repair fold re-sends a
+      // corrected walk). A server view of an older rule set never replaces a newer local one.
+      const metChanged = !!meta.metNeighbourIds?.length && !sameIds(existing.metNeighbourIds, meta.metNeighbourIds);
+      const serverStats = serverStatsOf(meta);
+      const statsChanged =
+        serverStats.statsVersion !== undefined &&
+        serverStats.statsVersion >= (existing.statsVersion ?? 0) &&
+        !sameStoredStats(existing, serverStats);
+      if (metChanged || statsChanged) {
+        const { syncedAt: _syncedAt, ...walk } = existing;
+        let next: Walk = metChanged ? { ...walk, metNeighbourIds: meta.metNeighbourIds } : walk;
+        if (statsChanged) {
+          const { statsEndTime: _end, statsDistanceM: _distance, statsExcluded: _excluded, ...bare } = next; // absent in the new view = absent here
+          next = { ...bare, ...serverStats };
+        }
+        await repos.walks.saveWalk(next);
+      }
     }
     // The server has it either way (we sent it, or it sent it to us).
     if (!existing || existing.syncedAt === null) await repos.walks.markSynced(meta.id, ctx.now);

@@ -235,6 +235,10 @@ export async function buildSnapshot(db: Db, auth: AuthCtx, now: number): Promise
       reward: walks.reward,
       deletedAt: walks.deletedAt,
       createdAt: walks.createdAt,
+      statsVersion: walks.statsVersion,
+      statsEndTime: walks.statsEndTime,
+      statsDistanceM: walks.statsDistanceM,
+      statsExcluded: walks.statsExcluded,
     })
     .from(walks)
     .where(and(eq(walks.householdId, hid), eq(walks.generated, false)))

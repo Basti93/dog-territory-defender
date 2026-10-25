@@ -4,12 +4,11 @@ import { setLocale } from '../../i18n';
 import {
   bucketForHour,
   buildWalkDiary,
-  DIARY_MAX_WALK_MS,
   diaryAnnouncements,
   normalizeDiarySeen,
   roundedMeters,
   roundedMinutes,
-  walkDurationMs,
+  median,
 } from '../walkDiary';
 import { bucketComparisonLine, friendlyDistance, friendlyDuration, sniffComment, typicalLine } from '../walkDiaryCopy';
 
@@ -27,13 +26,11 @@ describe('bucketForHour', () => {
   });
 });
 
-describe('walkDurationMs', () => {
-  it('is last fix minus start, null without a span or beyond 8 h', () => {
-    expect(walkDurationMs(walk('a', 1, 9, 10))).toBe(10 * 60000);
-    expect(walkDurationMs(manualWalk('m'))).toBeNull();
-    const t0 = 1_000_000;
-    expect(walkDurationMs({ startTime: t0, locations: eastwardTrail(t0, 1) })).toBeNull();
-    expect(walkDurationMs({ startTime: t0, locations: [{ latitude: 1, longitude: 1, timestamp: t0, accuracy: 5 }, { latitude: 1, longitude: 1, timestamp: t0 + DIARY_MAX_WALK_MS + 1, accuracy: 5 }] })).toBeNull();
+describe('median', () => {
+  it('is the middle value, the mean of the two middle ones for an even count', () => {
+    expect(median([5])).toBe(5);
+    expect(median([30, 1, 2])).toBe(2);
+    expect(median([4, 1, 3, 2])).toBe(2.5);
   });
 });
 
@@ -52,12 +49,46 @@ describe('buildWalkDiary', () => {
     expect(three.longest).toEqual({ durationMs: 40 * 60000, startTime: new Date(2026, 9, 3, 9).getTime() });
     expect(three.last?.startTime).toBe(new Date(2026, 9, 3, 9).getTime());
     expect(three.totalMeters).toBeGreaterThan(0);
-    expect(three.typical!.distanceMeters).toBeCloseTo(three.totalMeters / 3, 5);
+    expect(three.typical!.distanceMeters).toBeGreaterThan(0); // the median distance, not the mean
+    expect(three.typical!.distanceMeters).toBeLessThan(three.totalMeters / 2);
   });
 
   it('leaves out manual logs, walks that went nowhere and walks without a usable span', () => {
     const d = buildWalkDiary([manualWalk('m'), stillWalk('s'), walk('a', 1, 9, 20)]);
     expect(d.walkCount).toBe(1);
+  });
+
+  it('is robust: one stuck walk, one aborted walk and one glitch cannot move the typical walk, the longest or the buckets', () => {
+    const t0 = new Date(2026, 9, 1, 9, 0).getTime();
+    const idleTail = (id: string, day: number) => {
+      const start = new Date(2026, 9, day, 9, 0).getTime();
+      const moving = eastwardTrail(start, 20 * 30 + 1); // 20 real minutes, then 3 hours of a phone on a bench
+      const last = moving[moving.length - 1];
+      const bench = Array.from({ length: 36 * 60 }, (_, i) => ({ latitude: last.latitude + Math.sin(i) * 0.00002, longitude: last.longitude + Math.cos(i) * 0.00002, timestamp: last.timestamp + (i + 1) * 5000, accuracy: 10 }));
+      return trackedWalk(id, { startTime: start, locations: [...moving, ...bench] });
+    };
+    const good = [walk('a', 1, 9, 20), walk('b', 2, 9, 30), walk('c', 3, 9, 40)];
+    const clean = buildWalkDiary(good);
+    const tail = buildWalkDiary([...good, idleTail('stuck', 4)]);
+    expect(tail.walkCount).toBe(4); // its real 20 minutes still count, the bench does not
+    expect(tail.longest!.durationMs).toBe(40 * 60000);
+    expect(tail.typical!.durationMs).toBe(25 * 60000); // median of 20,20,30,40; the bench would have made it 30 (or the mean 70)
+    const broken = buildWalkDiary([
+      ...good,
+      walk('tiny', 5, 9, 1), // aborted: a minute
+      trackedWalk('glitch', { startTime: t0, locations: eastwardTrail(t0, 200, 0.0007) }), // jumps only
+      trackedWalk('stuck-flag', { startTime: t0 + 86400000, locations: eastwardTrail(t0 + 86400000, 5 * 60 * 30 + 1, 0.00004), statsVersion: 1, statsEndTime: t0 + 86400000 + 5 * 3600_000, statsDistanceM: 2000, statsExcluded: 'stuck' }),
+    ]);
+    expect(broken.walkCount).toBe(3);
+    expect(broken.typical).toEqual(clean.typical);
+    expect(broken.longest).toEqual(clean.longest);
+    expect(broken.totalMeters).toBeCloseTo(clean.totalMeters, 6);
+  });
+
+  it('uses the median, so one long outlier among the good walks does not drag the typical walk or a time-of-day row', () => {
+    const d = buildWalkDiary([walk('a', 1, 9, 20), walk('b', 2, 9, 20), walk('c', 3, 9, 22), walk('x', 4, 9, 150)]);
+    expect(d.typical!.durationMs).toBe(21 * 60000);
+    expect(d.buckets[0].avgDurationMs).toBe(21 * 60000);
   });
 
   it('shows only buckets with at least 3 walks, in day order', () => {

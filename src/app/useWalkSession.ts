@@ -394,6 +394,7 @@ export function useWalkSession({ repos, dogName, onRangeChanged, onRewards, sync
   const runFinishSteps = async (endedBy?: WalkEndedBy, trimAfter?: number): Promise<FinishOutcome> => {
     finishingRef.current = true;
     // "Still" ends a walk at the moment it stopped moving: the idle tail (up to 20 min and more) is not part of it.
+    // Only this live anchor cuts fixes (rewards are paid from what is kept); the statistics view cuts its own idle tail at finish.
     const stillSince = endedBy === 'auto-still' ? (trimAfter ?? autoFinishRef.current?.anchorAt) : undefined;
     autoFinishRef.current = null;
     setHomeCountdownMin(null);

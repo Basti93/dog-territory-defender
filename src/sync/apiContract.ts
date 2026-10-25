@@ -20,7 +20,7 @@ export const API_PREFIX = '/v1';
  * 426 `upgrade_required` (reads keep working). A missing client header counts as level 1.
  * Level 1 = M1 household sync, level 2 = neighbours (Track B) + this handshake.
  * Additive inside level 2 (no bump): live presence (M4), named corners (`corner.name`, `corner.updated`, `SnapshotResponse.corners`)
- * the shared dog look (`appearance.set`, `dog.appearance`, `ApiDog.appearanceRev`) and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`), and the neighbour dogs met on a walk (`ApiWalkMeta.metNeighbourIds`, `WalkUploadResponse.metNeighbourIds`).
+ * the shared dog look (`appearance.set`, `dog.appearance`, `ApiDog.appearanceRev`) and personal stats per player (`PUT /v1/me/stats`, `SnapshotResponse.myStats`, `JoinResponse.restored`), the neighbour dogs met on a walk (`ApiWalkMeta.metNeighbourIds`, `WalkUploadResponse.metNeighbourIds`), and the walk-statistics view (`ApiWalkMeta.stats*`, `ApiPersonalStats.statsBasis`).
  */
 export const API_LEVEL = 2;
 
@@ -269,6 +269,14 @@ export interface ApiWalkMeta {
   metNeighbourIds?: string[];
   treatsEarned: number | null;
   deleted: boolean;
+  /** Statistics view of a tracked walk (src/walks/walkRepair.ts), server-derived, additive; absent from older servers and for manual logs. Rewards and cells never depend on it. */
+  statsVersion?: number;
+  /** Last meaningful fix: the walk's end once an idle tail is cut. */
+  statsEndTime?: number;
+  /** Distance up to statsEndTime. */
+  statsDistanceM?: number;
+  /** Why the walk stays out of diary averages and records. */
+  statsExcluded?: 'too_short' | 'stuck' | 'gps_glitch';
 }
 
 export interface ApiWalkFull extends ApiWalkMeta {
@@ -307,6 +315,8 @@ export interface ApiPersonalStats {
   longestWalkDistanceM: number;
   totalTreatsEarnedLifetime: number;
   firstWalkAt: number | null;
+  /** Walk-statistics rule set the figures were corrected for (walkRepair.ts); a higher one wins the merge wholesale. Absent = 0. */
+  statsBasis: number;
 }
 
 export interface ApiAchievement {
@@ -333,6 +343,7 @@ export const STATS_CAPS: Record<Exclude<keyof ApiPersonalStats, 'firstWalkAt'>, 
   biggestTerritoryAreaM2: 1e13,
   longestWalkDistanceM: 1e8,
   totalTreatsEarnedLifetime: 1e13,
+  statsBasis: 1e6,
 };
 /** Latest accepted ms timestamp (year ~2286). */
 export const MAX_STATS_TIME_MS = 1e13;

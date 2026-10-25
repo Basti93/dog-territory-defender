@@ -7,6 +7,9 @@ export interface Location {
 
 export type WalkStartSource = 'button' | 'manual-log';
 
+/** Why a walk stays out of averages and records (src/walks/walkRepair.ts). */
+export type StatsExcludedReason = 'too_short' | 'stuck' | 'gps_glitch';
+
 export interface Walk {
   id: string;
   startTime: number;
@@ -58,6 +61,15 @@ export interface Walk {
   /** Household sync (multiplayer-sync): who walked it. Set on walks that came from the server; absent on purely local walks. */
   playerId?: string;
   playerName?: string;
+  /**
+   * Statistics view (src/walks/walkRepair.ts analyseWalk), additive: absent on a walk not analysed yet. Never touches rewards or cells.
+   * `statsEndTime` = last meaningful fix (an idle tail is cut), `statsDistanceM` = distance up to it, `statsExcluded` = why the
+   * walk does not count in the diary and records. `statsVersion` = the rule set that produced them.
+   */
+  statsVersion?: number;
+  statsEndTime?: number;
+  statsDistanceM?: number;
+  statsExcluded?: StatsExcludedReason;
 }
 
 export interface AppState {

@@ -209,7 +209,7 @@ describe('useWalkSession fixes stored by the location task', () => {
   it('replays them on the timer tick: still is detected while backgrounded and the idle tail is trimmed off', async () => {
     jest.useFakeTimers({ now: Date.now() });
     const start = Date.now() - 60 * 60_000; // the app has seen no fix for an hour, the store has
-    const moving = (i: number): Location => ({ latitude: 52 + i * 0.0003, longitude: 13, timestamp: start + 10_000 * i, accuracy: 5 });
+    const moving = (i: number): Location => ({ latitude: 52 + i * 0.0005, longitude: 13, timestamp: start + 20_000 * i, accuracy: 5 }); // ~55 m a step, 2.8 m/s
     const walk: Walk = { id: 'w1', startTime: start, startSource: 'button', closed: false, locations: [moving(0), moving(1), moving(2)] };
     mocked.startWatchingLocation.mockResolvedValue(true);
     const { result, repo } = await setup();
@@ -219,7 +219,7 @@ describe('useWalkSession fixes stored by the location task', () => {
     });
     expect(finishTrackedWalk).not.toHaveBeenCalled(); // a silent hour alone never ends the walk
     // The task stored a fix every 30 s for 25 minutes, all at the spot where the dog stopped.
-    const standing = Array.from({ length: 50 }, (_, i) => ({ ...moving(2), timestamp: start + 30_000 + 30_000 * i }));
+    const standing = Array.from({ length: 50 }, (_, i) => ({ ...moving(2), timestamp: start + 60_000 + 30_000 * i }));
     await repo.appendFixes('w1', standing);
     await act(async () => {
       jest.advanceTimersByTime(60_000);
@@ -232,6 +232,6 @@ describe('useWalkSession fixes stored by the location task', () => {
     expect(finished.endedBy).toBe('auto-still');
     // 3 moving fixes + the first standing one (the moment it stopped); the rest of the 25 idle minutes is cut off.
     expect(finished.locations).toHaveLength(4);
-    expect(finished.locations[3].timestamp).toBe(start + 30_000);
+    expect(finished.locations[3].timestamp).toBe(start + 60_000);
   });
 });

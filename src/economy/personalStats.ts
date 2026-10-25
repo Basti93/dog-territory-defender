@@ -1,5 +1,5 @@
 import { Walk } from '../types';
-import { walkDistanceMeters } from '../utils/geometry';
+import { analyseWalk } from '../walks/walkRepair';
 import { CELL_M } from '../utils/grid';
 import { DenEconomyState } from './denEconomy';
 import { t } from '../i18n';
@@ -12,6 +12,11 @@ export interface PersonalStatsState {
   longestWalkDistanceM: number;
   totalTreatsEarnedLifetime: number;
   firstWalkAt: number | null;
+  /**
+   * Which walk-statistics rule set the figures above were last corrected for (walkRepair.ts WALK_STATS_VERSION; 0 = never).
+   * A higher basis wins the sync merge wholesale (statsMerge.ts), which is the only way a correction can lower a figure.
+   */
+  statsBasis: number;
 }
 
 export function defaultPersonalStatsState(): PersonalStatsState {
@@ -23,6 +28,7 @@ export function defaultPersonalStatsState(): PersonalStatsState {
     longestWalkDistanceM: 0,
     totalTreatsEarnedLifetime: 0,
     firstWalkAt: null,
+    statsBasis: 0,
   };
 }
 
@@ -177,7 +183,10 @@ export function thresholdAchievementProgress(id: AchievementId, stats: PersonalS
  * needs its own numeric-threshold decision, not a silent implementer fix.
  */
 export function recordWalkClosed(stats: PersonalStatsState, walk: Walk, cellsPainted: number): RecordResult {
-  const distanceMeters = walkDistanceMeters(walk);
+  // Statistics distance: an idle tail (phone left on the bench) is not walked ground, and a walk that is not meaningful
+  // (aborted, stuck, glitchy) never sets the longest-walk record. Rewards are untouched (paid from the full route).
+  const walkStats = analyseWalk(walk);
+  const distanceMeters = walkStats.distanceMeters ?? 0;
   const areaM2 = cellsPainted * CELL_M * CELL_M;
 
   const beforeWalks = stats.totalWalksClosed;
@@ -191,7 +200,7 @@ export function recordWalkClosed(stats: PersonalStatsState, walk: Walk, cellsPai
     lifetimeDistanceMeters: stats.lifetimeDistanceMeters + distanceMeters,
     lifetimeTerritoryAreaM2: stats.lifetimeTerritoryAreaM2 + areaM2,
     biggestTerritoryAreaM2: Math.max(stats.biggestTerritoryAreaM2, areaM2),
-    longestWalkDistanceM: Math.max(stats.longestWalkDistanceM, distanceMeters),
+    longestWalkDistanceM: walkStats.excluded ? stats.longestWalkDistanceM : Math.max(stats.longestWalkDistanceM, distanceMeters),
     firstWalkAt: stats.firstWalkAt ?? walk.startTime,
   };
 

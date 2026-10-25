@@ -53,6 +53,7 @@ import {
   JoinSchema,
   LogUploadSchema,
   MyStatsSchema,
+  type ApiMyStatsBody,
   NearbyQuerySchema,
   PresenceQuerySchema,
   PresenceSchema,
@@ -332,7 +333,7 @@ export async function buildApp(deps: AppDeps): Promise<{ app: FastifyInstance; b
 
   // Personal stats of the caller: merged monotonically, scoped to req.auth.playerId, no events row, no command log.
   app.put(API_PATHS.meStats, { schema: { body: MyStatsSchema } }, async (req, reply): Promise<ApiMyStats> => {
-    const result = await putMyStats(db, req.auth!, normalizeMyStats(req.body as ApiMyStats), now());
+    const result = await putMyStats(db, req.auth!, normalizeMyStats(req.body as ApiMyStatsBody), now());
     if (result.kind === 'too-many') return reply.code(400).send({ error: 'bad_request' } satisfies ApiError) as never;
     return result.stats;
   });

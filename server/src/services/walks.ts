@@ -6,6 +6,7 @@ import { walkDistanceMeters } from '@game/utils/geometry';
 import { bloomMultiplier, manualLogBloomMultiplier } from '@game/economy/formulas';
 import { BALANCE } from '@game/economy/balanceConfig';
 import type { Location } from '@game/types';
+import { analyseWalk } from '@game/walks/walkRepair';
 import { confirmPromotions, findPromotionCandidates, homeCentreCell, resolveCelebrationTerritoryBeat, resolveTerritoryChanges } from '@game/utils/territoryCluster';
 import { generateTerritoryId } from '@game/storage/TerritoryRepository';
 import type { Cell } from '@game/storage/HomeRangeRepository';
@@ -26,6 +27,7 @@ import { dayKeyInZone, sameLocalDay } from '../lib/time';
 import { metNeighbourIds } from '../neighbours/met';
 import { onHostWalkAccepted } from '../neighbours/reactions';
 import { paintCells } from './cellPaint';
+import { statsColumns } from './walkStats';
 import { appendEvent, currentSeq, type EventBus } from './events';
 import { endPresenceForWalk, presenceChannel } from './presence';
 import { cellFromRow, denFromRow, lockDen, saveDen, stripRev, territoryFromRow, walkMetaFromRow } from './state';
@@ -405,6 +407,7 @@ export async function ingestWalk(
         metNeighbourIds: met,
         treatsEarned: qualifies ? treatsEarned : null,
         reward,
+        ...statsColumns(analyseWalk({ startTime: req.startTime, startSource: req.startSource, locations: req.locations })),
         createdAt: new Date(now), // the quota queries compare created_at with `now`; the DB clock would break tests with a fixed clock
       })
       .returning();
