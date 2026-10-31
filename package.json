@@ -1,6 +1,7 @@
 {
   "name": "dog-territory-defender",
   "version": "0.3.0",
+  "license": "MIT",
   "description": "Dog Territory Defender: GPS walk tracking + territory claiming game for urban dog owners",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
