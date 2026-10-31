@@ -6,7 +6,7 @@
 # pre-restore-*.sql.gz safety dumps or backup.log).
 set -euo pipefail
 
-SERVER="${BACKUP_SERVER:-user@home-server}"
+SERVER="${BACKUP_SERVER:-user@home-server}"   # placeholder: launchd gets the real target from install-pull.sh
 SOURCE="dog-territory/backups/"   # relative to the home directory on the server (= ~/dog-territory/backups/)
 TARGET="${BACKUP_TARGET:-$HOME/Backups/dog-territory}"
 KEEP_DAYS="${KEEP_DAYS:-90}"      # dumps are tiny

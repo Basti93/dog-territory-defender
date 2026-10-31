@@ -23,7 +23,7 @@ Dog Territory Defender ist ein standortbasiertes Mobilspiel für Hundebesitzer i
 - **Himmel + Hügel**: Haustür und Hof haben blauen Himmel mit Clay-Wolken oben und einen grünen Hügel; der Hof ist der "Held" (ca. 48 % der Bildschirmhöhe, 340 bis 440 pt).
 - Schwächen laut Owner: UI-Karten wirken im Vergleich zu den 3D-Sprites noch etwas flach/generisch; die Karte ist funktional, aber nicht so charmant wie der Hof; Settings und Listen sind nüchtern. Hier darfst du mutig sein.
 
-Screenshots: `screens/01-doorstep.png` (Haustür, Buddy schläft), `01b-doorstep-sleepy-alt.png` (zweite Fassung), `02-den.png` (Hof), `03-map-idle.png` (Karte ohne laufende Runde), `04-settings.png` (Einstellungen). Von Feier, Verlauf, Portrait, Onboarding gibt es keine brauchbaren Screenshots; dort bitte aus der Beschreibung in Abschnitt 6 entwerfen. Die Texte in den Screenshots sind teils Debug-Stand (z. B. gemischtes DE/EN "Newt's New Range wird wieder grün"), nicht als Copy-Vorbild nehmen.
+Screenshots: `screens/02-den.png` (Hof), `04-settings.png` (Einstellungen). Von Haustür, Karte, Feier, Verlauf, Portrait, Onboarding gibt es keine brauchbaren Screenshots; dort bitte aus der Beschreibung in Abschnitt 6 entwerfen. Die Texte in den Screenshots sind teils Debug-Stand, nicht als Copy-Vorbild nehmen.
 
 ## 4. Ton
 

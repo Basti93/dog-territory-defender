@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic fixture, written by scripts/generateSampleRoutes.mjs. -->
+<gpx version="1.1" creator="generateSampleRoutes" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Synthetic 20 x 10 m rectangle</name>
+    <trkseg>
+      <trkpt lat="48.136955" lon="11.574865"><time>2000-01-01T00:00:00.000Z</time></trkpt>
+      <trkpt lat="48.136955" lon="11.574933"><time>2000-01-01T00:00:04.000Z</time></trkpt>
+      <trkpt lat="48.136955" lon="11.575000"><time>2000-01-01T00:00:08.000Z</time></trkpt>
+      <trkpt lat="48.136955" lon="11.575067"><time>2000-01-01T00:00:12.000Z</time></trkpt>
+      <trkpt lat="48.136955" lon="11.575135"><time>2000-01-01T00:00:16.000Z</time></trkpt>
+      <trkpt lat="48.137000" lon="11.575135"><time>2000-01-01T00:00:20.000Z</time></trkpt>
+      <trkpt lat="48.137045" lon="11.575135"><time>2000-01-01T00:00:24.000Z</time></trkpt>
+      <trkpt lat="48.137045" lon="11.575067"><time>2000-01-01T00:00:28.000Z</time></trkpt>
+      <trkpt lat="48.137045" lon="11.575000"><time>2000-01-01T00:00:32.000Z</time></trkpt>
+      <trkpt lat="48.137045" lon="11.574933"><time>2000-01-01T00:00:36.000Z</time></trkpt>
+      <trkpt lat="48.137045" lon="11.574865"><time>2000-01-01T00:00:40.000Z</time></trkpt>
+      <trkpt lat="48.137000" lon="11.574865"><time>2000-01-01T00:00:44.000Z</time></trkpt>
+      <trkpt lat="48.136955" lon="11.574865"><time>2000-01-01T00:00:48.000Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

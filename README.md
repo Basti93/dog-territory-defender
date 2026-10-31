@@ -27,7 +27,7 @@ Offline-first app, everything persists locally in SQLite (`expo-sqlite`); option
 - `src/utils/`: GPS, geometry, Home Range grid, territory clustering, street lookup; `src/web/`: Leaflet map HTML in WebViews + Home Range raster renderer.
 - `src/buddy/` (appearance, image/vector skin), `src/art/` (`artOr()` slot access), `src/postcards/` (pure postcard derivation), `src/utils/cornerDetection.ts` + `src/economy/corners.ts` ("Unsere Ecken"), `src/notifications/`, `src/feedback/` (sounds, haptics), `src/i18n/` (de/en), `src/sync/` (API client, outbox, presence).
 - `server/` Fastify + Postgres API; `deploy/` Docker/Tailscale runbook and backup scripts; `plugins/` Expo config plugins.
-- `assets/` (`art/` Blender sprites, `buddy/` layered parts, `sounds/`, `fonts/`); `scripts/` (`blender/`, `generateArt.mjs`, `generateAssets.mjs`, `generateSounds.mjs`); `testing/` GPX routes.
+- `assets/` (`art/` Blender sprites, `buddy/` layered parts, `sounds/`, `fonts/`); `scripts/` (`blender/`, `generateArt.mjs`, `generateAssets.mjs`, `generateSounds.mjs`, `generateSampleRoutes.mjs`); `testing/` synthetic GPX routes.
 - `prototype/` clickable HTML design spec; `handover/claude-design/` brief + samples for Claude Design (no code).
 - `docs/`: `specs/` game design (source of truth), `decisions/LOG.md` + one page per past change.
 

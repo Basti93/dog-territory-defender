@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { BALANCE } from '../../economy/balanceConfig';
 import { Location } from '../../types';
 import {
   CELL_M,
@@ -339,28 +340,23 @@ describe('streetsKnown', () => {
   });
 });
 
-describe('real-data sanity check — replaying testing/*.gpx through paintedCells', () => {
+describe('GPX replay through paintedCells: synthetic fixtures in testing/', () => {
   const gpxDir = path.join(__dirname, '../../../testing');
+  const cellsOf = (file: string) => paintedCells(parseGpx(path.join(gpxDir, file)));
+  // The XP area cap is measured in painted cells at 400 m2 each (balanceConfig.ts xp.areaCapM2).
+  const areaCapCells = BALANCE.xp.areaCapM2 / 400;
 
-  it('munich-route.gpx paints a non-empty, plausible cell set', () => {
-    const locations = parseGpx(path.join(gpxDir, 'munich-route.gpx'));
-    expect(locations.length).toBeGreaterThan(0);
-    const cells = paintedCells(locations);
+  it.each(['sample-route-short.gpx', 'sample-route.gpx'])('%s stays under the reward floor and the XP area cap', (file) => {
+    const cells = cellsOf(file);
     expect(cells.size).toBeGreaterThan(0);
+    expect(cells.size).toBeLessThan(MIN_CELLS_FOR_REWARD);
+    expect(cells.size).toBeLessThan(areaCapCells);
   });
 
-  it('munich-route2.gpx paints a non-empty, plausible cell set', () => {
-    const locations = parseGpx(path.join(gpxDir, 'munich-route2.gpx'));
-    expect(locations.length).toBeGreaterThan(0);
-    const cells = paintedCells(locations);
-    expect(cells.size).toBeGreaterThan(0);
-  });
-
-  it('munich-route-3.gpx paints a non-empty, plausible cell set', () => {
-    const locations = parseGpx(path.join(gpxDir, 'munich-route-3.gpx'));
-    expect(locations.length).toBeGreaterThan(0);
-    const cells = paintedCells(locations);
-    expect(cells.size).toBeGreaterThan(0);
+  it('sample-route-long.gpx (700 m) clears the reward floor and goes over the XP area cap', () => {
+    const cells = cellsOf('sample-route-long.gpx');
+    expect(cells.size).toBeGreaterThanOrEqual(MIN_CELLS_FOR_REWARD);
+    expect(cells.size).toBeGreaterThan(areaCapCells);
   });
 });
 

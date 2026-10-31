@@ -36,11 +36,11 @@ export const BALANCE = {
     // shoelace polygon's enclosed area. 20000 / 400 = 50, so the cap now
     // binds at 50 painted cells (~450m of walking) — tighter than the old
     // polygon-area cap, which typically needed a much larger enclosed loop
-    // to reach 20000 m². Confirmed against real GPX replay: a genuine ~700m
-    // walk (testing/munich-route2.gpx) already paints 132 cells (52800 m²,
-    // over the cap); the two short synthetic test loops
-    // (munich-route.gpx/munich-route-3.gpx) stay well under both this cap
-    // and the 25-cell reward-eligibility floor.
+    // to reach 20000 m². Historical measurement from a real GPX replay (track
+    // not kept in the repo): a genuine ~700m walk painted 132 cells (52800 m²,
+    // over the cap), while two short test loops stayed well under both this
+    // cap and the 25-cell reward-eligibility floor. grid.test.ts keeps that
+    // property pinned with synthetic fixtures (testing/sample-route*.gpx).
     areaCapM2: 20000,
   },
   // The Home Range's Fresh Ground payout — bloomMultiplier = 1 + k*B, treats

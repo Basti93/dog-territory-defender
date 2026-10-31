@@ -29,7 +29,7 @@ export function HouseholdCard({ engine, status, onShareBackup, deviceLabel }: Ho
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [nameSaved, setNameSaved] = useState(false);
 
-  const canJoin = playerName.trim().length > 0 && code.replace(/[\s-]/g, '').length === INVITE_CODE_LENGTH && !busy;
+  const canJoin = serverUrl.trim().length > 0 && playerName.trim().length > 0 && code.replace(/[\s-]/g, '').length === INVITE_CODE_LENGTH && !busy;
 
   const runJoin = async () => {
     setBusy(true);
